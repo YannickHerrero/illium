@@ -160,10 +160,15 @@ impl Manager {
             dpi::scale(area, self.config.wm.gap),
             dpi::scale(area, self.config.wm.outer_gap),
         );
-        native::batch(&ids.into_iter().zip(rs).collect::<Vec<_>>());
+        native::batch(
+            &ids.into_iter()
+                .zip(rs)
+                .map(|(id, r)| (id, native::framed(id, r)))
+                .collect::<Vec<_>>(),
+        );
         for c in &self.model.clients {
             if c.workspace == self.model.active && c.fullscreen && !native::minimized(c.id) {
-                native::position(c.id, area, Some(HWND_TOP));
+                native::position(c.id, native::framed(c.id, area), Some(HWND_TOP));
             }
         }
         self.shell.refresh(&self.model, &self.config);
@@ -301,8 +306,8 @@ impl Manager {
                                     w: area.w * 2 / 3,
                                     h: area.h * 2 / 3,
                                 };
-                                w.restore = r;
-                                native::position(w.id, r, None);
+                                w.restore = native::framed(w.id, r);
+                                native::position(w.id, w.restore, None);
                             }
                         }
                         _ => {

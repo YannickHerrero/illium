@@ -32,6 +32,41 @@ pub fn rect(id: isize) -> Rect {
 pub fn visible(id: isize) -> bool {
     unsafe { IsWindowVisible(hwnd(id)).as_bool() }
 }
+/// Expands a target rectangle so the window's visible frame lands on it.
+/// Windows 10/11 windows carry invisible resize borders on three sides that
+/// GetWindowRect includes but the eye does not, which skews gaps otherwise.
+pub fn framed(id: isize, r: Rect) -> Rect {
+    unsafe {
+        let mut frame = RECT::default();
+        let mut window = RECT::default();
+        if DwmGetWindowAttribute(
+            hwnd(id),
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            (&mut frame as *mut RECT).cast(),
+            std::mem::size_of::<RECT>() as u32,
+        )
+        .is_err()
+            || GetWindowRect(hwnd(id), &mut window).is_err()
+        {
+            return r;
+        }
+        let border = |v: i32| v.clamp(0, 64);
+        let (left, top) = (
+            border(frame.left - window.left),
+            border(frame.top - window.top),
+        );
+        let (right, bottom) = (
+            border(window.right - frame.right),
+            border(window.bottom - frame.bottom),
+        );
+        Rect {
+            x: r.x - left,
+            y: r.y - top,
+            w: r.w + left + right,
+            h: r.h + top + bottom,
+        }
+    }
+}
 pub fn minimized(id: isize) -> bool {
     unsafe { IsIconic(hwnd(id)).as_bool() }
 }
