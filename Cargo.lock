@@ -4827,7 +4827,24 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "winarchy-ipc",
  "windows",
+]
+
+[[package]]
+name = "winarchy-ipc"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
+name = "winarchyctl"
+version = "0.1.0"
+dependencies = [
+ "winarchy-ipc",
 ]
 
 [[package]]

@@ -2,7 +2,8 @@
 
 ## Boundaries
 
-- `command.rs`: canonical textual grammar and typed commands; JSON reply envelope.
+- `crates/winarchy-ipc`: canonical command grammar, JSON envelope, bounded pipe I/O and token/session identity. Shared by daemon and CLI without graphical dependencies.
+- `crates/winarchyctl`: standalone CLI depending only on `winarchy-ipc`, not on the daemon or Slint.
 - `config.rs`: subsystem TOML types, first-run defaults, validation, rules, themes.
 - `layout.rs`: pure Fibonacci rectangles and deterministic geometric neighbor scoring.
 - `model.rs`: ordered client list, nine workspaces, monitor associations and recent history.
@@ -10,7 +11,7 @@
 - `platform/input.rs`: keyboard/mouse hooks and WinEvent hooks on a dedicated Win32 message thread; hidden broadcast window receives display changes.
 - `platform/mod.rs`: serialized manager state, command execution and event dispatch.
 - `platform/shell.rs`, `ui/shell.slint`: same-process Slint surfaces and fuzzy launcher.
-- `platform/ipc.rs`: owner-only local named pipe and CLI transport.
+- `platform/ipc.rs`: owner-only local named-pipe server and UI-thread command dispatch; reexports the shared client for compatibility.
 - `platform/session.rs`: window recovery tags and opt-in Explorer lifecycle.
 - `platform/dpi.rs`, `status.rs`: physical-coordinate conversion and native status modules.
 

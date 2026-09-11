@@ -1,11 +1,11 @@
 fn main() {
     let command = std::env::args().skip(1).collect::<Vec<_>>().join(" ");
-    if let Err(e) = command.parse::<winarchy::command::Command>() {
+    if let Err(e) = command.parse::<winarchy_ipc::command::Command>() {
         eprintln!("{e}");
         std::process::exit(2);
     }
     #[cfg(windows)]
-    match winarchy::platform::ipc::client(&command) {
+    match winarchy_ipc::client::client(&command) {
         Ok(reply) => {
             if reply.ok {
                 println!("{}", reply.message);

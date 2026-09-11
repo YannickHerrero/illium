@@ -1,4 +1,4 @@
-pub mod command;
+pub use winarchy_ipc::{command, protocol};
 pub mod config;
 pub mod files;
 pub mod keyboard;
@@ -7,6 +7,5 @@ pub mod model;
 pub mod modifiers;
 #[cfg(windows)]
 pub mod platform;
-pub mod protocol;
 pub mod queue;
 pub mod request;

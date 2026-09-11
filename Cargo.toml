@@ -1,3 +1,8 @@
+[workspace]
+members = ["crates/winarchy-ipc", "crates/winarchyctl"]
+default-members = [".", "crates/winarchy-ipc", "crates/winarchyctl"]
+resolver = "3"
+
 [package]
 name = "winarchy"
 version = "0.1.0"
@@ -6,6 +11,7 @@ license = "MIT"
 build = "build.rs"
 
 [dependencies]
+winarchy-ipc = { path = "crates/winarchy-ipc" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 serde_json = "1"

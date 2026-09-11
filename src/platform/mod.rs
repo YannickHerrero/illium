@@ -1,12 +1,9 @@
 mod dpi;
-mod identity;
+use winarchy_ipc::{identity, pipe_io};
 mod input;
 mod instance;
 pub mod ipc;
 mod native;
-mod pipe_io;
-#[cfg(test)]
-mod pipe_io_tests;
 mod security;
 mod session;
 #[cfg(test)]

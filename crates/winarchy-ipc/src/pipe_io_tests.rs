@@ -1,5 +1,5 @@
 //! Native pipe tests: no hooks, application windows or Explorer operations.
-use super::{native::wide, pipe_io::PipeIo};
+use super::{pipe_io::PipeIo, wide};
 use std::{
     io::{Read, Write},
     os::windows::{

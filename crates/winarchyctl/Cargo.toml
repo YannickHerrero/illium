@@ -1,0 +1,8 @@
+[package]
+name = "winarchyctl"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+winarchy-ipc = { path = "../winarchy-ipc" }
