@@ -6,7 +6,7 @@ A minimal, keyboard-first Windows 11 x64 tiling window manager and experimental 
 
 **Status: V1 implementation under integration validation — not yet a verified V1 release.** See [test results and limitations](docs/testing.md). Do not use as your unattended primary shell yet.
 
-**Host security blocker:** Defender quarantined the unsigned release daemon as `Trojan:Win32/Bearfoos.B!ml` after integration testing. This detection is unresolved. Do not disable antivirus or add exclusions to run it; see [the security/build report](docs/security-validation.md).
+**Host security blocker:** Defender quarantined the unsigned release daemon as `Trojan:Win32/Bearfoos.B!ml` after integration testing. This detection is unresolved. Do not disable antivirus or add exclusions to run it; see [the security/build report](docs/security-validation.md) and [the source/dependency audit](docs/security-audit.md). Security fixes are in the source, but the old candidate binaries have not been replaced or approved.
 
 > **Recovery:** press **Ctrl+Shift+Esc**, choose **Run new task**, and run `explorer.exe`. To end Winarchy normally, run `winarchyctl quit`. A watchdog also makes a best-effort recovery after crashes. Never rely on it as your only recovery mechanism.
 

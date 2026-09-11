@@ -1,5 +1,7 @@
 # Unresolved Windows security detection
 
+Follow-up: [source/dependency audit and remaining issues](security-audit.md). The source now contains security corrections; this report's executable hashes and prior candidate archive identify the **old build**, not those corrections. No corrected daemon has been run to bypass this detection.
+
 The locally cross-built release daemon ran the recorded IPC/window/recovery tests, then Microsoft Defender quarantined its Windows-host copy. The product reported:
 
 - Daemon: `Trojan:Win32/Bearfoos.B!ml` (ThreatID `2147731849`).
