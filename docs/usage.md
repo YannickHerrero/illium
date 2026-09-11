@@ -1,5 +1,13 @@
 # Usage
 
+## Windows already open at startup
+
+Starting Winarchy automatically enrolls eligible, already-visible application windows and tiles them in the current workspace (workspace 1 initially). You do not need to close and reopen your applications. Window rules still apply: ignored windows are untouched, dialogs generally float, and workspace assignments are respected. System/helper windows and applications that cannot be managed with your standard user token remain excluded.
+
+Minimized windows are not forcibly restored at startup. Restoring one enrolls it automatically. Minimizing an already-managed window removes it from the tiling calculation until it is restored, without losing its workspace membership.
+
+Hooks are registered before the initial enumeration, so windows created or restored during startup are queued for management rather than falling between the snapshot and event subscription. The log records the initial enrolled-window count without recording window titles.
+
 ## Applications and launcher
 
 Alt+Enter executes the `terminal` alias. Alt+Space toggles the launcher. Type a subsequence of an application's name, use Up/Down, Enter to launch, Escape to dismiss. The index combines `apps.toml` aliases and `.lnk` files under the current-user and common Start Menu Programs directories. Reload to refresh the index. Shortcuts are launched through ShellExecute, without requiring an Explorer process.

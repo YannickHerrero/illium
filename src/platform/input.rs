@@ -126,6 +126,15 @@ pub fn start(tx: EventSender, bindings: Vec<Binding>) -> Result<(), String> {
                         WINEVENT_OUTOFCONTEXT,
                     ),
                     SetWinEventHook(
+                        EVENT_SYSTEM_MINIMIZESTART,
+                        EVENT_SYSTEM_MINIMIZEEND,
+                        None,
+                        Some(window_event),
+                        0,
+                        0,
+                        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+                    ),
+                    SetWinEventHook(
                         EVENT_SYSTEM_MOVESIZEEND,
                         EVENT_SYSTEM_MOVESIZEEND,
                         None,

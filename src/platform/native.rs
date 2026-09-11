@@ -26,6 +26,9 @@ pub fn rect(id: isize) -> Rect {
         }
     }
 }
+pub fn minimized(id: isize) -> bool {
+    unsafe { IsIconic(hwnd(id)).as_bool() }
+}
 pub fn title(id: isize) -> String {
     unsafe {
         let mut s = [0u16; 1024];

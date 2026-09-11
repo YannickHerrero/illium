@@ -54,7 +54,7 @@ impl Manager {
                 .model
                 .clients
                 .iter()
-                .any(|c| c.id == id && c.workspace == self.model.active)
+                .any(|c| c.id == id && c.workspace == self.model.active && !native::minimized(c.id))
         }) {
             self.model.focused = None;
         }
@@ -137,7 +137,12 @@ impl Manager {
             .model
             .clients
             .iter()
-            .filter(|c| c.workspace == self.model.active && !c.floating && !c.fullscreen)
+            .filter(|c| {
+                c.workspace == self.model.active
+                    && !c.floating
+                    && !c.fullscreen
+                    && !native::minimized(c.id)
+            })
             .map(|c| c.id)
             .collect();
         let rs = fibonacci(
@@ -148,7 +153,7 @@ impl Manager {
         );
         native::batch(&ids.into_iter().zip(rs).collect::<Vec<_>>());
         for c in &self.model.clients {
-            if c.workspace == self.model.active && c.fullscreen {
+            if c.workspace == self.model.active && c.fullscreen && !native::minimized(c.id) {
                 native::position(c.id, area, Some(HWND_TOP));
             }
         }
@@ -162,16 +167,15 @@ impl Manager {
             .model
             .focused
             .filter(|id| {
-                self.model
-                    .clients
-                    .iter()
-                    .any(|c| c.id == *id && c.workspace == self.model.active)
+                self.model.clients.iter().any(|c| {
+                    c.id == *id && c.workspace == self.model.active && !native::minimized(c.id)
+                })
             })
             .or_else(|| {
                 self.model
                     .clients
                     .iter()
-                    .find(|c| c.workspace == self.model.active)
+                    .find(|c| c.workspace == self.model.active && !native::minimized(c.id))
                     .map(|c| c.id)
             });
         self.model.focused = id;
@@ -200,12 +204,9 @@ impl Manager {
             _ => tracing::debug!(?c, "command"),
         }
         let foreground = unsafe { GetForegroundWindow().0 as isize };
-        if self
-            .model
-            .clients
-            .iter()
-            .any(|w| w.id == foreground && w.workspace == self.model.active)
-        {
+        if self.model.clients.iter().any(|w| {
+            w.id == foreground && w.workspace == self.model.active && !native::minimized(w.id)
+        }) {
             self.model.focused = Some(foreground);
         }
         match c {
@@ -251,6 +252,7 @@ impl Manager {
                         .iter()
                         .filter(|w| {
                             w.workspace == self.model.active
+                                && !native::minimized(w.id)
                                 && (!matches!(c, Command::Move(_)) || !w.floating)
                         })
                         .map(|w| (w.id, native::rect(w.id)))
@@ -382,6 +384,7 @@ impl Manager {
                 EVENT_SYSTEM_FOREGROUND => {
                     if let Some(c) = self.model.clients.iter().find(|c| c.id == id)
                         && c.workspace == self.model.active
+                        && !native::minimized(c.id)
                     {
                         self.model.focused = Some(id);
                         let r = native::rect(id);
@@ -401,7 +404,11 @@ impl Manager {
                         self.layout();
                     }
                 }
-                EVENT_SYSTEM_MOVESIZEEND => self.layout(),
+                EVENT_SYSTEM_MINIMIZEEND => {
+                    self.add(id);
+                    self.layout();
+                }
+                EVENT_SYSTEM_MINIMIZESTART | EVENT_SYSTEM_MOVESIZEEND => self.layout(),
                 _ => {}
             },
             Event::Search(q) => self.shell.search(&q, self.config.launcher.max_results),
@@ -536,11 +543,18 @@ pub fn run(replace: bool) -> Result<(), String> {
             let mut m = m.borrow_mut();
             let config = m.config.clone();
             let monitors = m.monitors.clone();
+            // Subscribe before enumeration so no show/create/restore event can
+            // disappear between the initial snapshot and hook registration.
+            input::start(tx.clone(), bindings)?;
+            let foreground = unsafe { GetForegroundWindow().0 as isize };
             m.shell.configure(&config, &monitors)?;
             for id in native::enumerate() {
                 m.add(id);
             }
-            let foreground = unsafe { GetForegroundWindow().0 as isize };
+            tracing::info!(
+                count = m.model.clients.len(),
+                "existing application windows enrolled"
+            );
             m.model.focused = m
                 .model
                 .clients
@@ -549,7 +563,6 @@ pub fn run(replace: bool) -> Result<(), String> {
                 .map(|c| c.id);
             m.layout();
             m.focus_visible();
-            input::start(tx.clone(), bindings)?;
             watch(home, tx);
             tracing::info!("Winarchy core initialized");
             Ok(())
