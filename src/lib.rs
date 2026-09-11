@@ -4,6 +4,7 @@ pub mod files;
 pub mod keyboard;
 pub mod layout;
 pub mod model;
+pub mod modifiers;
 #[cfg(windows)]
 pub mod platform;
 pub mod protocol;

@@ -8,6 +8,14 @@ use windows::Win32::{
 };
 static STATE: OnceLock<(EventSender, RwLock<Vec<Binding>>)> = OnceLock::new();
 static CONSUMED: std::sync::Mutex<[bool; 256]> = std::sync::Mutex::new([false; 256]);
+static MODIFIERS: std::sync::Mutex<crate::modifiers::Modifiers> =
+    std::sync::Mutex::new(crate::modifiers::Modifiers::new());
+fn resync_modifiers() {
+    let mut state = MODIFIERS.lock().unwrap_or_else(|e| e.into_inner());
+    for key in [0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0x5b, 0x5c] {
+        state.update(key, unsafe { GetAsyncKeyState(key as i32) } < 0);
+    }
+}
 pub fn update(bindings: Vec<Binding>) {
     if let Some((_, b)) = STATE.get() {
         *b.write().unwrap_or_else(|e| e.into_inner()) = bindings;
@@ -20,6 +28,13 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
             if k.vkCode < 256 {
                 let down = w.0 as u32 == WM_KEYDOWN || w.0 as u32 == WM_SYSKEYDOWN;
                 let up = w.0 as u32 == WM_KEYUP || w.0 as u32 == WM_SYSKEYUP;
+                let modifiers = {
+                    let mut state = MODIFIERS.lock().unwrap_or_else(|e| e.into_inner());
+                    if down || up {
+                        state.update(k.vkCode, down);
+                    }
+                    state.mask() | u8::from(k.flags.0 & LLKHF_ALTDOWN.0 != 0)
+                };
                 if up {
                     let mut consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner());
                     if consumed[k.vkCode as usize] {
@@ -28,11 +43,6 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                     }
                 }
                 if down {
-                    let pressed = |v: VIRTUAL_KEY| GetAsyncKeyState(v.0 as i32) < 0;
-                    let modifiers = u8::from(pressed(VK_MENU) || k.flags.0 & LLKHF_ALTDOWN.0 != 0)
-                        | (u8::from(pressed(VK_CONTROL)) * 2)
-                        | (u8::from(pressed(VK_SHIFT)) * 4)
-                        | (u8::from(pressed(VK_LWIN) || pressed(VK_RWIN)) * 8);
                     if let Some((tx, bindings)) = STATE.get()
                         && let Some(b) = bindings
                             .read()
@@ -65,6 +75,9 @@ unsafe extern "system" fn window_event(
     _: u32,
     _: u32,
 ) {
+    if event == EVENT_SYSTEM_FOREGROUND {
+        resync_modifiers();
+    }
     if object == 0
         && !h.is_invalid()
         && let Some((tx, _)) = STATE.get()
@@ -99,6 +112,7 @@ pub fn start(tx: EventSender, bindings: Vec<Binding>) -> Result<(), String> {
     let _ = STATE.set((tx, RwLock::new(bindings)));
     let (ready, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || unsafe {
+        resync_modifiers();
         let hook = SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard), None, 0);
         match hook {
             Err(e) => {

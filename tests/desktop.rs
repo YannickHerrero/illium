@@ -273,7 +273,7 @@ fn desktop_smoke() {
             .collect::<Vec<_>>();
         assert_eq!(
             actual, expected_order,
-            "directional movement shortcut must swap window ordering"
+            "directional movement shortcut key={key:#x} direction={direction:?} must swap window ordering"
         );
     }
     keys(&[0x12, 0x20]);
