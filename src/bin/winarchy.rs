@@ -3,6 +3,11 @@ fn main() {
     #[cfg(windows)]
     {
         let args: Vec<_> = std::env::args().collect();
+        // Reject elevation before opening user-controlled configuration/log paths.
+        if let Err(e) = winarchy::platform::require_standard_user() {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
         let home = winarchy::config::Config::home();
         let _ = std::fs::create_dir_all(&home);
         let file = std::fs::OpenOptions::new()

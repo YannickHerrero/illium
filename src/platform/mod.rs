@@ -13,6 +13,7 @@ use crate::{
     layout::{Rect, fibonacci, neighbor},
     model::{Client, Model},
 };
+pub use security::require_standard_user;
 pub use session::watchdog;
 use std::{
     cell::RefCell,
