@@ -138,10 +138,12 @@ pub fn show(id: isize, visible: bool) {
         let _ = ShowWindow(hwnd(id), if visible { SW_SHOWNA } else { SW_HIDE });
     }
 }
-/// Zero-size activatable window that takes the foreground when no client can,
-/// so keystrokes never land in a window Winarchy just hid. Without Explorer
-/// nothing else picks up activation from a hidden foreground window.
-pub fn sink() -> isize {
+const SINK_CLASS: &str = "WinarchyFocusSink";
+/// Creates the zero-size activatable window that takes the foreground when no
+/// client can, so keystrokes never land in a window Winarchy just hid. It must
+/// live in a process without the keyboard hook: Windows does not run a
+/// low-level hook for input aimed at the hooking process's own windows.
+pub fn create_sink() -> Result<isize, String> {
     unsafe extern "system" fn procedure(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT {
         // Alt chords leave a bare Alt press/release here; DefWindowProc would
         // enter menu mode on it.
@@ -151,41 +153,52 @@ pub fn sink() -> isize {
         }
         unsafe { DefWindowProcW(h, m, w, l) }
     }
-    thread_local! {
-        static SINK: std::cell::Cell<isize> = const { std::cell::Cell::new(0) };
+    unsafe {
+        let class = wide(SINK_CLASS);
+        let instance = windows::Win32::System::LibraryLoader::GetModuleHandleW(None)
+            .map_err(|e| e.to_string())?;
+        RegisterClassW(&WNDCLASSW {
+            lpfnWndProc: Some(procedure),
+            hInstance: instance.into(),
+            lpszClassName: PCWSTR(class.as_ptr()),
+            ..Default::default()
+        });
+        let h = CreateWindowExW(
+            WS_EX_TOOLWINDOW,
+            PCWSTR(class.as_ptr()),
+            PCWSTR(class.as_ptr()),
+            WS_POPUP | WS_VISIBLE,
+            0,
+            0,
+            0,
+            0,
+            None,
+            None,
+            Some(instance.into()),
+            None,
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(h.0 as isize)
     }
-    SINK.with(|sink| {
-        if sink.get() == 0 {
-            unsafe {
-                let class = wide("WinarchyFocusSink");
-                let instance = windows::Win32::System::LibraryLoader::GetModuleHandleW(None)
-                    .unwrap_or_default();
-                RegisterClassW(&WNDCLASSW {
-                    lpfnWndProc: Some(procedure),
-                    hInstance: instance.into(),
-                    lpszClassName: PCWSTR(class.as_ptr()),
-                    ..Default::default()
-                });
-                if let Ok(h) = CreateWindowExW(
-                    WS_EX_TOOLWINDOW,
-                    PCWSTR(class.as_ptr()),
-                    PCWSTR(class.as_ptr()),
-                    WS_POPUP | WS_VISIBLE,
-                    0,
-                    0,
-                    0,
-                    0,
-                    None,
-                    None,
-                    Some(instance.into()),
-                    None,
-                ) {
-                    sink.set(h.0 as isize);
-                }
+}
+/// The sink window owned by `pid`, or 0 when it is not available.
+pub fn sink(pid: u32) -> isize {
+    if pid == 0 {
+        return 0;
+    }
+    let class = wide(SINK_CLASS);
+    unsafe {
+        let mut after = HWND::default();
+        while let Ok(h) = FindWindowExW(None, Some(after), PCWSTR(class.as_ptr()), None) {
+            let mut owner = 0;
+            GetWindowThreadProcessId(h, Some(&mut owner));
+            if owner == pid {
+                return h.0 as isize;
             }
+            after = h;
         }
-        sink.get()
-    })
+    }
+    0
 }
 /// `warp` centers the pointer on the window so the mouse follows keyboard-driven
 /// focus; pointer-driven focus passes `false` to leave the cursor alone.

@@ -185,7 +185,7 @@ impl Manager {
                     .map(|c| c.id)
             });
         self.model.focused = id;
-        native::focus(id.unwrap_or_else(native::sink), id.is_some());
+        native::focus(id.unwrap_or_else(session::sink), id.is_some());
     }
     fn reload(&mut self) -> Result<(), String> {
         let config = Config::load(&self.config.home)?;

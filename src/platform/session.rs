@@ -3,7 +3,7 @@ use std::{
     os::windows::process::CommandExt,
     sync::{
         OnceLock,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering},
     },
 };
 use windows::{
@@ -18,6 +18,7 @@ static READY: AtomicBool = AtomicBool::new(false);
 static IDENTITY: OnceLock<String> = OnceLock::new();
 static PROPERTY: OnceLock<Vec<u16>> = OnceLock::new();
 static GENERATION: AtomicUsize = AtomicUsize::new(1);
+static WATCHDOG: AtomicU32 = AtomicU32::new(0);
 fn initialize(identity: String) -> Result<(), String> {
     if identity.len() != 36
         || !identity.bytes().enumerate().all(|(i, b)| {
@@ -154,16 +155,18 @@ impl Recovery {
                 return Err("recovery event identity collision".into());
             }
             let started = creation_time(GetCurrentProcess())?;
-            std::process::Command::new(std::env::current_exe().map_err(|e| e.to_string())?)
-                .args([
-                    "--watch-session",
-                    &std::process::id().to_string(),
-                    &identity,
-                    &started.to_string(),
-                ])
-                .creation_flags(0x08000000)
-                .spawn()
-                .map_err(|e| e.to_string())?;
+            let child =
+                std::process::Command::new(std::env::current_exe().map_err(|e| e.to_string())?)
+                    .args([
+                        "--watch-session",
+                        &std::process::id().to_string(),
+                        &identity,
+                        &started.to_string(),
+                    ])
+                    .creation_flags(0x08000000)
+                    .spawn()
+                    .map_err(|e| e.to_string())?;
+            WATCHDOG.store(child.id(), Ordering::Release);
             if WaitForSingleObject(*ready, 15000) != WAIT_OBJECT_0 {
                 return Err("recovery watchdog did not initialize".into());
             }
@@ -171,6 +174,10 @@ impl Recovery {
             Ok(Self)
         }
     }
+}
+/// Focus sink hosted by the recovery watchdog, or 0 when unavailable.
+pub fn sink() -> isize {
+    native::sink(WATCHDOG.load(Ordering::Acquire))
 }
 impl Drop for Recovery {
     fn drop(&mut self) {
@@ -202,6 +209,16 @@ pub fn watchdog(pid: u32, identity: &str, started: u64) -> Result<(), String> {
         );
         SetEvent(*ready).map_err(|e| e.to_string())?;
         drop(ready);
+        // The daemon parks the foreground here when a workspace is empty. It
+        // cannot host this window itself: see native::create_sink.
+        std::thread::spawn(|| {
+            if native::create_sink().is_ok() {
+                let mut msg = MSG::default();
+                while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+                    DispatchMessageW(&msg);
+                }
+            }
+        });
         if WaitForSingleObject(*process, INFINITE) != WAIT_OBJECT_0 {
             return Err("could not wait for daemon exit".into());
         }
