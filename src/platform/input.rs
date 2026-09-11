@@ -42,24 +42,23 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                         return LRESULT(1);
                     }
                 }
-                if down {
-                    if let Some((tx, bindings)) = STATE.get()
-                        && let Some(b) = bindings
-                            .read()
-                            .unwrap_or_else(|e| e.into_inner())
-                            .iter()
-                            .find(|b| b.key == k.vkCode && b.modifiers == modifiers)
+                if down
+                    && let Some((tx, bindings)) = STATE.get()
+                    && let Some(b) = bindings
+                        .read()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .iter()
+                        .find(|b| b.key == k.vkCode && b.modifiers == modifiers)
+                {
+                    let mut consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner());
+                    if !consumed[k.vkCode as usize]
+                        && tx.send(Event::Command(b.command.clone(), None)).is_err()
                     {
-                        let mut consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner());
-                        if !consumed[k.vkCode as usize]
-                            && tx.send(Event::Command(b.command.clone(), None)).is_err()
-                        {
-                            drop(consumed);
-                            return CallNextHookEx(None, code, w, l);
-                        }
-                        consumed[k.vkCode as usize] = true;
-                        return LRESULT(1);
+                        drop(consumed);
+                        return CallNextHookEx(None, code, w, l);
                     }
+                    consumed[k.vkCode as usize] = true;
+                    return LRESULT(1);
                 }
             }
         }
