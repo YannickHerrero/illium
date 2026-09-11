@@ -143,6 +143,12 @@ pub fn show(id: isize, visible: bool) {
 /// nothing else picks up activation from a hidden foreground window.
 pub fn sink() -> isize {
     unsafe extern "system" fn procedure(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+        // Alt chords leave a bare Alt press/release here; DefWindowProc would
+        // enter menu mode on it.
+        let menu = m == WM_SYSCOMMAND && (w.0 & 0xfff0) as u32 == SC_KEYMENU;
+        if menu || m == WM_SYSKEYDOWN || m == WM_SYSKEYUP || m == WM_SYSCHAR {
+            return LRESULT(0);
+        }
         unsafe { DefWindowProcW(h, m, w, l) }
     }
     thread_local! {
@@ -194,13 +200,16 @@ pub fn focus(id: isize, warp: bool) {
         // Sharing the foreground thread's input queue with AttachThreadInput made
         // Windows reject the request on a host with an unbounded foreground lock,
         // while a plain call succeeded. Injecting a key release makes this
-        // process the last input source, which is one of the allowed cases.
+        // process the last input source, which is one of the allowed cases. The
+        // key must not be a modifier: the user is usually still holding Alt, and
+        // a released Alt also makes Win32 applications show their menu bar.
         if !SetForegroundWindow(hwnd(id)).as_bool() {
+            tracing::debug!(id, "foreground fallback");
             let release = INPUT {
                 r#type: INPUT_KEYBOARD,
                 Anonymous: INPUT_0 {
                     ki: KEYBDINPUT {
-                        wVk: VK_MENU,
+                        wVk: VK_NONAME,
                         dwFlags: KEYEVENTF_KEYUP,
                         dwExtraInfo: INJECTED,
                         ..Default::default()
