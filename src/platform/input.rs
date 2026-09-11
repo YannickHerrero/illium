@@ -1,56 +1,13 @@
 use super::Event;
-use crate::{command::Command, config::Keys};
+use crate::keyboard::Binding;
+pub use crate::keyboard::parse;
 use std::sync::{OnceLock, RwLock, mpsc::Sender};
 use windows::Win32::{
     Foundation::*,
     UI::{Accessibility::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
 };
-#[derive(Clone)]
-pub struct Binding {
-    key: u32,
-    modifiers: u8,
-    command: Command,
-}
 static STATE: OnceLock<(Sender<Event>, RwLock<Vec<Binding>>)> = OnceLock::new();
 static CONSUMED: std::sync::Mutex<[bool; 256]> = std::sync::Mutex::new([false; 256]);
-pub fn parse(keys: &Keys) -> Result<Vec<Binding>, String> {
-    keys.keybindings
-        .iter()
-        .map(|(key, command)| {
-            let mut modifiers = 0;
-            let mut vk = None;
-            for part in key.split('+') {
-                match part.to_ascii_lowercase().as_str() {
-                    "alt" => modifiers |= 1,
-                    "ctrl" => modifiers |= 2,
-                    "shift" => modifiers |= 4,
-                    "super" => modifiers |= 8,
-                    p => {
-                        vk = Some(match p {
-                            "space" => 32,
-                            "enter" => 13,
-                            "left" => 37,
-                            "up" => 38,
-                            "right" => 39,
-                            "down" => 40,
-                            "escape" => 27,
-                            "tab" => 9,
-                            s if s.len() == 1 && s.as_bytes()[0].is_ascii_alphanumeric() => {
-                                s.to_ascii_uppercase().as_bytes()[0] as u32
-                            }
-                            _ => return Err(format!("unsupported key: {key}")),
-                        });
-                    }
-                }
-            }
-            Ok(Binding {
-                key: vk.ok_or_else(|| format!("missing key: {key}"))?,
-                modifiers,
-                command: command.parse()?,
-            })
-        })
-        .collect()
-}
 pub fn update(bindings: Vec<Binding>) {
     if let Some((_, b)) = STATE.get() {
         *b.write().unwrap_or_else(|e| e.into_inner()) = bindings;

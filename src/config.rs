@@ -1,4 +1,3 @@
-use crate::command::Command;
 use serde::Deserialize;
 use std::{
     collections::BTreeMap,
@@ -192,8 +191,28 @@ impl Config {
         {
             return Err("launcher: invalid dimensions".into());
         }
-        for command in c.keys.keybindings.values() {
-            command.parse::<Command>()?;
+        crate::keyboard::parse(&c.keys)?;
+        for (index, modules) in [&c.bar.left, &c.bar.center, &c.bar.right]
+            .iter()
+            .enumerate()
+        {
+            for module in *modules {
+                if !["workspaces", "window-title", "volume", "battery", "clock"]
+                    .contains(&module.as_str())
+                    || (module == "workspaces" && index != 0)
+                {
+                    return Err(format!("bar: unsupported module or placement: {module}"));
+                }
+            }
+        }
+        let clock = c
+            .bar
+            .clock_format
+            .replace("%H", "")
+            .replace("%M", "")
+            .replace("%S", "");
+        if clock.contains('%') {
+            return Err("clock_format supports only %H, %M, %S".into());
         }
         for r in &c.rules.rules {
             if r.workspace.is_some_and(|n| !(1..=9).contains(&n)) {
