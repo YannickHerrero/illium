@@ -30,6 +30,8 @@ The candidate artifacts retained under WSL's ignored `dist/` directory are for l
 
 ## Review before proceeding
 
+For an actionable French checklist and a prefilled Microsoft submission report, see [Faire examiner le blocage Defender](defender-review.fr.md). Submission requires your explicit consent; no files have been uploaded.
+
 1. Review Defender Protection History and your organization's application-control policy.
 2. Review the source and reproduce a clean build from the locked dependency set.
 3. If the classification is believed to be incorrect, submit the exact hash/binary to Microsoft's official file-submission service for analysis. No submission was made automatically.
