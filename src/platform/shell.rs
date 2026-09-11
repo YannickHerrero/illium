@@ -1,0 +1,263 @@
+use super::{Event, native};
+use crate::{config::Config, layout::Rect, model::Model};
+use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+use slint::{ComponentHandle, ModelRc, VecModel};
+use std::{rc::Rc, sync::mpsc::Sender};
+use windows::Win32::UI::WindowsAndMessaging::*;
+slint::include_modules!();
+fn color(s: &str) -> slint::Color {
+    let c = u32::from_str_radix(&s[1..], 16).unwrap_or_default();
+    slint::Color::from_rgb_u8((c >> 16) as u8, (c >> 8) as u8, c as u8)
+}
+fn id(w: &slint::Window) -> isize {
+    match w.window_handle().window_handle().unwrap().as_raw() {
+        RawWindowHandle::Win32(h) => h.hwnd.get(),
+        _ => 0,
+    }
+}
+fn tool(w: &slint::Window) {
+    unsafe {
+        let h = native::hwnd(id(w));
+        let ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
+        SetWindowLongPtrW(
+            h,
+            GWL_EXSTYLE,
+            (ex | WS_EX_TOOLWINDOW.0 as isize) & !(WS_EX_APPWINDOW.0 as isize),
+        );
+    }
+}
+#[derive(Clone)]
+pub struct App {
+    pub name: String,
+    pub target: String,
+    pub shortcut: bool,
+}
+pub struct Shell {
+    pub backgrounds: Vec<Background>,
+    pub bars: Vec<Bar>,
+    pub launcher: Launcher,
+    pub apps: Vec<App>,
+    pub results: Vec<App>,
+    pub visible: bool,
+    tx: Sender<Event>,
+}
+fn scan(path: &std::path::Path, out: &mut Vec<App>) {
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                scan(&path, out);
+            } else if path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("lnk"))
+            {
+                out.push(App {
+                    name: path
+                        .file_stem()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into(),
+                    target: path.to_string_lossy().into(),
+                    shortcut: true,
+                });
+            }
+        }
+    }
+}
+fn score(query: &str, text: &str) -> Option<usize> {
+    let text = text.to_lowercase();
+    let mut chars = text.char_indices();
+    let mut total = 0;
+    for q in query.to_lowercase().chars() {
+        let (i, _) = chars.find(|(_, c)| *c == q)?;
+        total += i;
+    }
+    Some(total)
+}
+impl Shell {
+    pub fn new(tx: Sender<Event>) -> Result<Self, String> {
+        let launcher = Launcher::new().map_err(|e| e.to_string())?;
+        let t = tx.clone();
+        launcher.on_search(move |q| {
+            let _ = t.send(Event::Search(q.into()));
+        });
+        let t = tx.clone();
+        launcher.on_activate(move |n| {
+            let _ = t.send(Event::Launch(n));
+        });
+        let t = tx.clone();
+        launcher.on_dismiss(move || {
+            let _ = t.send(Event::Dismiss);
+        });
+        Ok(Self {
+            backgrounds: vec![],
+            bars: vec![],
+            launcher,
+            apps: vec![],
+            results: vec![],
+            visible: false,
+            tx,
+        })
+    }
+    pub fn configure(&mut self, c: &Config, monitors: &[Rect]) -> Result<(), String> {
+        for b in self.bars.drain(..) {
+            let _ = b.hide();
+        }
+        for b in self.backgrounds.drain(..) {
+            let _ = b.hide();
+        }
+        for r in monitors {
+            let b = Background::new().map_err(|e| e.to_string())?;
+            b.set_bg(color(&c.theme.background));
+            b.show().map_err(|e| e.to_string())?;
+            tool(b.window());
+            native::position(id(b.window()), *r, Some(HWND_BOTTOM));
+            self.backgrounds.push(b);
+            if c.bar.enabled {
+                let b = Bar::new().map_err(|e| e.to_string())?;
+                b.set_bg(color(&c.theme.surface));
+                b.set_fg(color(&c.theme.text));
+                b.set_accent(color(&c.theme.accent));
+                b.set_muted(color(&c.theme.subtext));
+                let tx = self.tx.clone();
+                b.on_workspace(move |n| {
+                    let _ = tx.send(Event::Command(
+                        crate::command::Command::Workspace(n as u8),
+                        None,
+                    ));
+                });
+                b.show().map_err(|e| e.to_string())?;
+                tool(b.window());
+                native::position(
+                    id(b.window()),
+                    Rect {
+                        x: r.x,
+                        y: if c.bar.position == "top" {
+                            r.y
+                        } else {
+                            r.y + r.h - c.bar.height
+                        },
+                        w: r.w,
+                        h: c.bar.height,
+                    },
+                    Some(HWND_TOPMOST),
+                );
+                self.bars.push(b);
+            }
+        }
+        self.launcher.set_bg(color(&c.theme.background));
+        self.launcher.set_fg(color(&c.theme.text));
+        self.launcher.set_accent(color(&c.theme.accent));
+        self.launcher.set_overlay(color(&c.theme.overlay));
+        self.apps = c
+            .apps
+            .apps
+            .iter()
+            .map(|(name, target)| App {
+                name: name.clone(),
+                target: target.clone(),
+                shortcut: false,
+            })
+            .collect();
+        for env in ["APPDATA", "PROGRAMDATA"] {
+            if let Some(root) = std::env::var_os(env) {
+                scan(
+                    &std::path::PathBuf::from(root).join("Microsoft/Windows/Start Menu/Programs"),
+                    &mut self.apps,
+                );
+            }
+        }
+        self.apps.sort_by_key(|a| a.name.to_lowercase());
+        self.apps.dedup_by(|a, b| a.name == b.name);
+        self.search("", c.launcher.max_results);
+        Ok(())
+    }
+    pub fn search(&mut self, q: &str, max: usize) {
+        let mut matches: Vec<_> = self
+            .apps
+            .iter()
+            .filter_map(|a| score(q, &a.name).map(|s| (s, a)))
+            .collect();
+        matches.sort_by_key(|(s, a)| (*s, a.name.clone()));
+        self.results = matches
+            .into_iter()
+            .take(max)
+            .map(|(_, a)| a.clone())
+            .collect();
+        self.launcher
+            .set_results(ModelRc::from(Rc::new(VecModel::from(
+                self.results
+                    .iter()
+                    .map(|a| a.name.clone().into())
+                    .collect::<Vec<_>>(),
+            ))));
+    }
+    pub fn dismiss(&mut self) {
+        let _ = self.launcher.hide();
+        self.visible = false;
+    }
+    pub fn toggle(&mut self, c: &Config, r: Rect) -> Result<(), String> {
+        if self.visible {
+            self.dismiss();
+            return Ok(());
+        }
+        self.launcher.set_query("".into());
+        self.launcher.set_selected(0);
+        self.search("", c.launcher.max_results);
+        self.launcher.show().map_err(|e| e.to_string())?;
+        tool(self.launcher.window());
+        let w = c.launcher.width.min(r.w);
+        let h = (c.launcher.max_results as i32 * 38 + 65).min(r.h);
+        native::position(
+            id(self.launcher.window()),
+            Rect {
+                x: r.x + (r.w - w) / 2,
+                y: r.y + (r.h - h) / 2,
+                w,
+                h,
+            },
+            Some(HWND_TOPMOST),
+        );
+        native::focus(id(self.launcher.window()));
+        self.launcher.invoke_focus_search();
+        self.visible = true;
+        Ok(())
+    }
+    pub fn refresh(&self, m: &Model, c: &Config) {
+        let occupied = (1..=9)
+            .map(|n| m.clients.iter().any(|w| w.workspace == n))
+            .collect::<Vec<_>>();
+        let title = m.focused.map(native::title).unwrap_or_default();
+        let mut status = String::new();
+        unsafe {
+            use windows::Win32::System::{Power::*, SystemInformation::GetLocalTime};
+            for module in &c.bar.right {
+                match module.as_str() {
+                    "clock" => {
+                        let t = GetLocalTime();
+                        status.push_str(
+                            &c.bar
+                                .clock_format
+                                .replace("%H", &format!("{:02}", t.wHour))
+                                .replace("%M", &format!("{:02}", t.wMinute))
+                                .replace("%S", &format!("{:02}", t.wSecond)),
+                        );
+                    }
+                    "battery" => {
+                        let mut p = SYSTEM_POWER_STATUS::default();
+                        if GetSystemPowerStatus(&mut p).is_ok() && p.BatteryLifePercent <= 100 {
+                            status.push_str(&format!("{}%  ", p.BatteryLifePercent));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        for b in &self.bars {
+            b.set_active(m.active as i32);
+            b.set_occupied(ModelRc::from(Rc::new(VecModel::from(occupied.clone()))));
+            b.set_title_text(title.clone().into());
+            b.set_status(status.clone().into());
+        }
+    }
+}

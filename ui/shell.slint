@@ -1,0 +1,65 @@
+import { LineEdit, ScrollView } from "std-widgets.slint";
+export component Background inherits Window {
+    no-frame: true;
+    in property <color> bg;
+    background: bg;
+}
+export component Bar inherits Window {
+    no-frame: true;
+    in property <color> bg;
+    in property <color> fg;
+    in property <color> accent;
+    in property <color> muted;
+    in property <int> active;
+    in property <[bool]> occupied;
+    in property <string> title-text;
+    in property <string> status;
+    callback workspace(int);
+    background: bg;
+    HorizontalLayout {
+        padding: 4px; spacing: 8px;
+        for n in 9: Rectangle {
+            width: 25px;
+            background: root.active == n + 1 ? root.accent : root.bg;
+            Text { text: "\{n + 1}"; color: root.active == n + 1 ? root.bg : (root.occupied[n] ? root.fg : root.muted); horizontal-alignment: center; vertical-alignment: center; }
+            TouchArea { clicked => { root.workspace(n + 1); } }
+        }
+        Text { text: root.title-text; color: root.fg; overflow: elide; horizontal-alignment: center; vertical-alignment: center; horizontal-stretch: 1; }
+        Text { text: root.status; color: root.fg; vertical-alignment: center; }
+    }
+}
+export component Launcher inherits Window {
+    no-frame: true;
+    in property <color> bg;
+    in property <color> fg;
+    in property <color> accent;
+    in property <color> overlay;
+    in property <[string]> results;
+    in-out property <int> selected: 0;
+    in-out property <string> query;
+    callback search(string);
+    callback activate(int);
+    callback dismiss();
+    background: bg;
+    forward-focus: keys;
+    keys := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Escape) { root.dismiss(); return accept; }
+            if (event.text == Key.DownArrow) { root.selected = min(root.selected + 1, root.results.length - 1); return accept; }
+            if (event.text == Key.UpArrow) { root.selected = max(0, root.selected - 1); return accept; }
+            if (event.text == Key.Return) { root.activate(root.selected); return accept; }
+            return reject;
+        }
+        VerticalLayout {
+            padding: 12px; spacing: 6px;
+            input := LineEdit { text <=> root.query; placeholder-text: "Search applications"; edited => {root.selected = 0; root.search(self.text);} accepted => {root.activate(root.selected);} }
+            for name[index] in root.results: Rectangle {
+                height: 32px;
+                background: root.selected == index ? root.overlay : root.bg;
+                Text { text: name; color: root.selected == index ? root.accent : root.fg; vertical-alignment: center; x: 8px; }
+                TouchArea { clicked => {root.activate(index);} }
+            }
+        }
+    }
+    public function focus-search() { input.focus(); }
+}
