@@ -3,7 +3,7 @@ use crate::{config::Config, layout::Rect, model::Model};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use slint::{ComponentHandle, ModelRc, VecModel};
 use std::rc::Rc;
-use windows::Win32::UI::WindowsAndMessaging::*;
+use windows::Win32::{Foundation::*, UI::WindowsAndMessaging::*};
 slint::include_modules!();
 fn color(s: &str) -> slint::Color {
     let c = u32::from_str_radix(&s[1..], 16).unwrap_or_default();
@@ -15,12 +15,42 @@ fn id(w: &slint::Window) -> isize {
         _ => 0,
     }
 }
+const ORIGINAL_PROC: &str = "WinarchyOriginalProc";
+/// Windows paints a classic caption over the top of a winit window each time
+/// it is activated, even without WS_CAPTION, and leaves it there until the
+/// next redraw. Answering the non-client messages ourselves prevents that.
+unsafe extern "system" fn surface_proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    if m == WM_NCACTIVATE {
+        return LRESULT(1);
+    }
+    if m == WM_NCPAINT {
+        return LRESULT(0);
+    }
+    unsafe {
+        let key = native::wide(ORIGINAL_PROC);
+        let original = GetPropW(h, windows::core::PCWSTR(key.as_ptr())).0 as isize;
+        if original == 0 {
+            return DefWindowProcW(h, m, w, l);
+        }
+        let original: WNDPROC = std::mem::transmute::<isize, WNDPROC>(original);
+        CallWindowProcW(original, h, m, w, l)
+    }
+}
 fn tool(w: &slint::Window, no_activate: bool) {
     unsafe {
         if id(w) == 0 {
             return;
         }
         let h = native::hwnd(id(w));
+        let key = native::wide(ORIGINAL_PROC);
+        if GetPropW(h, windows::core::PCWSTR(key.as_ptr())).is_invalid() {
+            let previous = SetWindowLongPtrW(h, GWLP_WNDPROC, surface_proc as *const () as isize);
+            let _ = SetPropW(
+                h,
+                windows::core::PCWSTR(key.as_ptr()),
+                Some(HANDLE(previous as *mut _)),
+            );
+        }
         let ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
         SetWindowLongPtrW(
             h,
