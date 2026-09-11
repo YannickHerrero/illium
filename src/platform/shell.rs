@@ -33,6 +33,28 @@ fn tool(w: &slint::Window, no_activate: bool) {
                 })
                 & !(WS_EX_APPWINDOW.0 as isize),
         );
+        // winit keeps WS_CAPTION on frameless windows for Aero Snap, which makes
+        // Windows clamp the bar to SM_CYMINTRACK (47 px at 125%).
+        let style = GetWindowLongPtrW(h, GWL_STYLE);
+        SetWindowLongPtrW(
+            h,
+            GWL_STYLE,
+            (style | WS_POPUP.0 as isize)
+                & !((WS_CAPTION.0
+                    | WS_THICKFRAME.0
+                    | WS_SYSMENU.0
+                    | WS_MINIMIZEBOX.0
+                    | WS_MAXIMIZEBOX.0) as isize),
+        );
+        let _ = SetWindowPos(
+            h,
+            None,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        );
     }
 }
 #[derive(Clone)]
