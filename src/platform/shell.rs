@@ -45,6 +45,7 @@ pub struct Shell {
     tx: Sender<Event>,
     pub pending: bool,
     launcher_pending: Option<Rect>,
+    descriptions: bool,
 }
 fn scan(path: &std::path::Path, out: &mut Vec<App>) {
     if let Ok(entries) = std::fs::read_dir(path) {
@@ -103,11 +104,13 @@ impl Shell {
             visible: false,
             pending: false,
             launcher_pending: None,
+            descriptions: false,
             tx,
         })
     }
     pub fn configure(&mut self, c: &Config, monitors: &[Rect]) -> Result<(), String> {
         self.pending = true;
+        self.descriptions = c.launcher.show_descriptions;
         for b in self.bars.drain(..) {
             let _ = b.hide();
         }
@@ -247,7 +250,13 @@ impl Shell {
             .set_results(ModelRc::from(Rc::new(VecModel::from(
                 self.results
                     .iter()
-                    .map(|a| a.name.clone().into())
+                    .map(|a| {
+                        if self.descriptions {
+                            format!("{} — {}", a.name, a.target).into()
+                        } else {
+                            a.name.clone().into()
+                        }
+                    })
                     .collect::<Vec<_>>(),
             ))));
     }
