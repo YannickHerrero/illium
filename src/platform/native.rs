@@ -36,7 +36,7 @@ pub fn title(id: isize) -> String {
 pub fn metadata(id: isize) -> Option<(String, String, bool)> {
     unsafe {
         let h = hwnd(id);
-        if !IsWindow(Some(h)).as_bool() || !IsWindowVisible(h).as_bool() {
+        if !IsWindow(Some(h)).as_bool() || !IsWindowVisible(h).as_bool() || IsIconic(h).as_bool() {
             return None;
         }
         let mut pid = 0;

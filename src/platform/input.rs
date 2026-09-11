@@ -112,6 +112,21 @@ unsafe extern "system" fn window_event(
         let _ = tx.send(Event::Window(event, h.0 as isize));
     }
 }
+unsafe extern "system" fn mouse(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
+    unsafe {
+        if code >= 0 && w.0 as u32 == WM_MOUSEMOVE {
+            static LAST: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+            let event = *(l.0 as *const MSLLHOOKSTRUCT);
+            let h = GetAncestor(WindowFromPoint(event.pt), GA_ROOT).0 as isize;
+            if LAST.swap(h, std::sync::atomic::Ordering::Relaxed) != h
+                && let Some((tx, _)) = STATE.get()
+            {
+                let _ = tx.send(Event::Mouse(h));
+            }
+        }
+        CallNextHookEx(None, code, w, l)
+    }
+}
 unsafe extern "system" fn display_window(h: HWND, message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     if (message == WM_DISPLAYCHANGE || message == WM_SETTINGCHANGE)
         && let Some((tx, _)) = STATE.get()
@@ -130,6 +145,7 @@ pub fn start(tx: Sender<Event>, bindings: Vec<Binding>) -> Result<(), String> {
                 let _ = ready.send(Err(e.to_string()));
             }
             Ok(hook) => {
+                let mouse_hook = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse), None, 0).ok();
                 let hooks = [
                     SetWinEventHook(
                         EVENT_OBJECT_CREATE,
@@ -198,6 +214,9 @@ pub fn start(tx: Sender<Event>, bindings: Vec<Binding>) -> Result<(), String> {
                     DispatchMessageW(&msg);
                 }
                 let _ = UnhookWindowsHookEx(hook);
+                if let Some(h) = mouse_hook {
+                    let _ = UnhookWindowsHookEx(h);
+                }
                 for h in hooks {
                     let _ = UnhookWinEvent(h);
                 }

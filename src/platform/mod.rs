@@ -1,3 +1,4 @@
+mod dpi;
 mod input;
 mod instance;
 pub mod ipc;
@@ -29,6 +30,7 @@ pub enum Event {
     Dismiss,
     Reload,
     Display,
+    Mouse(isize),
 }
 struct Manager {
     config: Config,
@@ -55,6 +57,7 @@ impl Manager {
                 workspace = r.workspace.unwrap_or(workspace);
             }
         }
+        session::tag(id);
         self.model.clients.push(Client {
             id,
             workspace,
@@ -74,9 +77,10 @@ impl Manager {
             h: 720,
         });
         if self.config.bar.enabled {
-            r.h -= self.config.bar.height;
+            let height = dpi::scale(r, self.config.bar.height);
+            r.h -= height;
             if self.config.bar.position == "top" {
-                r.y += self.config.bar.height;
+                r.y += height;
             }
         }
         r
@@ -103,8 +107,8 @@ impl Manager {
         let rs = fibonacci(
             area,
             ids.len(),
-            self.config.wm.gap,
-            self.config.wm.outer_gap,
+            dpi::scale(area, self.config.wm.gap),
+            dpi::scale(area, self.config.wm.outer_gap),
         );
         native::batch(&ids.into_iter().zip(rs).collect::<Vec<_>>());
         for c in &self.model.clients {
@@ -303,6 +307,7 @@ impl Manager {
                         && !unsafe { IsWindowVisible(native::hwnd(id)).as_bool() }
                     {
                         self.model.clients.retain(|c| c.id != id);
+                        session::untag(id);
                         self.layout();
                     }
                 }
@@ -348,6 +353,19 @@ impl Manager {
                 self.shell.dismiss();
                 self.focus_visible();
             }
+            Event::Mouse(id) => {
+                if self.config.wm.focus_follows_mouse
+                    && !self.shell.visible
+                    && self
+                        .model
+                        .clients
+                        .iter()
+                        .any(|c| c.id == id && c.workspace == self.model.active)
+                {
+                    self.model.focused = Some(id);
+                    native::focus(id);
+                }
+            }
             Event::Display => {
                 let monitors = native::monitors();
                 if !monitors.is_empty() && monitors != self.monitors {
@@ -372,6 +390,7 @@ impl Drop for Manager {
     fn drop(&mut self) {
         for c in &self.model.clients {
             native::show(c.id, true);
+            session::untag(c.id);
             if c.fullscreen {
                 native::position(c.id, c.restore, None);
             }
@@ -483,9 +502,13 @@ pub fn run(replace: bool) -> Result<(), String> {
             for event in rx.try_iter().take(128) {
                 m.event(event);
             }
-            let config = m.config.clone();
-            let monitors = m.monitors.clone();
-            if m.shell.arrange(&config, &monitors)
+            let Manager {
+                shell,
+                config,
+                monitors,
+                ..
+            } = &mut *m;
+            if shell.arrange(config, monitors)
                 && guard.borrow().is_none()
                 && !m.shell.backgrounds.is_empty()
             {
