@@ -95,4 +95,4 @@ See [themes](themes.md). Adding a theme requires no rebuild.
 
 ## Logs
 
-`winarchy.log` is written inside the configuration directory. Start with `--debug` for command and positioning diagnostics. Logs contain application titles; review them before sharing. Logs currently require manual rotation while the daemon is stopped.
+`winarchy.log` is written inside the configuration directory. Start with `--debug` for command and positioning diagnostics. New window lifecycle messages omit application titles, and launch command arguments are omitted even in debug mode. Historical logs and configuration parse errors can still contain private data; review logs before sharing. Logs currently require manual rotation while the daemon is stopped.

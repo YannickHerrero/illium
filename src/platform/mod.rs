@@ -69,7 +69,7 @@ impl Manager {
             fullscreen: false,
             restore: native::rect(id),
         });
-        tracing::info!(id,workspace,%title,"window added");
+        tracing::info!(id, workspace, "window added");
         true
     }
     fn area(&self) -> Rect {
@@ -156,7 +156,12 @@ impl Manager {
         Ok(())
     }
     fn execute(&mut self, c: Command) -> Result<String, String> {
-        tracing::debug!(?c, "command");
+        match &c {
+            Command::Spawn(_) | Command::LaunchTarget { .. } => {
+                tracing::debug!("application launch command")
+            }
+            _ => tracing::debug!(?c, "command"),
+        }
         let foreground = unsafe { GetForegroundWindow().0 as isize };
         if self
             .model
