@@ -25,7 +25,7 @@ use windows::Win32::{
     UI::{HiDpi::*, WindowsAndMessaging::*},
 };
 pub enum Event {
-    Command(Command, Option<Sender<Result<String, String>>>),
+    Command(Command, Option<crate::request::ReplyTo>),
     Window(u32, isize),
     Search(String),
     Launch(i32),
@@ -305,12 +305,20 @@ impl Manager {
     fn event(&mut self, event: Event) {
         match event {
             Event::Command(c, reply) => {
+                if let Some(reply) = &reply
+                    && !reply.ticket.start(std::time::Instant::now())
+                {
+                    let _ = reply
+                        .sender
+                        .send(Err("IPC request expired before execution".into()));
+                    return;
+                }
                 let result = self.execute(c);
                 if let Err(e) = &result {
                     tracing::warn!(%e,"command failed");
                 }
                 if let Some(reply) = reply {
-                    let _ = reply.send(result);
+                    let _ = reply.sender.send(result);
                 }
             }
             Event::Window(event, id) => match event {

@@ -104,10 +104,27 @@ pub fn start(tx: Sender<Event>) -> Result<(), String> {
             }
             let result = read_command(&mut file).and_then(|c| {
                 let (reply, rx) = std::sync::mpsc::channel();
-                tx.send(Event::Command(c, Some(reply)))
-                    .map_err(|e| e.to_string())?;
-                rx.recv_timeout(std::time::Duration::from_secs(5))
-                    .map_err(|e| e.to_string())?
+                let ticket = std::sync::Arc::new(crate::request::Ticket::new(
+                    std::time::Instant::now() + std::time::Duration::from_secs(5),
+                ));
+                tx.send(Event::Command(
+                    c,
+                    Some(crate::request::ReplyTo {
+                        ticket: ticket.clone(),
+                        sender: reply,
+                    }),
+                ))
+                .map_err(|e| e.to_string())?;
+                match rx.recv_timeout(std::time::Duration::from_secs(5)) {
+                    Ok(result) => result,
+                    Err(_) if ticket.cancel() => {
+                        Err("IPC request cancelled before execution".into())
+                    }
+                    Err(_) => Err(
+                        "IPC execution already started; outcome unknown, do not retry blindly"
+                            .into(),
+                    ),
+                }
             });
             let reply = match result {
                 Ok(message) => Reply { ok: true, message },
