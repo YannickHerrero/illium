@@ -4,10 +4,13 @@ use windows::{
         Foundation::*,
         Graphics::{Dwm::*, Gdi::*},
         System::Threading::*,
-        UI::{Shell::*, WindowsAndMessaging::*},
+        UI::{Input::KeyboardAndMouse::*, Shell::*, WindowsAndMessaging::*},
     },
     core::{BOOL, PCWSTR, PWSTR},
 };
+/// `dwExtraInfo` marker on input the daemon injects, so its own keyboard hook
+/// leaves modifier tracking untouched.
+pub const INJECTED: usize = 0x5741_5243;
 pub fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
 }
@@ -183,18 +186,29 @@ pub fn focus(id: isize) {
         return;
     }
     unsafe {
-        let foreground = GetWindowThreadProcessId(GetForegroundWindow(), None);
-        let current = GetCurrentThreadId();
-        let attached =
-            foreground != current && AttachThreadInput(current, foreground, true).as_bool();
         if IsIconic(hwnd(id)).as_bool() {
             let _ = ShowWindow(hwnd(id), SW_RESTORE);
         }
+        // Sharing the foreground thread's input queue with AttachThreadInput made
+        // Windows reject the request on a host with an unbounded foreground lock,
+        // while a plain call succeeded. Injecting a key release makes this
+        // process the last input source, which is one of the allowed cases.
         if !SetForegroundWindow(hwnd(id)).as_bool() {
-            tracing::debug!(id, "foreground request rejected");
-        }
-        if attached {
-            let _ = AttachThreadInput(current, foreground, false);
+            let release = INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: VK_MENU,
+                        dwFlags: KEYEVENTF_KEYUP,
+                        dwExtraInfo: INJECTED,
+                        ..Default::default()
+                    },
+                },
+            };
+            SendInput(&[release], std::mem::size_of::<INPUT>() as i32);
+            if !SetForegroundWindow(hwnd(id)).as_bool() {
+                tracing::debug!(id, "foreground request rejected");
+            }
         }
     }
 }

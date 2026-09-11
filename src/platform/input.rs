@@ -25,7 +25,7 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
     unsafe {
         if code >= 0 {
             let k = *(l.0 as *const KBDLLHOOKSTRUCT);
-            if k.vkCode < 256 {
+            if k.vkCode < 256 && k.dwExtraInfo != super::native::INJECTED {
                 let down = w.0 as u32 == WM_KEYDOWN || w.0 as u32 == WM_SYSKEYDOWN;
                 let up = w.0 as u32 == WM_KEYUP || w.0 as u32 == WM_SYSKEYUP;
                 let modifiers = {
