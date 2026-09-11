@@ -1,6 +1,6 @@
 # Installation
 
-**Build with the MSVC target.** The MinGW-built candidates were quarantined by Defender; the MSVC build with embedded resources was not, on the development host. Read [security validation](security-validation.md) and [the controller investigation](controller-investigation.md) before installing. These are build/run instructions, not a recommendation to bypass endpoint protection.
+Build for the `x86_64-pc-windows-msvc` target. The MinGW target still compiles but is not the supported distribution route.
 
 ## Windows build
 
@@ -36,7 +36,7 @@ cargo xwin build --workspace --release --target x86_64-pc-windows-msvc --locked
 
 The resulting executables depend on `VCRUNTIME140.dll` and the Universal CRT, which Windows 11 and the Visual C++ Redistributable provide.
 
-3. Cross-compile using MinGW from WSL (`x86_64-pc-windows-gnu`). This still builds, but the resulting binaries were the ones Defender classified as malicious; prefer the MSVC target:
+3. Cross-compile using MinGW from WSL (`x86_64-pc-windows-gnu`). This builds, but the MSVC target is the supported route:
 
 ```sh
 sudo apt install gcc-mingw-w64-x86-64

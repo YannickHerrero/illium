@@ -6,7 +6,7 @@ A minimal, keyboard-first Windows 11 x64 tiling window manager and experimental 
 
 **Status: V1 implementation under integration validation — not yet a verified V1 release.** See [test results and limitations](docs/testing.md). Do not use as your unattended primary shell yet.
 
-**Host security status:** Defender quarantined the earlier MinGW-built (`x86_64-pc-windows-gnu`) daemon and CLI as `Trojan:Win32/Bearfoos.B!ml` and `Trojan:Win32/Wacatac.F!ml`. Both were machine-learning verdicts on unsigned, resource-less, zero-prevalence binaries. The build now targets `x86_64-pc-windows-msvc` (from WSL through cargo-xwin, see [installation](docs/installation.md)) and embeds version information and an `asInvoker` manifest. On 2026-09-11 that build passed an on-demand scan, and both the CLI and the daemon launched on the development host without a detection. This is one host at one signature version, not a false-positive determination by Microsoft; see [the security/build report](docs/security-validation.md), [the source/dependency audit](docs/security-audit.md) and [the controller investigation](docs/controller-investigation.md). Do not disable antivirus or add exclusions to run it.
+**Build target:** `x86_64-pc-windows-msvc`, from Windows or cross-compiled from WSL with cargo-xwin (see [installation](docs/installation.md)). The executables embed version information and an `asInvoker` manifest and are unsigned.
 
 > **Recovery:** press **Ctrl+Shift+Esc**, choose **Run new task**, and run `explorer.exe`. To end Winarchy normally, run `winarchyctl quit`. A watchdog also makes a best-effort recovery after crashes. Never rely on it as your only recovery mechanism.
 
