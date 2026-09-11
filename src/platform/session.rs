@@ -4,6 +4,7 @@ use windows::{
     Win32::{Foundation::*, System::Threading::*, UI::WindowsAndMessaging::*},
     core::PCWSTR,
 };
+static READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 fn marker(pid: u32) -> std::path::PathBuf {
     crate::config::Config::home().join(format!("session-{pid}.explorer"))
 }
@@ -32,6 +33,9 @@ pub fn explorer(start: bool) -> Result<(), String> {
         let _ = std::fs::remove_file(marker(std::process::id()));
         Ok(())
     } else {
+        if !READY.load(std::sync::atomic::Ordering::Acquire) {
+            return Err("recovery watchdog is not ready; Explorer was not stopped".into());
+        }
         // Record intent first, so a crash during taskkill is recoverable too.
         std::fs::write(marker(std::process::id()), b"restore Explorer")
             .map_err(|e| e.to_string())?;
@@ -69,6 +73,7 @@ impl Recovery {
             let _ = CloseHandle(ready);
             result?;
         }
+        READY.store(true, std::sync::atomic::Ordering::Release);
         if replace {
             explorer(false)?;
         }
