@@ -10,6 +10,8 @@ export component Bar inherits Window {
     in property <color> fg;
     in property <color> accent;
     in property <color> muted;
+    in property <bool> workspaces-visible: true;
+    in property <string> left-text;
     in property <int> active;
     in property <[bool]> occupied;
     in property <string> title-text;
@@ -19,11 +21,13 @@ export component Bar inherits Window {
     HorizontalLayout {
         padding: 4px; spacing: 8px;
         for n in 9: Rectangle {
-            width: 25px;
+            visible: root.workspaces-visible;
+            width: root.workspaces-visible ? 25px : 0px;
             background: root.active == n + 1 ? root.accent : root.bg;
             Text { text: "\{n + 1}"; color: root.active == n + 1 ? root.bg : (root.occupied[n] ? root.fg : root.muted); horizontal-alignment: center; vertical-alignment: center; }
             TouchArea { clicked => { root.workspace(n + 1); } }
         }
+        Text { text: root.left-text; color: root.fg; vertical-alignment: center; }
         Text { text: root.title-text; color: root.fg; overflow: elide; horizontal-alignment: center; vertical-alignment: center; horizontal-stretch: 1; }
         Text { text: root.status; color: root.fg; vertical-alignment: center; }
     }

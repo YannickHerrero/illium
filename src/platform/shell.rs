@@ -289,35 +289,15 @@ impl Shell {
             .map(|n| m.clients.iter().any(|w| w.workspace == n))
             .collect::<Vec<_>>();
         let title = m.focused.map(native::title).unwrap_or_default();
-        let mut status = String::new();
-        unsafe {
-            use windows::Win32::System::{Power::*, SystemInformation::GetLocalTime};
-            for module in &c.bar.right {
-                match module.as_str() {
-                    "clock" => {
-                        let t = GetLocalTime();
-                        status.push_str(
-                            &c.bar
-                                .clock_format
-                                .replace("%H", &format!("{:02}", t.wHour))
-                                .replace("%M", &format!("{:02}", t.wMinute))
-                                .replace("%S", &format!("{:02}", t.wSecond)),
-                        );
-                    }
-                    "battery" => {
-                        let mut p = SYSTEM_POWER_STATUS::default();
-                        if GetSystemPowerStatus(&mut p).is_ok() && p.BatteryLifePercent <= 100 {
-                            status.push_str(&format!("{}%  ", p.BatteryLifePercent));
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
+        let left = super::status::text(c, &title, &c.bar.left);
+        let center = super::status::text(c, &title, &c.bar.center);
+        let status = super::status::text(c, &title, &c.bar.right);
         for b in &self.bars {
             b.set_active(m.active as i32);
             b.set_occupied(ModelRc::from(Rc::new(VecModel::from(occupied.clone()))));
-            b.set_title_text(title.clone().into());
+            b.set_workspaces_visible(c.bar.left.iter().any(|s| s == "workspaces"));
+            b.set_left_text(left.clone().into());
+            b.set_title_text(center.clone().into());
             b.set_status(status.clone().into());
         }
     }
