@@ -1,0 +1,6 @@
+# Rules match case-insensitive substrings; all supplied fields must match.
+# [[rules]]
+# executable = "notepad.exe"
+# floating = true
+# workspace = 2
+rules = []

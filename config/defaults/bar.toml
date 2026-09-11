@@ -1,0 +1,7 @@
+enabled = true
+position = "top"
+height = 28
+left = ["workspaces"]
+center = ["window-title"]
+right = ["battery", "clock"]
+clock_format = "%H:%M"

@@ -1,0 +1,3 @@
+[apps]
+terminal = "wezterm.exe"
+browser = "msedge.exe"
