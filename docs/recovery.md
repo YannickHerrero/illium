@@ -13,7 +13,7 @@ Run `winarchyctl quit`. Managed windows are shown, fullscreen floating geometry 
 1. Open Task Manager with Ctrl+Shift+Esc.
 2. End the Winarchy daemon if it remains running. A recovery helper with `--watch-session` may also appear under the same executable name; it waits for the daemon.
 3. Use Run new task to run `explorer.exe`.
-4. The helper restores hidden windows tagged with that daemon's process ID. If both processes were killed, relaunch the affected applications or sign out after saving recoverable work. Do not assume restarting Explorer alone unhides WM-hidden application windows.
+4. The helper restores hidden windows tagged with that daemon's unique session identity. If both processes were killed, relaunch the affected applications or sign out after saving recoverable work. Do not assume restarting Explorer alone unhides WM-hidden application windows.
 
 The helper starts for both ordinary and replacement sessions. It is not a service and renders no UI. Explorer-restoration intent is recorded before `taskkill` runs. Recovery remains best effort: process termination, machine shutdown, application privilege boundaries or policy restrictions can defeat it.
 

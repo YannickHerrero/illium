@@ -1,5 +1,7 @@
 # Validation status
 
+**Historical baseline below.** The [latest follow-up](corrections.md) records 44 passing Linux tests, 45 passing native Windows tests on `c10d931`, the successful preexisting-window enrollment/restoration test, stronger keyboard assertions that failed, and the later Defender CLI block. Earlier smoke-test success does not override those later failures.
+
 This is an **integration candidate, not a completed/verified V1 release**. The source and release binaries are available, but the interactive definition of done has not all been demonstrated.
 
 The desktop results below describe the pre-audit candidate. The [security audit](security-audit.md) subsequently added source corrections and three framing tests (32 desktop-independent tests now pass). Those Win32 changes are cross-checked, not yet runtime-tested; the earlier desktop results must not be treated as their validation.

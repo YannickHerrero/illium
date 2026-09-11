@@ -6,7 +6,7 @@ A minimal, keyboard-first Windows 11 x64 tiling window manager and experimental 
 
 **Status: V1 implementation under integration validation — not yet a verified V1 release.** See [test results and limitations](docs/testing.md). Do not use as your unattended primary shell yet.
 
-**Host security blocker:** Defender quarantined the unsigned release daemon as `Trojan:Win32/Bearfoos.B!ml` after integration testing. This detection is unresolved. Do not disable antivirus or add exclusions to run it; see [the security/build report](docs/security-validation.md) and [the source/dependency audit](docs/security-audit.md). Security fixes are in the source, but the old candidate binaries have not been replaced or approved.
+**Host security blocker:** Defender quarantined the unsigned release daemon as `Trojan:Win32/Bearfoos.B!ml` after integration testing. This detection is unresolved. Do not disable antivirus or add exclusions to run it; see [the security/build report](docs/security-validation.md) and [the source/dependency audit](docs/security-audit.md). Follow-up candidates passed on-demand scans, but Windows later blocked the installed CLI as `Trojan:Win32/Wacatac.F!ml`. See [current correction/test results](docs/corrections.md). No candidate is approved for everyday use.
 
 > **Recovery:** press **Ctrl+Shift+Esc**, choose **Run new task**, and run `explorer.exe`. To end Winarchy normally, run `winarchyctl quit`. A watchdog also makes a best-effort recovery after crashes. Never rely on it as your only recovery mechanism.
 
@@ -29,6 +29,7 @@ This does **not** stop Explorer. Defaults are installed without overwriting exis
 
 ## Features
 
+- Automatic enrollment of already-open eligible windows; enrollment on restoration for minimized windows
 - Fibonacci tiling, geometrical focus and directional order swaps
 - Nine owned workspaces, move-and-follow, occupied/recent navigation
 - Floating clients, reversible fullscreen and normal application close requests

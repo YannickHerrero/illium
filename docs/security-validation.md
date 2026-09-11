@@ -1,5 +1,7 @@
 # Unresolved Windows security detection
 
+**Latest result:** a corrected daemon could run and enrollment tests passed, but the installed CLI was subsequently blocked as `Trojan:Win32/Wacatac.F!ml` despite clean on-demand scans. Read [the correction/validation follow-up](corrections.md). The original daemon detection below remains historical evidence, not the only current blocker.
+
 Follow-up: [source/dependency audit and remaining issues](security-audit.md). The source now contains security corrections; this report's executable hashes and prior candidate archive identify the **old build**, not those corrections. No corrected daemon has been run to bypass this detection.
 
 The locally cross-built release daemon ran the recorded IPC/window/recovery tests, then Microsoft Defender quarantined its Windows-host copy. The product reported:

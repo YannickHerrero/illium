@@ -1,6 +1,6 @@
 # Configuration
 
-All files live under `%USERPROFILE%\.config\winarchy`, or `WINARCHY_CONFIG_HOME`. Missing defaults are installed using create-new semantics: existing files are never overwritten. TOML files are UTF-8.
+All files live under `%USERPROFILE%\.config\winarchy`, or `WINARCHY_CONFIG_HOME`. Missing defaults are installed using create-new semantics: existing files are never overwritten. TOML files are UTF-8 regular files (no symlinks/reparse points), limited to 64 KiB each. Configuration and theme directory snapshots examine at most 256 entries.
 
 Directory notifications trigger a debounced, validated reload. Changes to logs and recovery markers do not cause reloads. Reload is transactional across the configuration set: if any file is invalid, the last valid configuration remains active. Fix the file or run `winarchyctl config reload` to see a readable error. Startup requires valid files.
 
@@ -69,7 +69,7 @@ max_results = 8
 show_descriptions = false
 ```
 
-Width: 200–2000 logical pixels; results: 1–30. Launcher dimensions are clamped to the active monitor. The V1 index is rebuilt on configuration reload.
+Width: 200–2000 logical pixels; results: 1–30. Launcher dimensions are clamped to the active monitor. The V1 index is rebuilt on configuration reload. Each Start Menu root is limited to 8,192 examined entries and 16 nested levels; links and junctions are not followed.
 
 ## rules.toml
 

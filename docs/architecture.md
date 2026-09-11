@@ -18,7 +18,7 @@ No async runtime, database, network server or web UI is involved. Windows builds
 
 ## Event flow
 
-Hook callbacks only capture small events/commands and enqueue them. A 10 ms Slint timer drains a bounded batch on the UI thread; window discovery is event-driven, not repeated desktop enumeration. Directory change notifications are debounced and compare only TOML contents. A separate one-second timer updates battery/volume/time. Display broadcasts trigger monitor re-enumeration.
+Hook callbacks only capture small events/commands and try to enqueue them in a 1,024-item bounded queue, without blocking. A 10 ms Slint timer drains a bounded batch on the UI thread. Discovery is event-driven; an overflow schedules reconciliation of the current desktop and configuration. Initial hooks precede startup enumeration. Modifier masks follow ordered key events, with resynchronization outside keyboard callbacks. Directory change notifications are debounced and compare only TOML contents. A separate one-second timer updates battery/volume/time. Display broadcasts trigger monitor re-enumeration.
 
 All regular keyboard bindings and IPC commands reach the same `Manager::execute` implementation. Bar workspace clicks emit the same commands. Launcher application selections share the same native spawn/shortcut helpers; Escape and search are UI-only events.
 
@@ -26,12 +26,12 @@ Slint defers native window creation. Surface positioning waits until valid HWNDs
 
 ## State and layout
 
-Each HWND has one workspace and one position in the global ordered vector. Layout filters that order by active workspace and excludes floating/fullscreen clients. Fibonacci alternates horizontal/vertical bisection; once a split is physically impossible, remaining clients stack. Directions use window centers with squared forward distance plus four times squared perpendicular distance, with HWND tie-breaking.
+Each HWND has one workspace and one position in the global ordered vector. Layout filters that order by active workspace and excludes floating/fullscreen/minimized clients. Each client has a per-window generation property scoped to the current session; numeric handle reuse invalidates the old record. The managed list is capped at 512 windows. Fibonacci alternates horizontal/vertical bisection; once a split is physically impossible, remaining clients stack. Directions use window centers with squared forward distance plus four times squared perpendicular distance, with HWND tie-breaking.
 
 Workspace switches show/hide managed clients. A client carries its floating state and saved fullscreen geometry. Monitor associations are workspace-local; only one global workspace is active. This deliberately is not an independent-workspace-per-monitor system.
 
 ## IPC and recovery
 
-`\\.\pipe\winarchy-USERNAME` accepts a UTF-8 command line and returns a newline-terminated JSON `{ok,message}` reply. Commands are capped at 8191 bytes; the CLI times out after ten seconds. The pipe rejects remote clients and has an owner-only DACL. A named local mutex covers the entire daemon lifetime.
+`\\.\pipe\winarchy-SID-SESSION` accepts a UTF-8 command line and returns a newline-terminated JSON `{ok,message}` reply, followed by a client acknowledgement byte (`0x06`). Commands are capped at 8191 bytes. Overlapped reads/writes use cancellation deadlines; the client exchange has a 12-second deadline. Unstarted queued commands can be cancelled atomically; already-started operations cannot be rolled back and may report an unknown outcome. The pipe rejects remote clients, has an owner-only DACL and retains its single handle between clients. The client verifies the server's token SID and session and requests identification-level access only. A named local mutex covers the daemon lifetime.
 
-A second invocation of the same executable in watchdog mode has no UI. It waits on the daemon process, restores tagged hidden windows, and restarts Explorer if a session marker requests it. This is the only extra process; all visible shell surfaces remain in the daemon.
+A second invocation of the same executable in watchdog mode has no UI. It verifies the daemon's PID plus process creation time, waits on that process, restores windows tagged with the unique session GUID, and restarts Explorer if a GUID-scoped session marker requests it. Its handshake completes before client windows are touched; Explorer is stopped only after the native UI surfaces are ready. This is the only extra process; all visible shell surfaces remain in the daemon.

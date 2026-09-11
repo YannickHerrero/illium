@@ -1,5 +1,7 @@
 # Audit de sécurité — 11 septembre 2026
 
+**Rapport initial historique.** Plusieurs points ci-dessous ont depuis été corrigés et testés. Le [suivi des corrections](corrections.md) distingue les résultats positifs, les tests encore en échec et le nouveau blocage Defender du contrôleur malgré une analyse statique sans détection.
+
 ## Conclusion
 
 **Aucun mécanisme manifestement malveillant n'a été identifié dans le code Winarchy examiné. Cela ne prouve ni l'innocuité du binaire ni un faux positif Defender. La version reste non approuvée pour une utilisation quotidienne.**
