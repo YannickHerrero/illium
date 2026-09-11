@@ -15,7 +15,7 @@ fn id(w: &slint::Window) -> isize {
         _ => 0,
     }
 }
-fn tool(w: &slint::Window) {
+fn tool(w: &slint::Window, no_activate: bool) {
     unsafe {
         if id(w) == 0 {
             return;
@@ -25,7 +25,13 @@ fn tool(w: &slint::Window) {
         SetWindowLongPtrW(
             h,
             GWL_EXSTYLE,
-            (ex | WS_EX_TOOLWINDOW.0 as isize) & !(WS_EX_APPWINDOW.0 as isize),
+            (ex | WS_EX_TOOLWINDOW.0 as isize
+                | if no_activate {
+                    WS_EX_NOACTIVATE.0 as isize
+                } else {
+                    0
+                })
+                & !(WS_EX_APPWINDOW.0 as isize),
         );
     }
 }
@@ -189,12 +195,12 @@ impl Shell {
                 return false;
             }
             for (b, r) in self.backgrounds.iter().zip(monitors) {
-                tool(b.window());
+                tool(b.window(), true);
                 native::position(id(b.window()), *r, Some(HWND_BOTTOM));
             }
             for (b, r) in self.bars.iter().zip(monitors) {
                 let height = super::dpi::scale(*r, c.bar.height);
-                tool(b.window());
+                tool(b.window(), true);
                 native::position(
                     id(b.window()),
                     Rect {
@@ -217,7 +223,7 @@ impl Shell {
         {
             let w = super::dpi::scale(r, c.launcher.width).min(r.w);
             let h = super::dpi::scale(r, c.launcher.max_results as i32 * 38 + 65).min(r.h);
-            tool(self.launcher.window());
+            tool(self.launcher.window(), false);
             native::position(
                 id(self.launcher.window()),
                 Rect {
