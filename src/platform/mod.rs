@@ -488,8 +488,11 @@ pub fn run(replace: bool) -> Result<(), String> {
     let recovery = Rc::new(RefCell::new(None));
     let m = manager.clone();
     let error = startup_error.clone();
+    let startup_recovery = recovery.clone();
     slint::Timer::single_shot(std::time::Duration::from_millis(1), move || {
         let result = (|| -> Result<(), String> {
+            // Arm crash recovery before any client can be tagged or hidden.
+            *startup_recovery.borrow_mut() = Some(session::Recovery::new()?);
             let mut m = m.borrow_mut();
             let config = m.config.clone();
             let monitors = m.monitors.clone();
@@ -519,6 +522,8 @@ pub fn run(replace: bool) -> Result<(), String> {
     let m = manager.clone();
     let timer = slint::Timer::default();
     let guard = recovery.clone();
+    let error = startup_error.clone();
+    let mut session_started = false;
     timer.start(
         slint::TimerMode::Repeated,
         std::time::Duration::from_millis(10),
@@ -538,14 +543,24 @@ pub fn run(replace: bool) -> Result<(), String> {
             if ready && pending && !m.shell.visible {
                 m.focus_visible();
             }
-            if ready && guard.borrow().is_none() && !m.shell.backgrounds.is_empty() {
-                match session::Recovery::new(replace) {
-                    Ok(recovery) => {
-                        *guard.borrow_mut() = Some(recovery);
-                        tracing::info!("Winarchy ready");
-                    }
+            if ready
+                && !session_started
+                && guard.borrow().is_some()
+                && !m.shell.backgrounds.is_empty()
+            {
+                session_started = true;
+                // Explorer is stopped only after native surfaces exist, not at
+                // watchdog startup. A failure also propagates to the exit code.
+                let result = if replace {
+                    session::explorer(false)
+                } else {
+                    Ok(())
+                };
+                match result {
+                    Ok(()) => tracing::info!("Winarchy ready"),
                     Err(e) => {
                         tracing::error!(%e,"session initialization failed");
+                        *error.borrow_mut() = Some(e);
                         let _ = slint::quit_event_loop();
                     }
                 }

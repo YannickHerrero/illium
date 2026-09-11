@@ -2,7 +2,7 @@ use super::{native, security};
 use std::os::windows::process::CommandExt;
 use windows::{
     Win32::{Foundation::*, System::Threading::*, UI::WindowsAndMessaging::*},
-    core::PCWSTR,
+    core::{Owned, PCWSTR},
 };
 static READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 fn marker(pid: u32) -> std::path::PathBuf {
@@ -75,30 +75,28 @@ fn start_explorer() -> Result<(), String> {
 }
 pub struct Recovery;
 impl Recovery {
-    pub fn new(replace: bool) -> Result<Self, String> {
+    pub fn new() -> Result<Self, String> {
         unsafe {
             let name = native::wide(&format!("Local\\WinarchyRecovery-{}", std::process::id()));
-            let ready = CreateEventW(None, true, false, PCWSTR(name.as_ptr()))
-                .map_err(|e| e.to_string())?;
+            let ready = Owned::new(
+                CreateEventW(None, true, false, PCWSTR(name.as_ptr()))
+                    .map_err(|e| e.to_string())?,
+            );
             let exe = std::env::current_exe().map_err(|e| e.to_string())?;
             let result = std::process::Command::new(exe)
                 .args(["--watch-session", &std::process::id().to_string()])
                 .creation_flags(0x08000000)
                 .spawn();
             let result = result.map_err(|e| e.to_string()).and_then(|_| {
-                if WaitForSingleObject(ready, 15000) == WAIT_OBJECT_0 {
+                if WaitForSingleObject(*ready, 15000) == WAIT_OBJECT_0 {
                     Ok(())
                 } else {
                     Err("recovery watchdog did not initialize".into())
                 }
             });
-            let _ = CloseHandle(ready);
             result?;
         }
         READY.store(true, std::sync::atomic::Ordering::Release);
-        if replace {
-            explorer(false)?;
-        }
         Ok(Self)
     }
 }
@@ -112,14 +110,19 @@ impl Drop for Recovery {
 pub fn watchdog(pid: u32) -> Result<(), String> {
     security::require_standard_user()?;
     unsafe {
-        let process = OpenProcess(PROCESS_SYNCHRONIZE, false, pid).map_err(|e| e.to_string())?;
+        let process =
+            Owned::new(OpenProcess(PROCESS_SYNCHRONIZE, false, pid).map_err(|e| e.to_string())?);
         let name = native::wide(&format!("Local\\WinarchyRecovery-{pid}"));
-        let ready = OpenEventW(EVENT_MODIFY_STATE, false, PCWSTR(name.as_ptr()))
-            .map_err(|e| e.to_string())?;
-        let _ = SetEvent(ready);
-        let _ = CloseHandle(ready);
-        let _ = WaitForSingleObject(process, INFINITE);
-        let _ = CloseHandle(process);
+        let ready = Owned::new(
+            OpenEventW(EVENT_MODIFY_STATE, false, PCWSTR(name.as_ptr()))
+                .map_err(|e| e.to_string())?,
+        );
+        SetEvent(*ready).map_err(|e| e.to_string())?;
+        drop(ready);
+        if WaitForSingleObject(*process, INFINITE) != WAIT_OBJECT_0 {
+            return Err("could not wait for daemon exit".into());
+        }
+        drop(process);
         let property = property();
         for id in native::enumerate() {
             if GetPropW(native::hwnd(id), PCWSTR(property.as_ptr())).0 as usize == pid as usize {
