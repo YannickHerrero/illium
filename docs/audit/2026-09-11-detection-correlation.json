@@ -1,0 +1,57 @@
+{
+  "method": "Read-only Windows event-log correlation; no executable launched, rebuilt, renamed or restored during this investigation",
+  "interval_utc": {
+    "start": "2026-09-11T15:42:00Z",
+    "end": "2026-09-11T16:28:00Z"
+  },
+  "antivirus": {
+    "log": "Microsoft-Windows-Windows Defender/Operational",
+    "target": "%LOCALAPPDATA%\\Programs\\Winarchy\\winarchyctl.exe",
+    "detection_id": "{4545C864-C567-43A8-8284-F5879A1524EC}",
+    "threat_id": "2147749375",
+    "threat_name": "Trojan:Win32/Wacatac.F!ml",
+    "detection": {
+      "event_id": 1116,
+      "record_id": 70440,
+      "event_time_utc": "2026-09-11T16:25:23.2366230Z",
+      "detection_time_utc": "2026-09-11T16:25:22.713Z",
+      "source_id": "3",
+      "type_id": "8",
+      "execution_id": "1"
+    },
+    "remediation": {
+      "event_id": 1117,
+      "record_id": 70441,
+      "event_time_utc": "2026-09-11T16:25:54.6357058Z",
+      "action_id": "2",
+      "action": "Quarantine",
+      "error_code": "0x00000000"
+    },
+    "classifier_features_or_code_location": "Not present in the retrieved events"
+  },
+  "other_controls": {
+    "code_integrity": {
+      "query_result": "18 events in interval; 7 Winarchy-related matches, all event 3076",
+      "matched_policy_name": "DefaultWindowsAudit",
+      "interpretation": "Audit-mode events, not enforced event 3077 blocks",
+      "hello_control_event_time_utc": "2026-09-11T16:27:52.3579034Z"
+    },
+    "applocker_exe_and_dll": {
+      "query_result": "NoMatchingEventsFound in interval"
+    },
+    "defender_asr_and_controlled_folder_access": {
+      "queried_event_ids": [1121, 1122, 1123, 1124],
+      "query_result": "10 events in interval; 9 Winarchy-related matches, all event 1122",
+      "matched_rule_id": "01443614-CD74-433A-B99E-2ECDC07BFC25",
+      "rule_name": "Block executable files from running unless they meet a prevalence, age, or trusted list criterion",
+      "interpretation": "ASR audit events; not the antivirus quarantine verdict",
+      "hello_control_event_time_utc": "2026-09-11T16:27:52.3315609Z"
+    }
+  },
+  "limits": [
+    "Absence of matching events in this interval does not establish absence of all application-control policies.",
+    "An audit finding shared by a running control program and Winarchy does not identify the cause of the separate antivirus classification.",
+    "No source line, API call, static feature, reputation score or cloud-model decision is exposed by these events.",
+    "No false-positive determination has been made."
+  ]
+}

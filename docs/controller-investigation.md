@@ -56,6 +56,28 @@ Thus removing unrelated GUI dependencies fixed a genuine architectural defect, *
 
 This shows that this toolchain can produce an executable that runs on this machine. It does not certify the toolchain, exclude path/context effects, or prove Winarchy benign. The control was not a renamed Winarchy binary and was not used to perform an operation through a blocked component.
 
+## Read-only correlation of other security controls
+
+A subsequent investigation inspected the raw XML fields (not just localized messages) for Defender events 1116/1117, and correlated Code Integrity, AppLocker EXE/DLL and Defender ASR/CFA events between **15:42 and 16:28 UTC on 2026-09-11**. It did not run or modify any executable. A minimized, profile-redacted evidence extract is in [detection-correlation.json](audit/2026-09-11-detection-correlation.json).
+
+The controller's antivirus detection and quarantine share detection ID `{4545C864-C567-43A8-8284-F5879A1524EC}` (records 70440 and 70441). They identify realtime source 3, fast-path type 8 and successful quarantine. They provide **no classifier feature, code location, API trace or confidence score**.
+
+There are additional, separate findings:
+
+- Winarchy-related Code Integrity events were **3076**, under `DefaultWindowsAudit`. These are audit-mode findings, not enforced 3077 blocks. The successfully executed print-only control also has a 3076 event.
+- ASR events referencing Winarchy were **1122**, for rule `01443614-CD74-433A-B99E-2ECDC07BFC25`: “Block executable files from running unless they meet a prevalence, age, or trusted list criterion.” These particular events are **audit**, not block events. The print-only control also triggered this audit at 16:27:52 UTC and still printed its message.
+- AppLocker EXE/DLL returned no events in the queried interval. No Winarchy-related enforced Code Integrity or ASR/CFA block was found there. This is a scoped observation, not proof that the machine has no other policies.
+
+Thus a reputation/trust audit signal is confirmed, but **must not be conflated with the separate `Wacatac.F!ml` antivirus quarantine**. Its presence on the successful control means it does not by itself explain the observed difference. A missing signature, the compiler, an IPC API, or PowerShell being listed as the accessing process cannot be declared the exact cause on this evidence.
+
+Microsoft references used to interpret event IDs and the rule GUID:
+
+- [ASR rule reference](https://learn.microsoft.com/en-us/defender-endpoint/attack-surface-reduction-rules-reference#block-executable-files-from-running-unless-they-meet-a-prevalence-age-or-trusted-list-criterion)
+- [ASR audit testing / event 1122](https://learn.microsoft.com/en-us/defender-endpoint/attack-surface-reduction-rules-deployment-test)
+- [App Control event 3076 versus 3077](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/operations/event-id-explanations)
+
+The exact antivirus classifier trigger remains unknown. Iterating renamed, stripped or selectively altered binaries until one is accepted would not establish that trigger or certify safety; it is not the diagnostic method used here.
+
 ## Current limits
 
 Visual Studio is installed, but `vswhere` finds no `Microsoft.VisualStudio.Component.VC.Tools.x86.x64`, and the standard Windows SDK library directory is absent. No MSVC toolchain/SDK was installed and no native MSVC build is claimed.
