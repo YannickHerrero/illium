@@ -73,23 +73,22 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                 if down {
                     let pressed = |v: VIRTUAL_KEY| GetAsyncKeyState(v.0 as i32) < 0;
                     let modifiers = u8::from(pressed(VK_MENU) || k.flags.0 & LLKHF_ALTDOWN.0 != 0)
-                        | u8::from(pressed(VK_CONTROL)) * 2
-                        | u8::from(pressed(VK_SHIFT)) * 4
-                        | u8::from(pressed(VK_LWIN) || pressed(VK_RWIN)) * 8;
-                    if let Some((tx, bindings)) = STATE.get() {
-                        if let Some(b) = bindings
+                        | (u8::from(pressed(VK_CONTROL)) * 2)
+                        | (u8::from(pressed(VK_SHIFT)) * 4)
+                        | (u8::from(pressed(VK_LWIN) || pressed(VK_RWIN)) * 8);
+                    if let Some((tx, bindings)) = STATE.get()
+                        && let Some(b) = bindings
                             .read()
                             .unwrap_or_else(|e| e.into_inner())
                             .iter()
                             .find(|b| b.key == k.vkCode && b.modifiers == modifiers)
-                        {
-                            let mut consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner());
-                            if !consumed[k.vkCode as usize] {
-                                let _ = tx.send(Event::Command(b.command.clone(), None));
-                            }
-                            consumed[k.vkCode as usize] = true;
-                            return LRESULT(1);
+                    {
+                        let mut consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner());
+                        if !consumed[k.vkCode as usize] {
+                            let _ = tx.send(Event::Command(b.command.clone(), None));
                         }
+                        consumed[k.vkCode as usize] = true;
+                        return LRESULT(1);
                     }
                 }
             }
@@ -106,10 +105,11 @@ unsafe extern "system" fn window_event(
     _: u32,
     _: u32,
 ) {
-    if object == 0 && !h.is_invalid() {
-        if let Some((tx, _)) = STATE.get() {
-            let _ = tx.send(Event::Window(event, h.0 as isize));
-        }
+    if object == 0
+        && !h.is_invalid()
+        && let Some((tx, _)) = STATE.get()
+    {
+        let _ = tx.send(Event::Window(event, h.0 as isize));
     }
 }
 pub fn start(tx: Sender<Event>, bindings: Vec<Binding>) -> Result<(), String> {
