@@ -46,7 +46,7 @@ pub fn metadata(id: isize) -> Option<(String, String, bool)> {
         }
         let style = GetWindowLongPtrW(h, GWL_STYLE) as u32;
         let ex = GetWindowLongPtrW(h, GWL_EXSTYLE) as u32;
-        if style & WS_CHILD.0 != 0 || ex & WS_EX_TOOLWINDOW.0 != 0 {
+        if style & WS_CHILD.0 != 0 || ex & (WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0) != 0 {
             return None;
         }
         let mut cloaked = 0u32;
@@ -58,6 +58,9 @@ pub fn metadata(id: isize) -> Option<(String, String, bool)> {
         let n = GetClassNameW(h, &mut class);
         let class = String::from_utf16_lossy(&class[..n.max(0) as usize]);
         if [
+            "#32768",
+            "tooltips_class32",
+            "XamlExplorerHostIslandWindow",
             "Progman",
             "WorkerW",
             "Shell_TrayWnd",
@@ -128,7 +131,19 @@ pub fn show(id: isize, visible: bool) {
 }
 pub fn focus(id: isize) {
     unsafe {
-        let _ = SetForegroundWindow(hwnd(id));
+        let foreground = GetWindowThreadProcessId(GetForegroundWindow(), None);
+        let current = GetCurrentThreadId();
+        let attached =
+            foreground != current && AttachThreadInput(current, foreground, true).as_bool();
+        if IsIconic(hwnd(id)).as_bool() {
+            let _ = ShowWindow(hwnd(id), SW_RESTORE);
+        }
+        if !SetForegroundWindow(hwnd(id)).as_bool() {
+            tracing::debug!(id, "foreground request rejected");
+        }
+        if attached {
+            let _ = AttachThreadInput(current, foreground, false);
+        }
     }
 }
 pub fn close(id: isize) {
@@ -185,7 +200,7 @@ pub fn batch(items: &[(isize, Rect)]) {
 pub fn spawn(command: &str) -> Result<(), String> {
     unsafe {
         let mut line = wide(command);
-        let mut si = STARTUPINFOW {
+        let si = STARTUPINFOW {
             cb: std::mem::size_of::<STARTUPINFOW>() as u32,
             ..Default::default()
         };
@@ -199,7 +214,7 @@ pub fn spawn(command: &str) -> Result<(), String> {
             CREATE_NEW_PROCESS_GROUP,
             None,
             None,
-            &mut si,
+            &si,
             &mut pi,
         )
         .map_err(|e| e.to_string())?;

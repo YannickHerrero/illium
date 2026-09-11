@@ -1,4 +1,5 @@
 mod input;
+mod instance;
 pub mod ipc;
 mod native;
 mod session;
@@ -295,18 +296,18 @@ impl Manager {
                     }
                 }
                 EVENT_SYSTEM_FOREGROUND => {
-                    if let Some(c) = self.model.clients.iter().find(|c| c.id == id) {
-                        if c.workspace == self.model.active {
-                            self.model.focused = Some(id);
-                            let r = native::rect(id);
-                            if let Some(index) = self.monitors.iter().position(|m| {
-                                r.x + r.w / 2 >= m.x
-                                    && r.x + r.w / 2 < m.x + m.w
-                                    && r.y + r.h / 2 >= m.y
-                                    && r.y + r.h / 2 < m.y + m.h
-                            }) {
-                                self.model.monitors[(self.model.active - 1) as usize] = index;
-                            }
+                    if let Some(c) = self.model.clients.iter().find(|c| c.id == id)
+                        && c.workspace == self.model.active
+                    {
+                        self.model.focused = Some(id);
+                        let r = native::rect(id);
+                        if let Some(index) = self.monitors.iter().position(|m| {
+                            r.x + r.w / 2 >= m.x
+                                && r.x + r.w / 2 < m.x + m.w
+                                && r.y + r.h / 2 >= m.y
+                                && r.y + r.h / 2 < m.y + m.h
+                        }) {
+                            self.model.monitors[(self.model.active - 1) as usize] = index;
                         }
                     }
                     self.shell.refresh(&self.model, &self.config);
@@ -382,6 +383,7 @@ fn watch(home: std::path::PathBuf, tx: Sender<Event>) {
     });
 }
 pub fn run(replace: bool) -> Result<(), String> {
+    let _instance = instance::Instance::acquire()?;
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     }
