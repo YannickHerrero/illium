@@ -5,3 +5,4 @@ pub mod layout;
 pub mod model;
 #[cfg(windows)]
 pub mod platform;
+pub mod protocol;

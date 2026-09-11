@@ -1,8 +1,8 @@
 use super::{Event, native::wide};
-use crate::command::{Command, Reply};
+use crate::{command::Reply, protocol::read_command};
 use std::{
     io::{Read, Write},
-    os::windows::io::FromRawHandle,
+    os::windows::{fs::OpenOptionsExt, io::FromRawHandle},
     sync::mpsc::Sender,
 };
 use windows::{
@@ -38,6 +38,8 @@ fn exchange(command: &str) -> Result<Reply, String> {
     let mut file = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
+        // A pre-created hostile pipe must never be able to impersonate this client.
+        .custom_flags(SECURITY_SQOS_PRESENT.0 | SECURITY_IDENTIFICATION.0)
         .open(name)
         .map_err(|e| format!("Winarchy unavailable: {e}"))?;
     file.write_all(format!("{command}\n").as_bytes())
@@ -46,106 +48,77 @@ fn exchange(command: &str) -> Result<Reply, String> {
     let mut b = [0];
     while response.len() < 65536 && file.read(&mut b).map_err(|e| e.to_string())? == 1 {
         if b[0] == b'\n' {
-            break;
+            return serde_json::from_slice(&response).map_err(|e| e.to_string());
         }
         response.push(b[0]);
     }
-    serde_json::from_slice(&response).map_err(|e| e.to_string())
+    Err("incomplete or oversized IPC reply".into())
 }
-pub fn start(tx: Sender<Event>) -> Result<(), String> {
-    let (ready, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || unsafe {
+/// The File owns the single pipe instance for the full server lifetime, including
+/// between clients. Closing/recreating it would permit pipe-name takeover races.
+fn create_pipe() -> Result<std::fs::File, String> {
+    unsafe {
         let name = wide(&pipe_name());
-        // Owner-only access. Never expose command execution to other local users.
         let sddl = wide("D:P(A;;GA;;;OW)");
         let mut descriptor = PSECURITY_DESCRIPTOR::default();
-        if let Err(e) = ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
             PCWSTR(sddl.as_ptr()),
             SDDL_REVISION_1,
             &mut descriptor,
             None,
-        ) {
-            let _ = ready.send(Err(e.to_string()));
-            return;
-        }
+        )
+        .map_err(|e| e.to_string())?;
         let security = SECURITY_ATTRIBUTES {
             nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
             lpSecurityDescriptor: descriptor.0,
             bInheritHandle: false.into(),
         };
-        let mut first = true;
+        let h = CreateNamedPipeW(
+            PCWSTR(name.as_ptr()),
+            PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
+            PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
+            1,
+            65536,
+            65536,
+            1000,
+            Some(&security),
+        );
+        let error = (h == INVALID_HANDLE_VALUE).then(windows::core::Error::from_win32);
+        let _ = LocalFree(Some(HLOCAL(descriptor.0)));
+        if let Some(e) = error {
+            return Err(e.to_string());
+        }
+        Ok(std::fs::File::from_raw_handle(h.0))
+    }
+}
+pub fn start(tx: Sender<Event>) -> Result<(), String> {
+    use std::os::windows::io::AsRawHandle;
+    // Fail synchronously before any UI/window management on name/DACL errors.
+    let mut file = create_pipe()?;
+    std::thread::spawn(move || unsafe {
+        let h = HANDLE(file.as_raw_handle());
         loop {
-            let h = CreateNamedPipeW(
-                PCWSTR(name.as_ptr()),
-                PIPE_ACCESS_DUPLEX
-                    | if first {
-                        FILE_FLAG_FIRST_PIPE_INSTANCE
-                    } else {
-                        FILE_FLAGS_AND_ATTRIBUTES(0)
-                    },
-                PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
-                1,
-                65536,
-                65536,
-                1000,
-                Some(&security),
-            );
-            if h == INVALID_HANDLE_VALUE {
-                let e = windows::core::Error::from_win32().to_string();
-                let _ = ready.send(Err(e.clone()));
-                tracing::error!(%e,"pipe creation failed");
+            if ConnectNamedPipe(h, None).is_err() && GetLastError() != ERROR_PIPE_CONNECTED {
+                tracing::error!(error = %windows::core::Error::from_win32(), "IPC listener stopped");
                 break;
             }
-            if first {
-                let _ = ready.send(Ok(()));
-                first = false;
+            let result = read_command(&mut file).and_then(|c| {
+                let (reply, rx) = std::sync::mpsc::channel();
+                tx.send(Event::Command(c, Some(reply)))
+                    .map_err(|e| e.to_string())?;
+                rx.recv_timeout(std::time::Duration::from_secs(5))
+                    .map_err(|e| e.to_string())?
+            });
+            let reply = match result {
+                Ok(message) => Reply { ok: true, message },
+                Err(message) => Reply { ok: false, message },
+            };
+            if let Ok(json) = serde_json::to_string(&reply) {
+                let _ = writeln!(file, "{json}");
             }
-            let connected =
-                ConnectNamedPipe(h, None).is_ok() || GetLastError() == ERROR_PIPE_CONNECTED;
-            if connected {
-                let mut file = std::fs::File::from_raw_handle(h.0);
-                let mut bytes = Vec::new();
-                let mut b = [0];
-                while bytes.len() < 8192 {
-                    match file.read(&mut b) {
-                        Ok(1) if b[0] != b'\n' => bytes.push(b[0]),
-                        _ => break,
-                    }
-                }
-                let too_long = bytes.len() >= 8192;
-                let result = String::from_utf8(bytes)
-                    .map_err(|e| e.to_string())
-                    .and_then(|s| {
-                        if too_long {
-                            Err("IPC command exceeds 8191 bytes".into())
-                        } else {
-                            s.parse::<Command>()
-                        }
-                    })
-                    .and_then(|c| {
-                        let (reply, rx) = std::sync::mpsc::channel();
-                        tx.send(Event::Command(c, Some(reply)))
-                            .map_err(|e| e.to_string())?;
-                        rx.recv_timeout(std::time::Duration::from_secs(5))
-                            .map_err(|e| e.to_string())?
-                    });
-                let reply = match result {
-                    Ok(message) => Reply { ok: true, message },
-                    Err(message) => Reply { ok: false, message },
-                };
-                let _ = writeln!(
-                    file,
-                    "{}",
-                    serde_json::to_string(&reply).unwrap_or_default()
-                );
-                let _ = file.flush();
-                let _ = FlushFileBuffers(h);
-                let _ = DisconnectNamedPipe(h);
-            } else {
-                let _ = CloseHandle(h);
-            }
+            let _ = FlushFileBuffers(h);
+            let _ = DisconnectNamedPipe(h);
         }
-        let _ = LocalFree(Some(HLOCAL(descriptor.0)));
     });
-    rx.recv().map_err(|e| e.to_string())?
+    Ok(())
 }
