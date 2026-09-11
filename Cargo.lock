@@ -4872,6 +4872,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "winarchy-shot"
+version = "0.1.0"
+dependencies = [
+ "windows",
+ "winresource",
+]
+
+[[package]]
 name = "winarchyctl"
 version = "0.1.0"
 dependencies = [
