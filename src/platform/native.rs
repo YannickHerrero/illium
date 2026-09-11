@@ -211,19 +211,25 @@ pub fn spawn(command: &str) -> Result<(), String> {
             ..Default::default()
         };
         let mut pi = PROCESS_INFORMATION::default();
-        CreateProcessW(
+        let created = CreateProcessW(
             None,
             Some(PWSTR(line.as_mut_ptr())),
             None,
             None,
             false,
-            CREATE_NEW_PROCESS_GROUP,
+            CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,
             None,
             None,
             &si,
             &mut pi,
-        )
-        .map_err(|e| e.to_string())?;
+        );
+        if let Err(e) = created {
+            // Bare aliases may be registered in Windows App Paths rather than PATH.
+            if !command.chars().any(char::is_whitespace) {
+                return shortcut(command);
+            }
+            return Err(e.to_string());
+        }
         let _ = CloseHandle(pi.hThread);
         let _ = CloseHandle(pi.hProcess);
         Ok(())
