@@ -30,6 +30,7 @@ V1 requires nine workspaces and Fibonacci. Gaps are 0–100 logical pixels. Poin
 ```toml
 [keybindings]
 "Alt+Space" = "launcher toggle"
+"Alt+Shift+Space" = "meta toggle"
 "Alt+Enter" = "spawn terminal"
 "Ctrl+Alt+R" = "config reload"
 "Alt+Shift+3" = "window move-workspace 3 --follow"

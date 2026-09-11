@@ -10,7 +10,7 @@ Hooks are registered before the initial enumeration, so windows created or resto
 
 ## Applications and launcher
 
-Win+Shift+S runs `winarchy-shot.exe` from the daemon's directory: the screen freezes dimmed, drag a rectangle to copy it to the clipboard as a bitmap, Escape or right click cancels. Alt+Enter executes the `terminal` alias. Alt+Space toggles the launcher. Type a subsequence of an application's name, use Up/Down, Enter to launch, Escape to dismiss. The index combines `apps.toml` aliases and `.lnk` files under the current-user and common Start Menu Programs directories. Reload to refresh the index. Shortcuts are launched through ShellExecute, without requiring an Explorer process.
+Alt+Shift+Space opens the session menu in the launcher surface: Hibernate, Lock, Restart, Shut down and Quit Winarchy, filtered with the same fuzzy search. Power actions run the system `shutdown.exe`; hibernation requires it to be enabled on the machine. Win+Shift+S runs `winarchy-shot.exe` from the daemon's directory: the screen freezes dimmed, drag a rectangle to copy it to the clipboard as a bitmap, Escape or right click cancels. Alt+Enter executes the `terminal` alias. Alt+Space toggles the launcher. Type a subsequence of an application's name, use Up/Down, Enter to launch, Escape to dismiss. The index combines `apps.toml` aliases and `.lnk` files under the current-user and common Start Menu Programs directories. Reload to refresh the index. Shortcuts are launched through ShellExecute, without requiring an Explorer process.
 
 `spawn` takes an alias, not an arbitrary shell expression:
 

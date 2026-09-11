@@ -333,6 +333,9 @@ impl Manager {
             Command::Launcher => {
                 self.shell.toggle(&self.config, self.area())?;
             }
+            Command::Meta => {
+                self.shell.toggle_meta(&self.config, self.area())?;
+            }
             Command::Screenshot => {
                 let tool = std::env::current_exe()
                     .map_err(|e| e.to_string())?
@@ -423,6 +426,14 @@ impl Manager {
                 _ => {}
             },
             Event::Search(q) => self.shell.search(&q, self.config.launcher.max_results),
+            Event::Launch(n) if self.shell.meta => {
+                if let Some(command) = self.shell.meta_results.get(n.max(0) as usize).cloned() {
+                    self.shell.dismiss();
+                    if let Err(e) = self.execute(command) {
+                        tracing::error!(%e,"session action failed");
+                    }
+                }
+            }
             Event::Launch(n) => {
                 if let Some(app) = self.shell.results.get(n.max(0) as usize).cloned() {
                     self.shell.dismiss();

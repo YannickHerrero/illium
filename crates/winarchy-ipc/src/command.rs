@@ -27,6 +27,8 @@ pub enum Command {
         shortcut: bool,
     },
     Launcher,
+    /// Session menu: hibernate, lock, restart, shut down, quit.
+    Meta,
     Screenshot,
     Reload,
     Theme(String),
@@ -65,6 +67,7 @@ impl FromStr for Command {
             ["window", "toggle-fullscreen"] => Self::Fullscreen,
             ["spawn", app] => Self::Spawn((*app).into()),
             ["launcher", "toggle"] => Self::Launcher,
+            ["meta", "toggle"] => Self::Meta,
             ["screenshot"] => Self::Screenshot,
             ["config", "reload"] => Self::Reload,
             ["theme", "set", name] if !name.contains(['/', '\\', '.']) => {

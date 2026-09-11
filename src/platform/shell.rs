@@ -105,6 +105,10 @@ pub struct Shell {
     pub pending: bool,
     launcher_pending: Option<Rect>,
     descriptions: bool,
+    /// The launcher surface shows the session menu instead of applications.
+    pub meta: bool,
+    meta_items: Vec<(String, crate::command::Command)>,
+    pub meta_results: Vec<crate::command::Command>,
 }
 fn scan(path: &std::path::Path, out: &mut Vec<App>) {
     for path in crate::files::shortcuts(path, 8192, 16) {
@@ -154,6 +158,9 @@ impl Shell {
             pending: false,
             launcher_pending: None,
             descriptions: false,
+            meta: false,
+            meta_items: vec![],
+            meta_results: vec![],
             tx,
         })
     }
@@ -273,6 +280,27 @@ impl Shell {
         true
     }
     pub fn search(&mut self, q: &str, max: usize) {
+        if self.meta {
+            let mut matches: Vec<_> = self
+                .meta_items
+                .iter()
+                .filter_map(|(name, command)| score(q, name).map(|s| (s, name, command)))
+                .collect();
+            matches.sort_by_key(|(s, name, _)| (*s, (*name).clone()));
+            let shown: Vec<slint::SharedString> = matches
+                .iter()
+                .take(max)
+                .map(|(_, name, _)| (*name).clone().into())
+                .collect();
+            self.meta_results = matches
+                .into_iter()
+                .take(max)
+                .map(|(_, _, command)| command.clone())
+                .collect();
+            self.launcher
+                .set_results(ModelRc::from(Rc::new(VecModel::from(shown))));
+            return;
+        }
         let mut matches: Vec<_> = self
             .apps
             .iter()
@@ -301,6 +329,7 @@ impl Shell {
     pub fn dismiss(&mut self) {
         let _ = self.launcher.hide();
         self.visible = false;
+        self.meta = false;
         self.launcher_pending = None;
     }
     pub fn toggle(&mut self, c: &Config, r: Rect) -> Result<(), String> {
@@ -308,6 +337,49 @@ impl Shell {
             self.dismiss();
             return Ok(());
         }
+        self.meta = false;
+        self.open(c, r)
+    }
+    /// Session actions run through the same launcher surface. Power actions go
+    /// through the OS shutdown tool resolved from the system directory.
+    pub fn toggle_meta(&mut self, c: &Config, r: Rect) -> Result<(), String> {
+        if self.visible {
+            self.dismiss();
+            return Ok(());
+        }
+        use crate::command::Command;
+        let shutdown = super::security::os_executable("shutdown.exe", true)?;
+        let rundll = super::security::os_executable("rundll32.exe", true)?;
+        let run = |line: String| Command::LaunchTarget {
+            target: line,
+            shortcut: false,
+        };
+        self.meta_items = vec![
+            (
+                "Hibernate".into(),
+                run(format!("\"{}\" /h", shutdown.display())),
+            ),
+            (
+                "Lock".into(),
+                run(format!(
+                    "\"{}\" user32.dll,LockWorkStation",
+                    rundll.display()
+                )),
+            ),
+            (
+                "Restart".into(),
+                run(format!("\"{}\" /r /t 0", shutdown.display())),
+            ),
+            (
+                "Shut down".into(),
+                run(format!("\"{}\" /s /t 0", shutdown.display())),
+            ),
+            ("Quit Winarchy".into(), Command::Quit),
+        ];
+        self.meta = true;
+        self.open(c, r)
+    }
+    fn open(&mut self, c: &Config, r: Rect) -> Result<(), String> {
         self.launcher.set_query("".into());
         self.launcher.set_selected(0);
         self.search("", c.launcher.max_results);
