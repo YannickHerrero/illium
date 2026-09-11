@@ -27,6 +27,7 @@ pub enum Command {
         shortcut: bool,
     },
     Launcher,
+    Screenshot,
     Reload,
     Theme(String),
     Explorer(bool),
@@ -64,6 +65,7 @@ impl FromStr for Command {
             ["window", "toggle-fullscreen"] => Self::Fullscreen,
             ["spawn", app] => Self::Spawn((*app).into()),
             ["launcher", "toggle"] => Self::Launcher,
+            ["screenshot"] => Self::Screenshot,
             ["config", "reload"] => Self::Reload,
             ["theme", "set", name] if !name.contains(['/', '\\', '.']) => {
                 Self::Theme((*name).into())

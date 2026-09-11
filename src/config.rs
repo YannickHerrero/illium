@@ -253,7 +253,7 @@ mod tests {
         Config::install(&p).unwrap();
         let c = Config::load(&p).unwrap();
         assert_eq!(c.global.theme, "catppuccin-mocha");
-        assert_eq!(c.keys.keybindings.len(), 43);
+        assert_eq!(c.keys.keybindings.len(), 44);
         std::fs::write(p.join("wm.toml"), "invalid").unwrap();
         assert!(Config::load(&p).is_err());
         Config::install(&p).unwrap();

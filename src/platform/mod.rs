@@ -327,6 +327,12 @@ impl Manager {
             Command::Launcher => {
                 self.shell.toggle(&self.config, self.area())?;
             }
+            Command::Screenshot => {
+                let tool = std::env::current_exe()
+                    .map_err(|e| e.to_string())?
+                    .with_file_name("winarchy-shot.exe");
+                native::spawn(&format!("\"{}\"", tool.display()))?;
+            }
             Command::Reload => self.reload()?,
             Command::Theme(name) => {
                 let path = self.config.home.join("winarchy.toml");

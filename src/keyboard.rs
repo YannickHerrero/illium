@@ -67,8 +67,11 @@ mod tests {
         let keys: Keys =
             toml::from_str(include_str!("../config/defaults/keybindings.toml")).unwrap();
         let bs = parse(&keys).unwrap();
-        assert_eq!(bs.len(), 43);
-        assert!(bs.iter().all(|b| b.modifiers & 1 != 0));
+        assert_eq!(bs.len(), 44);
+        assert!(
+            bs.iter()
+                .all(|b| b.modifiers & 1 != 0 || b.command == Command::Screenshot)
+        );
         assert_eq!(
             bs.iter().find(|b| b.key == 32).unwrap().command,
             Command::Launcher

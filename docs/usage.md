@@ -10,7 +10,7 @@ Hooks are registered before the initial enumeration, so windows created or resto
 
 ## Applications and launcher
 
-Alt+Enter executes the `terminal` alias. Alt+Space toggles the launcher. Type a subsequence of an application's name, use Up/Down, Enter to launch, Escape to dismiss. The index combines `apps.toml` aliases and `.lnk` files under the current-user and common Start Menu Programs directories. Reload to refresh the index. Shortcuts are launched through ShellExecute, without requiring an Explorer process.
+Win+Shift+S runs `winarchy-shot.exe` from the daemon's directory: the screen freezes dimmed, drag a rectangle to copy it to the clipboard as a bitmap, Escape or right click cancels. Alt+Enter executes the `terminal` alias. Alt+Space toggles the launcher. Type a subsequence of an application's name, use Up/Down, Enter to launch, Escape to dismiss. The index combines `apps.toml` aliases and `.lnk` files under the current-user and common Start Menu Programs directories. Reload to refresh the index. Shortcuts are launched through ShellExecute, without requiring an Explorer process.
 
 `spawn` takes an alias, not an arbitrary shell expression:
 

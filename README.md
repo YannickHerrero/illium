@@ -55,6 +55,7 @@ This does **not** stop Explorer. Defaults are installed without overwriting exis
 | Alt+T / Alt+Shift+T | Set tiling / toggle floating |
 | Alt+F / Alt+Q | Toggle fullscreen / close normally |
 | Alt+Shift+R | Reload configuration |
+| Win+Shift+S | Region screenshot to clipboard |
 
 All bindings come from `keybindings.toml`, not hard-coded actions in the keyboard hook.
 
