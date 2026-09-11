@@ -82,6 +82,13 @@ export component Launcher inherits Window {
                     vertical-alignment: center;
                     edited => {root.selected = 0; root.search(self.text);}
                     accepted => {root.activate(root.selected);}
+                    // TextInput consumes the arrows as cursor line moves before
+                    // the enclosing FocusScope can see them.
+                    key-pressed(event) => {
+                        if (event.text == Key.DownArrow) { root.selected = min(root.selected + 1, root.results.length - 1); return accept; }
+                        if (event.text == Key.UpArrow) { root.selected = max(0, root.selected - 1); return accept; }
+                        return reject;
+                    }
                 }
             }
             for name[index] in root.results: Rectangle {
