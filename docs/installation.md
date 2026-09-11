@@ -1,5 +1,7 @@
 # Installation
 
+**Current candidate is blocked by an unresolved Defender quarantine.** Read [security validation](security-validation.md) before attempting to install it. These are build/run instructions, not a recommendation to bypass endpoint protection.
+
 ## Windows build
 
 Requirements: Windows 11 x64, current stable Rust (edition 2024), Visual Studio Build Tools with the **Desktop development with C++** workload and Windows SDK. Installing Visual Studio alone does not install the linker. Use a Developer PowerShell or `scripts\build-windows.cmd`.

@@ -28,6 +28,8 @@ Development: WSL2 on Windows 11 x64. Windows target: `x86_64-pc-windows-gnu`, cr
 
 `crash_restores_hidden_windows` starts a disposable daemon, creates and hides fixtures, forcibly terminates the daemon, and verifies the watchdog restores the real HWNDs. It passed.
 
+`replacement_crash_restores_explorer` additionally verifies Explorer is stopped, forcibly terminates the replacement daemon, and asserts both hidden-client restoration and Explorer's taskbar returning. It passed on the release binary. Explorer was left running afterward.
+
 Additional host checks:
 
 - WezTerm processes launched through IPC, including while Explorer was absent. Actual terminal interaction remains unverified.
@@ -36,6 +38,8 @@ Additional host checks:
 - IPC status and theme persistence worked. The native-handle startup failure discovered during testing was fixed by deferring HWND positioning until Slint created the windows.
 
 ### Blocked / not verified
+
+After the successful release integration tests, Defender quarantined the Windows-host copy of the release daemon as `Trojan:Win32/Bearfoos.B!ml`. Further launch attempts correctly failed because the file was removed. No exclusion, security disablement or quarantine restoration was attempted. This is a separate unresolved distribution/runtime blocker; see [security validation](security-validation.md). The final terminal-spawn recheck was blocked by that quarantine.
 
 The foreground window on the host was **“Écran de verrouillage par défaut de Windows”** (Windows default lock screen). The interactive `desktop_smoke` test failed at foreground selection: its target HWND was not made foreground. No attempt was made to bypass the lock screen.
 
@@ -47,9 +51,8 @@ Consequently, these remain **unverified**, not passing:
 - visual inspection of bar/background, clipping, selection and themes;
 - keyboard move/follow/close/fullscreen/reload actions;
 - 100% and mixed-DPI visual paths, real monitor hotplug;
-- Explorer restoration after a *replacement-session* forced crash (ordinary crash window recovery and normal replacement restoration were tested separately).
 
-Do not interpret IPC state assertions as proof that keyboard input or visual rendering is correct. The remaining interactive checks require an unlocked desktop.
+Do not interpret IPC state assertions as proof that keyboard input or visual rendering is correct. The remaining interactive checks require an unlocked desktop **and resolution of the antivirus detection through proper review**, not a security bypass.
 
 ## Reproducing tests
 
@@ -65,6 +68,8 @@ cargo test --test desktop -- --ignored --exact desktop_smoke --nocapture
 # No existing daemon may be running for this one:
 $env:WINARCHY_TEST_DAEMON = (Resolve-Path .\target\debug\winarchy.exe).Path
 cargo test --test desktop -- --ignored --exact crash_restores_hidden_windows --nocapture
+# Destructive Explorer-session test: close File Explorer windows and save work first.
+cargo test --test desktop -- --ignored --exact replacement_crash_restores_explorer --nocapture
 ```
 
 Do not run all ignored tests concurrently: they share the current user's daemon and desktop. With WSL, compile using `cargo test --target x86_64-pc-windows-gnu --no-run`, copy the reported test executables to Windows, and invoke them there.
