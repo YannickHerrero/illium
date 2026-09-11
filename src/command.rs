@@ -1,0 +1,56 @@
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Direction { Left, Down, Up, Right }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Command {
+    Workspace(u8), Next, Recent, Close, Focus(Direction), Move(Direction),
+    MoveWorkspace(u8, bool), Tile, Float, Fullscreen, Spawn(String),
+    Launcher, Reload, Theme(String), Explorer(bool), Quit,
+}
+impl FromStr for Command {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, String> {
+        let parts: Vec<_> = s.split_whitespace().collect();
+        let ws = |s: &str| s.parse::<u8>().ok().filter(|n| (1..=9).contains(n)).ok_or_else(|| "workspace must be 1..9".to_owned());
+        let dir = |s| match s { "left" => Ok(Direction::Left), "down" => Ok(Direction::Down), "up" => Ok(Direction::Up), "right" => Ok(Direction::Right), _ => Err("invalid direction".to_owned()) };
+        Ok(match parts.as_slice() {
+            ["workspace", "next" | "next-active"] => Self::Next,
+            ["workspace", "recent"] => Self::Recent,
+            ["workspace", n] => Self::Workspace(ws(n)?),
+            ["window", "close"] => Self::Close,
+            ["window", "focus", d] => Self::Focus(dir(d)?),
+            ["window", "move", d] => Self::Move(dir(d)?),
+            ["window", "move-workspace", n] => Self::MoveWorkspace(ws(n)?, false),
+            ["window", "move-workspace", n, "--follow"] => Self::MoveWorkspace(ws(n)?, true),
+            ["window", "set-tiling"] => Self::Tile,
+            ["window", "toggle-float"] => Self::Float,
+            ["window", "toggle-fullscreen"] => Self::Fullscreen,
+            ["spawn", app] => Self::Spawn((*app).into()),
+            ["launcher", "toggle"] => Self::Launcher,
+            ["config", "reload"] => Self::Reload,
+            ["theme", "set", name] if !name.contains(['/', '\\', '.']) => Self::Theme((*name).into()),
+            ["explorer", "start"] => Self::Explorer(true),
+            ["explorer", "stop"] => Self::Explorer(false),
+            ["quit"] => Self::Quit,
+            _ => return Err(format!("unknown command: {s}")),
+        })
+    }
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Reply { pub ok: bool, pub message: String }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test] fn commands() {
+        assert_eq!("window move-workspace 9 --follow".parse(), Ok(Command::MoveWorkspace(9,true)));
+        assert_eq!("window focus left".parse(), Ok(Command::Focus(Direction::Left)));
+        for s in ["workspace 0", "workspace 10", "window move diagonal", "quit now", "theme set ../bad"] { assert!(s.parse::<Command>().is_err(), "{s}"); }
+    }
+    #[test] fn protocol() {
+        let r: Reply = serde_json::from_str(r#"{"ok":false,"message":"invalid command"}"#).unwrap();
+        assert!(!r.ok);
+        assert!(serde_json::from_str::<Reply>("{}").is_err());
+    }
+}
