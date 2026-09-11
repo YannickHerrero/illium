@@ -26,6 +26,7 @@ pub enum Command {
     Theme(String),
     Explorer(bool),
     Quit,
+    Status,
 }
 impl FromStr for Command {
     type Err = String;
@@ -65,6 +66,7 @@ impl FromStr for Command {
             ["explorer", "start"] => Self::Explorer(true),
             ["explorer", "stop"] => Self::Explorer(false),
             ["quit"] => Self::Quit,
+            ["status"] => Self::Status,
             _ => return Err(format!("unknown command: {s}")),
         })
     }

@@ -4,6 +4,7 @@ pub mod ipc;
 mod native;
 mod session;
 mod shell;
+mod status;
 use crate::{
     command::Command,
     config::Config,
@@ -148,6 +149,13 @@ impl Manager {
     fn execute(&mut self, c: Command) -> Result<String, String> {
         tracing::debug!(?c, "command");
         match c {
+            Command::Status => return Ok(serde_json::json!({
+                "workspace": self.model.active, "recent": self.model.recent,
+                "focused": self.model.focused, "theme": self.config.global.theme,
+                "gap": self.config.wm.gap, "launcher": self.shell.visible,
+                "monitors": self.monitors, "bar_count": self.shell.bars.len(),
+                "clients": self.model.clients.iter().map(|c| serde_json::json!({"id":c.id,"workspace":c.workspace,"floating":c.floating,"fullscreen":c.fullscreen,"title":native::title(c.id),"rect":native::rect(c.id)})).collect::<Vec<_>>()
+            }).to_string()),
             Command::Workspace(n) => {
                 self.model.switch(n);
                 self.layout();
@@ -280,9 +288,11 @@ impl Manager {
             }
             Event::Window(event, id) => match event {
                 EVENT_OBJECT_DESTROY => {
-                    self.model.clients.retain(|c| c.id != id);
-                    tracing::info!(id, "window removed");
-                    self.layout();
+                    if self.model.clients.iter().any(|c| c.id == id) {
+                        self.model.clients.retain(|c| c.id != id);
+                        tracing::info!(id, "window removed");
+                        self.layout();
+                    }
                 }
                 EVENT_OBJECT_HIDE => {
                     if self
@@ -419,6 +429,10 @@ pub fn run(replace: bool) -> Result<(), String> {
     let _instance = instance::Instance::acquire()?;
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        let _ = windows::Win32::System::Com::CoInitializeEx(
+            None,
+            windows::Win32::System::Com::COINIT_APARTMENTTHREADED,
+        );
     }
     let home = Config::home();
     Config::install(&home)?;
