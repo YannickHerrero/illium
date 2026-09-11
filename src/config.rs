@@ -127,8 +127,9 @@ const DEFAULTS: &[(&str, &str)] = &[
     ),
 ];
 fn parse<T: serde::de::DeserializeOwned>(home: &Path, name: &str) -> Result<T, String> {
-    let s = std::fs::read_to_string(home.join(name)).map_err(|e| format!("{name}: {e}"))?;
-    toml::from_str(&s).map_err(|e| format!("{name}: {e}"))
+    let bytes = crate::files::read_config(&home.join(name))?;
+    let s = std::str::from_utf8(&bytes).map_err(|e| format!("{name}: {e}"))?;
+    toml::from_str(s).map_err(|e| format!("{name}: {e}"))
 }
 impl Config {
     pub fn home() -> PathBuf {
@@ -160,6 +161,8 @@ impl Config {
         Ok(())
     }
     pub fn load(home: &Path) -> Result<Self, String> {
+        // Apply the same bounds at startup/reload as in the directory watcher.
+        crate::files::snapshot(home)?;
         let global: Global = parse(home, "winarchy.toml")?;
         if global.theme.contains(['/', '\\', '.']) {
             return Err("invalid theme name".into());

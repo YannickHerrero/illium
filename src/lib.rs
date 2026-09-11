@@ -1,5 +1,6 @@
 pub mod command;
 pub mod config;
+pub mod files;
 pub mod keyboard;
 pub mod layout;
 pub mod model;

@@ -54,26 +54,16 @@ pub struct Shell {
     descriptions: bool,
 }
 fn scan(path: &std::path::Path, out: &mut Vec<App>) {
-    if let Ok(entries) = std::fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                scan(&path, out);
-            } else if path
-                .extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case("lnk"))
-            {
-                out.push(App {
-                    name: path
-                        .file_stem()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .into(),
-                    target: path.to_string_lossy().into(),
-                    shortcut: true,
-                });
-            }
-        }
+    for path in crate::files::shortcuts(path, 8192, 16) {
+        out.push(App {
+            name: path
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into(),
+            target: path.to_string_lossy().into(),
+            shortcut: true,
+        });
     }
 }
 fn score(query: &str, text: &str) -> Option<usize> {

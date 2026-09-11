@@ -291,7 +291,7 @@ impl Manager {
             Command::Reload => self.reload()?,
             Command::Theme(name) => {
                 let path = self.config.home.join("winarchy.toml");
-                let old = std::fs::read(&path).map_err(|e| e.to_string())?;
+                let old = crate::files::read_config(&path)?;
                 std::fs::write(&path, format!("theme = {name:?}\n")).map_err(|e| e.to_string())?;
                 if let Err(e) = self.reload() {
                     let _ = std::fs::write(path, old);
@@ -445,34 +445,19 @@ fn watch(home: std::path::PathBuf, tx: Sender<Event>) {
         ) else {
             return;
         };
-        fn snapshot(home: &std::path::Path) -> Vec<(std::path::PathBuf, Vec<u8>)> {
-            let mut files = Vec::new();
-            for dir in [home.to_path_buf(), home.join("themes")] {
-                if let Ok(entries) = std::fs::read_dir(dir) {
-                    for entry in entries.flatten() {
-                        let p = entry.path();
-                        if p.extension().is_some_and(|s| s == "toml") {
-                            files.push((p.clone(), std::fs::read(p).unwrap_or_default()));
-                        }
-                    }
-                }
-            }
-            files.sort_by(|a, b| a.0.cmp(&b.0));
-            files
-        }
-        let mut previous = snapshot(&home);
+        let mut previous = crate::files::snapshot(&home);
         loop {
             if WaitForSingleObject(h, INFINITE) != WAIT_OBJECT_0 {
                 break;
             }
+            if FindNextChangeNotification(h).is_err() {
+                break;
+            }
             std::thread::sleep(std::time::Duration::from_millis(150));
-            let next = snapshot(&home);
+            let next = crate::files::snapshot(&home);
             if next != previous {
                 previous = next;
                 let _ = tx.send(Event::Reload);
-            }
-            if FindNextChangeNotification(h).is_err() {
-                break;
             }
         }
         let _ = FindCloseChangeNotification(h);
