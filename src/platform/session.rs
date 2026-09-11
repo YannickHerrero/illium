@@ -1,4 +1,4 @@
-use super::native;
+use super::{native, security};
 use std::os::windows::process::CommandExt;
 use windows::{
     Win32::{Foundation::*, System::Threading::*, UI::WindowsAndMessaging::*},
@@ -29,7 +29,7 @@ pub fn untag(id: isize) {
 }
 pub fn explorer(start: bool) -> Result<(), String> {
     if start {
-        native::spawn("explorer.exe")?;
+        start_explorer()?;
         let _ = std::fs::remove_file(marker(std::process::id()));
         Ok(())
     } else {
@@ -39,8 +39,23 @@ pub fn explorer(start: bool) -> Result<(), String> {
         // Record intent first, so a crash during taskkill is recoverable too.
         std::fs::write(marker(std::process::id()), b"restore Explorer")
             .map_err(|e| e.to_string())?;
-        let status = std::process::Command::new("taskkill.exe")
-            .args(["/IM", "explorer.exe", "/F"])
+        let taskkill = security::os_executable("taskkill.exe", true)?;
+        let mut session = 0;
+        unsafe {
+            windows::Win32::System::RemoteDesktop::ProcessIdToSessionId(
+                std::process::id(),
+                &mut session,
+            )
+        }
+        .map_err(|e| e.to_string())?;
+        let status = std::process::Command::new(taskkill)
+            .args([
+                "/IM",
+                "explorer.exe",
+                "/FI",
+                &format!("SESSION eq {session}"),
+                "/F",
+            ])
             .creation_flags(0x08000000)
             .status()
             .map_err(|e| e.to_string())?;
@@ -50,6 +65,13 @@ pub fn explorer(start: bool) -> Result<(), String> {
             Err("could not stop Explorer".into())
         }
     }
+}
+fn start_explorer() -> Result<(), String> {
+    let path = security::os_executable("explorer.exe", false)?;
+    std::process::Command::new(path)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 pub struct Recovery;
 impl Recovery {
@@ -88,6 +110,7 @@ impl Drop for Recovery {
     }
 }
 pub fn watchdog(pid: u32) -> Result<(), String> {
+    security::require_standard_user()?;
     unsafe {
         let process = OpenProcess(PROCESS_SYNCHRONIZE, false, pid).map_err(|e| e.to_string())?;
         let name = native::wide(&format!("Local\\WinarchyRecovery-{pid}"));
@@ -105,7 +128,7 @@ pub fn watchdog(pid: u32) -> Result<(), String> {
             }
         }
         if marker(pid).exists() {
-            native::spawn("explorer.exe")?;
+            start_explorer()?;
             let _ = std::fs::remove_file(marker(pid));
         }
         Ok(())

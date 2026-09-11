@@ -3,6 +3,7 @@ mod input;
 mod instance;
 pub mod ipc;
 mod native;
+mod security;
 mod session;
 mod shell;
 mod status;
@@ -461,6 +462,7 @@ fn watch(home: std::path::PathBuf, tx: Sender<Event>) {
     });
 }
 pub fn run(replace: bool) -> Result<(), String> {
+    security::require_standard_user()?;
     let _instance = instance::Instance::acquire()?;
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
