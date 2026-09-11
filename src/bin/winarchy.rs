@@ -26,8 +26,19 @@ fn main() {
                 .init();
         }
         if let Some(i) = args.iter().position(|a| a == "--watch-session") {
-            if let Some(pid) = args.get(i + 1).and_then(|s| s.parse().ok()) {
-                let _ = winarchy::platform::watchdog(pid);
+            let result = match (
+                args.get(i + 1).and_then(|s| s.parse().ok()),
+                args.get(i + 2),
+                args.get(i + 3).and_then(|s| s.parse().ok()),
+            ) {
+                (Some(pid), Some(identity), Some(started)) => {
+                    winarchy::platform::watchdog(pid, identity, started)
+                }
+                _ => Err("invalid recovery helper arguments".into()),
+            };
+            if let Err(e) = result {
+                tracing::error!(%e,"recovery helper stopped");
+                std::process::exit(1);
             }
             return;
         }

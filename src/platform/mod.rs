@@ -8,6 +8,8 @@ mod pipe_io;
 mod pipe_io_tests;
 mod security;
 mod session;
+#[cfg(test)]
+mod session_tests;
 mod shell;
 mod status;
 use crate::{
@@ -41,11 +43,29 @@ struct Manager {
     shell: shell::Shell,
 }
 impl Manager {
+    fn prune(&mut self) {
+        self.model
+            .clients
+            .retain(|c| session::owns(c.id, c.generation));
+        if self.model.focused.is_some_and(|id| {
+            !self
+                .model
+                .clients
+                .iter()
+                .any(|c| c.id == id && c.workspace == self.model.active)
+        }) {
+            self.model.focused = None;
+        }
+    }
     fn add(&mut self, id: isize) -> bool {
+        self.prune();
         if let Some(c) = self.model.clients.iter().find(|c| c.id == id) {
             if c.workspace != self.model.active {
                 native::show(id, false);
             }
+            return false;
+        }
+        if self.model.clients.len() >= 512 {
             return false;
         }
         let Some((exe, class, mut floating)) = native::metadata(id) else {
@@ -62,9 +82,16 @@ impl Manager {
                 workspace = r.workspace.unwrap_or(workspace);
             }
         }
-        session::tag(id);
+        let generation = match session::tag(id) {
+            Ok(g) => g,
+            Err(e) => {
+                tracing::debug!(id,%e,"window cannot be tagged safely");
+                return false;
+            }
+        };
         self.model.clients.push(Client {
             id,
+            generation,
             workspace,
             floating,
             fullscreen: false,
@@ -92,9 +119,7 @@ impl Manager {
         r
     }
     fn layout(&mut self) {
-        self.model
-            .clients
-            .retain(|c| unsafe { IsWindow(Some(native::hwnd(c.id))).as_bool() });
+        self.prune();
         for c in &self.model.clients {
             let visible = c.workspace == self.model.active;
             let currently = unsafe { IsWindowVisible(native::hwnd(c.id)).as_bool() };
@@ -125,6 +150,7 @@ impl Manager {
         self.shell.refresh(&self.model, &self.config);
     }
     fn focus_visible(&mut self) {
+        self.prune();
         let id = self
             .model
             .focused
@@ -157,6 +183,7 @@ impl Manager {
         Ok(())
     }
     fn execute(&mut self, c: Command) -> Result<String, String> {
+        self.prune();
         match &c {
             Command::Spawn(_) | Command::LaunchTarget { .. } => {
                 tracing::debug!("application launch command")
@@ -324,8 +351,9 @@ impl Manager {
             Event::Window(event, id) => match event {
                 EVENT_OBJECT_DESTROY => {
                     if self.model.clients.iter().any(|c| c.id == id) {
-                        self.model.clients.retain(|c| c.id != id);
-                        tracing::info!(id, "window removed");
+                        // A delayed destroy event must not remove a new window
+                        // that has reused the same numeric HWND.
+                        self.prune();
                         self.layout();
                     }
                 }
@@ -420,6 +448,9 @@ impl Manager {
 impl Drop for Manager {
     fn drop(&mut self) {
         for c in &self.model.clients {
+            if !session::owns(c.id, c.generation) {
+                continue;
+            }
             native::show(c.id, true);
             session::untag(c.id);
             if c.fullscreen {
@@ -574,6 +605,7 @@ pub fn run(replace: bool) -> Result<(), String> {
         std::time::Duration::from_secs(1),
         move || {
             let mut m = m.borrow_mut();
+            m.prune();
             if maintenance.take_overflow() {
                 tracing::warn!("event queue overflow; reconciling windows and configuration");
                 m.event(Event::Display);

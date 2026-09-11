@@ -2,6 +2,7 @@ use crate::layout::Rect;
 #[derive(Debug, Clone)]
 pub struct Client {
     pub id: isize,
+    pub generation: usize,
     pub workspace: u8,
     pub floating: bool,
     pub fullscreen: bool,
@@ -73,6 +74,7 @@ mod tests {
         for id in 1..=3 {
             m.clients.push(Client {
                 id,
+                generation: id as usize,
                 workspace: 1,
                 floating: false,
                 fullscreen: false,

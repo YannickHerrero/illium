@@ -93,6 +93,7 @@ fn direction_reorder_changes_geometry() {
     for id in 1..=4 {
         m.clients.push(Client {
             id,
+            generation: id as usize,
             workspace: 1,
             floating: false,
             fullscreen: false,
@@ -138,6 +139,7 @@ fn workspace_move_preserves_uniqueness() {
     let mut m = Model::new();
     m.clients.push(Client {
         id: 42,
+        generation: 42,
         workspace: 1,
         floating: true,
         fullscreen: false,
@@ -156,6 +158,7 @@ fn occupied_wraps() {
     let mut m = Model::new();
     m.clients.push(Client {
         id: 1,
+        generation: 1,
         workspace: 2,
         floating: false,
         fullscreen: false,
