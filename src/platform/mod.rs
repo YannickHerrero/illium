@@ -27,6 +27,7 @@ pub enum Event {
     Launch(i32),
     Dismiss,
     Reload,
+    Display,
 }
 struct Manager {
     config: Config,
@@ -337,6 +338,18 @@ impl Manager {
                 self.shell.dismiss();
                 self.focus_visible();
             }
+            Event::Display => {
+                let monitors = native::monitors();
+                if !monitors.is_empty() && monitors != self.monitors {
+                    tracing::info!(count = monitors.len(), "display configuration changed");
+                    self.monitors = monitors;
+                    for index in &mut self.model.monitors {
+                        *index = (*index).min(self.monitors.len() - 1);
+                    }
+                    let _ = self.shell.configure(&self.config, &self.monitors);
+                    self.layout();
+                }
+            }
             Event::Reload => {
                 if let Err(e) = self.reload() {
                     tracing::warn!(%e,"keeping previous configuration");
@@ -369,12 +382,32 @@ fn watch(home: std::path::PathBuf, tx: Sender<Event>) {
         ) else {
             return;
         };
+        fn snapshot(home: &std::path::Path) -> Vec<(std::path::PathBuf, Vec<u8>)> {
+            let mut files = Vec::new();
+            for dir in [home.to_path_buf(), home.join("themes")] {
+                if let Ok(entries) = std::fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        if p.extension().is_some_and(|s| s == "toml") {
+                            files.push((p.clone(), std::fs::read(p).unwrap_or_default()));
+                        }
+                    }
+                }
+            }
+            files.sort_by(|a, b| a.0.cmp(&b.0));
+            files
+        }
+        let mut previous = snapshot(&home);
         loop {
             if WaitForSingleObject(h, INFINITE) != WAIT_OBJECT_0 {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(150));
-            let _ = tx.send(Event::Reload);
+            let next = snapshot(&home);
+            if next != previous {
+                previous = next;
+                let _ = tx.send(Event::Reload);
+            }
             if FindNextChangeNotification(h).is_err() {
                 break;
             }
@@ -428,15 +461,7 @@ pub fn run(replace: bool) -> Result<(), String> {
         slint::TimerMode::Repeated,
         std::time::Duration::from_secs(1),
         move || {
-            let mut m = m.borrow_mut();
-            let monitors = native::monitors();
-            if monitors != m.monitors {
-                m.monitors = monitors;
-                let c = m.config.clone();
-                let monitors = m.monitors.clone();
-                let _ = m.shell.configure(&c, &monitors);
-                m.layout();
-            }
+            let m = m.borrow();
             m.shell.refresh(&m.model, &m.config);
         },
     );

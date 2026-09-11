@@ -112,6 +112,14 @@ unsafe extern "system" fn window_event(
         let _ = tx.send(Event::Window(event, h.0 as isize));
     }
 }
+unsafe extern "system" fn display_window(h: HWND, message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    if (message == WM_DISPLAYCHANGE || message == WM_SETTINGCHANGE)
+        && let Some((tx, _)) = STATE.get()
+    {
+        let _ = tx.send(Event::Display);
+    }
+    unsafe { DefWindowProcW(h, message, w, l) }
+}
 pub fn start(tx: Sender<Event>, bindings: Vec<Binding>) -> Result<(), String> {
     let _ = STATE.set((tx, RwLock::new(bindings)));
     let (ready, rx) = std::sync::mpsc::channel();
@@ -151,6 +159,38 @@ pub fn start(tx: Sender<Event>, bindings: Vec<Binding>) -> Result<(), String> {
                         WINEVENT_OUTOFCONTEXT,
                     ),
                 ];
+                let class = super::native::wide("WinarchyEvents");
+                let instance = windows::Win32::System::LibraryLoader::GetModuleHandleW(None)
+                    .unwrap_or_default();
+                let wc = WNDCLASSW {
+                    lpfnWndProc: Some(display_window),
+                    hInstance: instance.into(),
+                    lpszClassName: windows::core::PCWSTR(class.as_ptr()),
+                    ..Default::default()
+                };
+                RegisterClassW(&wc);
+                let _display = CreateWindowExW(
+                    WS_EX_TOOLWINDOW,
+                    windows::core::PCWSTR(class.as_ptr()),
+                    windows::core::PCWSTR(class.as_ptr()),
+                    WS_POPUP,
+                    0,
+                    0,
+                    0,
+                    0,
+                    None,
+                    None,
+                    Some(instance.into()),
+                    None,
+                );
+                if hooks.iter().any(|h| h.is_invalid()) || _display.is_err() {
+                    let _ = ready.send(Err("window event initialization failed".into()));
+                    let _ = UnhookWindowsHookEx(hook);
+                    for h in hooks {
+                        let _ = UnhookWinEvent(h);
+                    }
+                    return;
+                }
                 let _ = ready.send(Ok(()));
                 let mut msg = MSG::default();
                 while GetMessageW(&mut msg, None, 0, 0).as_bool() {
