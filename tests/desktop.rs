@@ -163,7 +163,7 @@ fn desktop_smoke() {
         .collect::<Vec<_>>();
     assert!(rects.windows(2).any(|rs| rs[0] != rs[1]));
     focus(ids[0]);
-    ctl("window toggle-float");
+    keys(&[0x12, 0x10, 0x54]);
     assert!(
         status()["clients"]
             .as_array()
@@ -174,9 +174,9 @@ fn desktop_smoke() {
             .as_bool()
             .unwrap()
     );
-    ctl("window set-tiling");
+    keys(&[0x12, 0x54]);
     focus(ids[0]);
-    ctl("window toggle-fullscreen");
+    keys(&[0x12, 0x46]);
     assert!(
         status()["clients"]
             .as_array()
@@ -187,7 +187,7 @@ fn desktop_smoke() {
             .as_bool()
             .unwrap()
     );
-    ctl("window toggle-fullscreen");
+    keys(&[0x12, 0x46]);
     focus(ids[0]);
     ctl("window move-workspace 8 --follow");
     assert_eq!(status()["workspace"], 8);
@@ -197,6 +197,10 @@ fn desktop_smoke() {
     assert_eq!(status()["workspace"], 8);
     focus(ids[0]);
     ctl("window move-workspace 9 --follow");
+    keys(&[0x12, 0x44]);
+    assert_eq!(status()["workspace"], 8);
+    keys(&[0x12, 0x53]);
+    assert_eq!(status()["workspace"], 9);
     for (key, n) in [(0x31, 1), (0x39, 9)] {
         keys(&[0x12, key]);
         assert_eq!(status()["workspace"], n);
@@ -209,9 +213,68 @@ fn desktop_smoke() {
         ctl(&format!("window focus {direction}"));
         ctl(&format!("window move {direction}"));
     }
-    for key in [0x48, 0x4a, 0x4b, 0x4c] {
+    use winarchy::command::Direction::{Down, Left, Right, Up};
+    for (key, direction) in [
+        (0x48, Left),
+        (0x4a, Down),
+        (0x4b, Up),
+        (0x4c, Right),
+        (0x25, Left),
+        (0x28, Down),
+        (0x26, Up),
+        (0x27, Right),
+    ] {
+        let state = status();
+        let current = state["focused"].as_i64().unwrap() as isize;
+        let geometry = |s: &serde_json::Value| {
+            s["clients"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|c| c["workspace"] == s["workspace"] && c["floating"] == false)
+                .map(|c| {
+                    (
+                        c["id"].as_i64().unwrap() as isize,
+                        serde_json::from_value::<winarchy::layout::Rect>(c["rect"].clone())
+                            .unwrap(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let expected =
+            winarchy::layout::neighbor(&geometry(&state), current, direction).unwrap_or(current);
         keys(&[0x12, key]);
+        assert_eq!(
+            unsafe { GetForegroundWindow().0 as isize },
+            expected,
+            "directional shortcut must change actual foreground"
+        );
+        let state = status();
+        let mut expected_order = state["clients"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["id"].as_i64().unwrap() as isize)
+            .collect::<Vec<_>>();
+        if let Some(other) = winarchy::layout::neighbor(&geometry(&state), expected, direction) {
+            let a = expected_order
+                .iter()
+                .position(|id| *id == expected)
+                .unwrap();
+            let b = expected_order.iter().position(|id| *id == other).unwrap();
+            expected_order.swap(a, b);
+        }
         keys(&[0x12, 0x10, key]);
+        let actual = status()["clients"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["id"].as_i64().unwrap() as isize)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            actual, expected_order,
+            "directional movement shortcut must swap window ordering"
+        );
     }
     keys(&[0x12, 0x20]);
     assert_eq!(status()["launcher"], true);
