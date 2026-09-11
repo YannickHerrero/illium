@@ -1,10 +1,18 @@
 export component Background inherits Window {
     no-frame: true;
+    in property <length> surface-width;
+    in property <length> surface-height;
+    width: surface-width;
+    height: surface-height;
     in property <color> bg;
     background: bg;
 }
 export component Bar inherits Window {
     no-frame: true;
+    in property <length> surface-width;
+    in property <length> surface-height;
+    width: surface-width;
+    height: surface-height;
     in property <color> bg;
     in property <color> fg;
     in property <color> accent;
@@ -33,6 +41,10 @@ export component Bar inherits Window {
 }
 export component Launcher inherits Window {
     no-frame: true;
+    in property <length> surface-width;
+    in property <length> surface-height;
+    width: surface-width;
+    height: surface-height;
     in property <color> bg;
     in property <color> fg;
     in property <color> accent;

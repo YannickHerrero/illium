@@ -116,10 +116,8 @@ impl Shell {
         for r in monitors {
             let b = Background::new().map_err(|e| e.to_string())?;
             b.set_bg(color(&c.theme.background));
-            b.window()
-                .set_size(slint::PhysicalSize::new(r.w as u32, r.h as u32));
-            b.window()
-                .set_position(slint::PhysicalPosition::new(r.x, r.y));
+            b.set_surface_width(super::dpi::logical(*r, r.w));
+            b.set_surface_height(super::dpi::logical(*r, r.h));
             b.show().map_err(|e| e.to_string())?;
             self.backgrounds.push(b);
             if c.bar.enabled {
@@ -135,17 +133,8 @@ impl Shell {
                         None,
                     ));
                 });
-                let height = super::dpi::scale(*r, c.bar.height);
-                b.window()
-                    .set_size(slint::PhysicalSize::new(r.w as u32, height as u32));
-                b.window().set_position(slint::PhysicalPosition::new(
-                    r.x,
-                    if c.bar.position == "top" {
-                        r.y
-                    } else {
-                        r.y + r.h - height
-                    },
-                ));
+                b.set_surface_width(super::dpi::logical(*r, r.w));
+                b.set_surface_height(c.bar.height as f32);
                 b.show().map_err(|e| e.to_string())?;
                 self.bars.push(b);
             }
@@ -271,15 +260,8 @@ impl Shell {
         self.search("", c.launcher.max_results);
         let w = super::dpi::scale(r, c.launcher.width).min(r.w);
         let h = super::dpi::scale(r, c.launcher.max_results as i32 * 38 + 65).min(r.h);
-        self.launcher
-            .window()
-            .set_size(slint::PhysicalSize::new(w as u32, h as u32));
-        self.launcher
-            .window()
-            .set_position(slint::PhysicalPosition::new(
-                r.x + (r.w - w) / 2,
-                r.y + (r.h - h) / 2,
-            ));
+        self.launcher.set_surface_width(super::dpi::logical(r, w));
+        self.launcher.set_surface_height(super::dpi::logical(r, h));
         self.launcher.show().map_err(|e| e.to_string())?;
         self.launcher_pending = Some(r);
         self.visible = true;
