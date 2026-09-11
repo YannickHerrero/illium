@@ -1,5 +1,7 @@
 # Corrections and Windows validation follow-up
 
+**Later investigation:** the controller has since been separated from the GUI dependencies. It became substantially smaller but was still blocked at launch. See [controller investigation](controller-investigation.md) for the evidence and independent toolchain control.
+
 This follow-up supersedes the open-item status in the initial [security audit](security-audit.md), but **does not approve the application for everyday use or establish an antivirus false positive**.
 
 ## Source corrections
