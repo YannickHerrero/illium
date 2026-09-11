@@ -21,6 +21,11 @@ pub enum Command {
     Float,
     Fullscreen,
     Spawn(String),
+    /// Resolved launcher target; aliases and UI results converge on this action.
+    LaunchTarget {
+        target: String,
+        shortcut: bool,
+    },
     Launcher,
     Reload,
     Theme(String),

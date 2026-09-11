@@ -39,19 +39,22 @@ struct Manager {
     shell: shell::Shell,
 }
 impl Manager {
-    fn add(&mut self, id: isize) {
-        if self.model.clients.iter().any(|c| c.id == id) {
-            return;
+    fn add(&mut self, id: isize) -> bool {
+        if let Some(c) = self.model.clients.iter().find(|c| c.id == id) {
+            if c.workspace != self.model.active {
+                native::show(id, false);
+            }
+            return false;
         }
         let Some((exe, class, mut floating)) = native::metadata(id) else {
-            return;
+            return false;
         };
         let title = native::title(id);
         let mut workspace = self.model.active;
         for r in &self.config.rules.rules {
             if r.matches(&exe, &class, &title) {
                 if r.ignore {
-                    return;
+                    return false;
                 }
                 floating |= r.floating;
                 workspace = r.workspace.unwrap_or(workspace);
@@ -66,6 +69,7 @@ impl Manager {
             restore: native::rect(id),
         });
         tracing::info!(id,workspace,%title,"window added");
+        true
     }
     fn area(&self) -> Rect {
         let index = self.model.monitors[(self.model.active - 1) as usize]
@@ -152,6 +156,15 @@ impl Manager {
     }
     fn execute(&mut self, c: Command) -> Result<String, String> {
         tracing::debug!(?c, "command");
+        let foreground = unsafe { GetForegroundWindow().0 as isize };
+        if self
+            .model
+            .clients
+            .iter()
+            .any(|w| w.id == foreground && w.workspace == self.model.active)
+        {
+            self.model.focused = Some(foreground);
+        }
         match c {
             Command::Status => return Ok(serde_json::json!({
                 "workspace": self.model.active, "recent": self.model.recent,
@@ -256,8 +269,11 @@ impl Manager {
                     .apps
                     .apps
                     .get(&app)
-                    .ok_or_else(|| format!("unknown application: {app}"))?;
-                native::spawn(target)?;
+                    .ok_or_else(|| format!("unknown application: {app}"))?.clone();
+                return self.execute(Command::LaunchTarget { target, shortcut: false });
+            }
+            Command::LaunchTarget { target, shortcut } => {
+                if shortcut { native::shortcut(&target)?; } else { native::spawn(&target)?; }
             }
             Command::Launcher => {
                 self.shell.toggle(&self.config, self.area())?;
@@ -329,8 +345,9 @@ impl Manager {
                     self.shell.refresh(&self.model, &self.config);
                 }
                 EVENT_OBJECT_CREATE | EVENT_OBJECT_SHOW => {
-                    self.add(id);
-                    self.layout();
+                    if self.add(id) {
+                        self.layout();
+                    }
                 }
                 EVENT_SYSTEM_MOVESIZEEND => self.layout(),
                 _ => {}
@@ -339,11 +356,10 @@ impl Manager {
             Event::Launch(n) => {
                 if let Some(app) = self.shell.results.get(n.max(0) as usize).cloned() {
                     self.shell.dismiss();
-                    let result = if app.shortcut {
-                        native::shortcut(&app.target)
-                    } else {
-                        native::spawn(&app.target)
-                    };
+                    let result = self.execute(Command::LaunchTarget {
+                        target: app.target,
+                        shortcut: app.shortcut,
+                    });
                     if let Err(e) = result {
                         tracing::error!(%e,"launch failed");
                     }
@@ -479,8 +495,15 @@ pub fn run(replace: bool) -> Result<(), String> {
             for id in native::enumerate() {
                 m.add(id);
             }
-            m.model.focused = Some(unsafe { GetForegroundWindow().0 as isize });
+            let foreground = unsafe { GetForegroundWindow().0 as isize };
+            m.model.focused = m
+                .model
+                .clients
+                .iter()
+                .find(|c| c.id == foreground)
+                .map(|c| c.id);
             m.layout();
+            m.focus_visible();
             input::start(tx.clone(), bindings)?;
             watch(home, tx);
             tracing::info!("Winarchy core initialized");
@@ -508,10 +531,12 @@ pub fn run(replace: bool) -> Result<(), String> {
                 monitors,
                 ..
             } = &mut *m;
-            if shell.arrange(config, monitors)
-                && guard.borrow().is_none()
-                && !m.shell.backgrounds.is_empty()
-            {
+            let pending = shell.pending;
+            let ready = shell.arrange(config, monitors);
+            if ready && pending && !m.shell.visible {
+                m.focus_visible();
+            }
+            if ready && guard.borrow().is_none() && !m.shell.backgrounds.is_empty() {
                 match session::Recovery::new(replace) {
                     Ok(recovery) => {
                         *guard.borrow_mut() = Some(recovery);
