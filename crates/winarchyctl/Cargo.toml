@@ -3,6 +3,8 @@ name = "winarchyctl"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+description = "Command-line controller for the Winarchy window manager"
+repository = "https://github.com/YannickHerrero/winarchy"
 
 [dependencies]
 winarchy-ipc = { path = "../winarchy-ipc" }

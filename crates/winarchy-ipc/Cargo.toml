@@ -3,6 +3,8 @@ name = "winarchy-ipc"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+description = "Named-pipe command protocol shared by Winarchy and its controller"
+repository = "https://github.com/YannickHerrero/winarchy"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -8,6 +8,8 @@ name = "winarchy"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+description = "Keyboard-first tiling window manager and experimental shell for Windows 11"
+repository = "https://github.com/YannickHerrero/winarchy"
 build = "build.rs"
 
 [dependencies]
