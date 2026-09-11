@@ -310,9 +310,39 @@ fn ipc_desktop_smoke() {
 #[test]
 #[ignore = "kills a disposable Winarchy daemon; no existing daemon may be running"]
 fn crash_restores_hidden_windows() {
+    crash_session(false);
+}
+
+#[test]
+#[ignore = "stops Explorer and kills a disposable daemon; save work and close Explorer windows"]
+fn replacement_crash_restores_explorer() {
+    crash_session(true);
+}
+
+struct TestDaemon(std::process::Child);
+impl Drop for TestDaemon {
+    fn drop(&mut self) {
+        if self.0.try_wait().ok().flatten().is_none() {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+}
+fn crash_session(replace: bool) {
+    let explorer_running = || unsafe {
+        let name = wide("Shell_TrayWnd");
+        FindWindowW(PCWSTR(name.as_ptr()), None).is_ok()
+    };
+    if replace {
+        assert!(explorer_running(), "start Explorer before this test");
+    }
     let exe =
         std::env::var("WINARCHY_TEST_DAEMON").expect("set WINARCHY_TEST_DAEMON to test executable");
-    let mut daemon = std::process::Command::new(exe).spawn().unwrap();
+    let mut command = std::process::Command::new(exe);
+    if replace {
+        command.arg("--replace-explorer");
+    }
+    let mut daemon = TestDaemon(command.spawn().unwrap());
     for _ in 0..100 {
         if winarchy::platform::ipc::client("status").is_ok() {
             break;
@@ -320,6 +350,9 @@ fn crash_restores_hidden_windows() {
         std::thread::sleep(Duration::from_millis(100));
     }
     std::thread::sleep(Duration::from_secs(2));
+    if replace {
+        assert!(!explorer_running(), "Explorer was not stopped");
+    }
     let ids = fixture();
     let _cleanup = Cleanup(ids.clone(), 1);
     std::thread::sleep(Duration::from_secs(1));
@@ -327,16 +360,17 @@ fn crash_restores_hidden_windows() {
     for id in &ids {
         assert!(!unsafe { IsWindowVisible(HWND(*id as *mut _)).as_bool() });
     }
-    daemon.kill().unwrap();
-    daemon.wait().unwrap();
+    daemon.0.kill().unwrap();
+    daemon.0.wait().unwrap();
     for _ in 0..100 {
         if ids
             .iter()
             .all(|id| unsafe { IsWindowVisible(HWND(*id as *mut _)).as_bool() })
+            && (!replace || explorer_running())
         {
             return;
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    panic!("watchdog did not restore hidden fixture windows");
+    panic!("watchdog did not restore hidden fixtures and required Explorer state");
 }
