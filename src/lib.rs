@@ -7,4 +7,5 @@ pub mod model;
 #[cfg(windows)]
 pub mod platform;
 pub mod protocol;
+pub mod queue;
 pub mod request;

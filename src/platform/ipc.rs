@@ -1,5 +1,5 @@
 use super::{
-    Event,
+    Event, EventSender,
     native::wide,
     pipe_io::{self, PipeIo},
 };
@@ -14,7 +14,7 @@ use std::{
         fs::OpenOptionsExt,
         io::{AsRawHandle, FromRawHandle},
     },
-    sync::{Arc, mpsc::Sender},
+    sync::Arc,
     time::{Duration, Instant},
 };
 use windows::{
@@ -112,7 +112,7 @@ fn create_pipe() -> Result<std::fs::File, String> {
         Ok(std::fs::File::from_raw_handle(h.0))
     }
 }
-fn dispatch(tx: &Sender<Event>, command: crate::command::Command) -> Result<String, String> {
+fn dispatch(tx: &EventSender, command: crate::command::Command) -> Result<String, String> {
     let (sender, rx) = std::sync::mpsc::channel();
     let ticket = Arc::new(Ticket::new(Instant::now() + Duration::from_secs(5)));
     tx.send(Event::Command(
@@ -131,7 +131,7 @@ fn dispatch(tx: &Sender<Event>, command: crate::command::Command) -> Result<Stri
         }
     }
 }
-fn serve(file: &std::fs::File, tx: &Sender<Event>) -> Result<(), String> {
+fn serve(file: &std::fs::File, tx: &EventSender) -> Result<(), String> {
     let mut io = PipeIo {
         handle: HANDLE(file.as_raw_handle()),
         deadline: Instant::now() + Duration::from_secs(3),
@@ -158,7 +158,7 @@ fn serve(file: &std::fs::File, tx: &Sender<Event>) -> Result<(), String> {
     let _ = io.read_exact(&mut ack); // Old clients may close without ACK; wait is bounded.
     Ok(())
 }
-pub fn start(tx: Sender<Event>) -> Result<(), String> {
+pub fn start(tx: EventSender) -> Result<(), String> {
     let file = create_pipe()?;
     std::thread::spawn(move || {
         let h = HANDLE(file.as_raw_handle());

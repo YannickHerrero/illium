@@ -18,15 +18,12 @@ use crate::{
 };
 pub use security::require_standard_user;
 pub use session::watchdog;
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    sync::mpsc::{self, Sender},
-};
+use std::{cell::RefCell, rc::Rc};
 use windows::Win32::{
     Foundation::*,
     UI::{HiDpi::*, WindowsAndMessaging::*},
 };
+pub type EventSender = crate::queue::Sender<Event>;
 pub enum Event {
     Command(Command, Option<crate::request::ReplyTo>),
     Window(u32, isize),
@@ -431,7 +428,7 @@ impl Drop for Manager {
         }
     }
 }
-fn watch(home: std::path::PathBuf, tx: Sender<Event>) {
+fn watch(home: std::path::PathBuf, tx: EventSender) {
     std::thread::spawn(move || unsafe {
         use windows::{
             Win32::{Storage::FileSystem::*, System::Threading::*},
@@ -477,7 +474,8 @@ pub fn run(replace: bool) -> Result<(), String> {
     Config::install(&home)?;
     let config = Config::load(&home)?;
     let bindings = input::parse(&config.keys)?;
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = crate::queue::channel(1024);
+    let maintenance = tx.clone();
     ipc::start(tx.clone())?;
     let manager = Manager {
         config,
@@ -575,7 +573,27 @@ pub fn run(replace: bool) -> Result<(), String> {
         slint::TimerMode::Repeated,
         std::time::Duration::from_secs(1),
         move || {
-            let m = m.borrow();
+            let mut m = m.borrow_mut();
+            if maintenance.take_overflow() {
+                tracing::warn!("event queue overflow; reconciling windows and configuration");
+                m.event(Event::Display);
+                let active = m.model.active;
+                m.model.clients.retain(|c| {
+                    let keep = c.workspace != active
+                        || unsafe { IsWindowVisible(native::hwnd(c.id)).as_bool() };
+                    if !keep {
+                        session::untag(c.id);
+                    }
+                    keep
+                });
+                for id in native::enumerate() {
+                    m.add(id);
+                }
+                if let Err(e) = m.reload() {
+                    tracing::warn!(%e,"overflow reload rejected");
+                    m.layout();
+                }
+            }
             m.shell.refresh(&m.model, &m.config);
         },
     );

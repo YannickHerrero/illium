@@ -1,8 +1,8 @@
-use super::{Event, native};
+use super::{Event, EventSender, native};
 use crate::{config::Config, layout::Rect, model::Model};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use slint::{ComponentHandle, ModelRc, VecModel};
-use std::{rc::Rc, sync::mpsc::Sender};
+use std::rc::Rc;
 use windows::Win32::UI::WindowsAndMessaging::*;
 slint::include_modules!();
 fn color(s: &str) -> slint::Color {
@@ -48,7 +48,7 @@ pub struct Shell {
     pub apps: Vec<App>,
     pub results: Vec<App>,
     pub visible: bool,
-    tx: Sender<Event>,
+    tx: EventSender,
     pub pending: bool,
     launcher_pending: Option<Rect>,
     descriptions: bool,
@@ -77,7 +77,7 @@ fn score(query: &str, text: &str) -> Option<usize> {
     Some(total)
 }
 impl Shell {
-    pub fn new(tx: Sender<Event>) -> Result<Self, String> {
+    pub fn new(tx: EventSender) -> Result<Self, String> {
         let launcher = Launcher::new().map_err(|e| e.to_string())?;
         let t = tx.clone();
         launcher.on_search(move |q| {

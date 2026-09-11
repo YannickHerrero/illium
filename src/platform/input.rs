@@ -1,12 +1,12 @@
-use super::Event;
+use super::{Event, EventSender};
 use crate::keyboard::Binding;
 pub use crate::keyboard::parse;
-use std::sync::{OnceLock, RwLock, mpsc::Sender};
+use std::sync::{OnceLock, RwLock};
 use windows::Win32::{
     Foundation::*,
     UI::{Accessibility::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
 };
-static STATE: OnceLock<(Sender<Event>, RwLock<Vec<Binding>>)> = OnceLock::new();
+static STATE: OnceLock<(EventSender, RwLock<Vec<Binding>>)> = OnceLock::new();
 static CONSUMED: std::sync::Mutex<[bool; 256]> = std::sync::Mutex::new([false; 256]);
 pub fn update(bindings: Vec<Binding>) {
     if let Some((_, b)) = STATE.get() {
@@ -41,8 +41,11 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                             .find(|b| b.key == k.vkCode && b.modifiers == modifiers)
                     {
                         let mut consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner());
-                        if !consumed[k.vkCode as usize] {
-                            let _ = tx.send(Event::Command(b.command.clone(), None));
+                        if !consumed[k.vkCode as usize]
+                            && tx.send(Event::Command(b.command.clone(), None)).is_err()
+                        {
+                            drop(consumed);
+                            return CallNextHookEx(None, code, w, l);
                         }
                         consumed[k.vkCode as usize] = true;
                         return LRESULT(1);
@@ -92,7 +95,7 @@ unsafe extern "system" fn display_window(h: HWND, message: u32, w: WPARAM, l: LP
     }
     unsafe { DefWindowProcW(h, message, w, l) }
 }
-pub fn start(tx: Sender<Event>, bindings: Vec<Binding>) -> Result<(), String> {
+pub fn start(tx: EventSender, bindings: Vec<Binding>) -> Result<(), String> {
     let _ = STATE.set((tx, RwLock::new(bindings)));
     let (ready, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || unsafe {
