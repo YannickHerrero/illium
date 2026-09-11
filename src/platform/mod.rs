@@ -99,6 +99,9 @@ impl Manager {
                 return false;
             }
         };
+        if self.config.wm.square_corners {
+            native::corners(id, true);
+        }
         self.model.clients.push(Client {
             id,
             generation,
@@ -193,6 +196,9 @@ impl Manager {
         self.shell.configure(&config, &self.monitors)?;
         input::update(bindings);
         self.config = config;
+        for c in &self.model.clients {
+            native::corners(c.id, self.config.wm.square_corners);
+        }
         self.layout();
         tracing::info!("configuration reloaded");
         Ok(())
@@ -473,6 +479,7 @@ impl Drop for Manager {
                 continue;
             }
             native::show(c.id, true);
+            native::corners(c.id, false);
             session::untag(c.id);
             if c.fullscreen {
                 native::position(c.id, c.restore, None);

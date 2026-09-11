@@ -3,3 +3,4 @@ layout = "fibonacci"
 gap = 6
 outer_gap = 6
 focus_follows_mouse = true
+square_corners = true

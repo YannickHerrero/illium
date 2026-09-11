@@ -20,9 +20,10 @@ layout = "fibonacci"
 gap = 6
 outer_gap = 6
 focus_follows_mouse = true
+square_corners = true
 ```
 
-V1 requires nine workspaces and Fibonacci. Gaps are 0–100 logical pixels. Pointer focus focuses eligible clients on pointer entry. In the other direction, focus changed by a directional shortcut or a workspace switch centers the pointer on the newly focused client. Dimensions are scaled to physical monitor coordinates.
+V1 requires nine workspaces and Fibonacci. Gaps are 0–100 logical pixels. Pointer focus focuses eligible clients on pointer entry. In the other direction, focus changed by a directional shortcut or a workspace switch centers the pointer on the newly focused client. Dimensions are scaled to physical monitor coordinates. `square_corners` asks the Desktop Window Manager not to round the corners of managed windows and shell surfaces; the preference is reset when a window leaves Winarchy.
 
 ## keybindings.toml
 

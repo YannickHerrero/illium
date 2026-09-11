@@ -42,6 +42,7 @@ fn tool(w: &slint::Window, no_activate: bool) {
             return;
         }
         let h = native::hwnd(id(w));
+        native::corners(id(w), true);
         let key = native::wide(ORIGINAL_PROC);
         if GetPropW(h, windows::core::PCWSTR(key.as_ptr())).is_invalid() {
             let previous = SetWindowLongPtrW(h, GWLP_WNDPROC, surface_proc as *const () as isize);

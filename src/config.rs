@@ -16,6 +16,11 @@ pub struct Wm {
     pub gap: i32,
     pub outer_gap: i32,
     pub focus_follows_mouse: bool,
+    #[serde(default = "enabled")]
+    pub square_corners: bool,
+}
+fn enabled() -> bool {
+    true
 }
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]

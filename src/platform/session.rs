@@ -227,6 +227,7 @@ pub fn watchdog(pid: u32, identity: &str, started: u64) -> Result<(), String> {
             for id in native::enumerate() {
                 if !GetPropW(native::hwnd(id), PCWSTR(key.as_ptr())).is_invalid() {
                     native::show(id, true);
+                    native::corners(id, false);
                     untag(id);
                 }
             }

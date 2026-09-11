@@ -133,6 +133,23 @@ pub fn monitors() -> Vec<Rect> {
     }
     out
 }
+/// Windows 11 rounds top-level windows; tiled windows look wrong with gaps
+/// between rounded corners. `square` false restores the system default.
+pub fn corners(id: isize, square: bool) {
+    let preference = if square {
+        DWMWCP_DONOTROUND
+    } else {
+        DWMWCP_DEFAULT
+    };
+    unsafe {
+        let _ = DwmSetWindowAttribute(
+            hwnd(id),
+            DWMWA_WINDOW_CORNER_PREFERENCE,
+            (&preference as *const DWM_WINDOW_CORNER_PREFERENCE).cast(),
+            std::mem::size_of::<DWM_WINDOW_CORNER_PREFERENCE>() as u32,
+        );
+    }
+}
 pub fn show(id: isize, visible: bool) {
     unsafe {
         let _ = ShowWindow(hwnd(id), if visible { SW_SHOWNA } else { SW_HIDE });
