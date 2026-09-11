@@ -44,7 +44,8 @@ struct Manager {
     shell: shell::Shell,
 }
 impl Manager {
-    fn prune(&mut self) {
+    fn prune(&mut self) -> bool {
+        let previous = self.model.clients.len();
         self.model
             .clients
             .retain(|c| session::owns(c.id, c.generation));
@@ -57,9 +58,12 @@ impl Manager {
         }) {
             self.model.focused = None;
         }
+        previous != self.model.clients.len()
     }
     fn add(&mut self, id: isize) -> bool {
-        self.prune();
+        if self.prune() {
+            self.layout();
+        }
         if let Some(c) = self.model.clients.iter().find(|c| c.id == id) {
             if c.workspace != self.model.active {
                 native::show(id, false);
@@ -151,7 +155,9 @@ impl Manager {
         self.shell.refresh(&self.model, &self.config);
     }
     fn focus_visible(&mut self) {
-        self.prune();
+        if self.prune() {
+            self.layout();
+        }
         let id = self
             .model
             .focused
@@ -184,7 +190,9 @@ impl Manager {
         Ok(())
     }
     fn execute(&mut self, c: Command) -> Result<String, String> {
-        self.prune();
+        if self.prune() {
+            self.layout();
+        }
         match &c {
             Command::Spawn(_) | Command::LaunchTarget { .. } => {
                 tracing::debug!("application launch command")
@@ -606,7 +614,9 @@ pub fn run(replace: bool) -> Result<(), String> {
         std::time::Duration::from_secs(1),
         move || {
             let mut m = m.borrow_mut();
-            m.prune();
+            if m.prune() {
+                m.layout();
+            }
             if maintenance.take_overflow() {
                 tracing::warn!("event queue overflow; reconciling windows and configuration");
                 m.event(Event::Display);
