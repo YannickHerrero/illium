@@ -117,9 +117,11 @@ impl Shell {
         for r in monitors {
             let b = Background::new().map_err(|e| e.to_string())?;
             b.set_bg(color(&c.theme.background));
+            b.window()
+                .set_size(slint::PhysicalSize::new(r.w as u32, r.h as u32));
+            b.window()
+                .set_position(slint::PhysicalPosition::new(r.x, r.y));
             b.show().map_err(|e| e.to_string())?;
-            tool(b.window());
-            native::position(id(b.window()), *r, Some(HWND_BOTTOM));
             self.backgrounds.push(b);
             if c.bar.enabled {
                 let b = Bar::new().map_err(|e| e.to_string())?;
@@ -134,22 +136,18 @@ impl Shell {
                         None,
                     ));
                 });
-                b.show().map_err(|e| e.to_string())?;
-                tool(b.window());
-                native::position(
-                    id(b.window()),
-                    Rect {
-                        x: r.x,
-                        y: if c.bar.position == "top" {
-                            r.y
-                        } else {
-                            r.y + r.h - c.bar.height
-                        },
-                        w: r.w,
-                        h: c.bar.height,
+                let height = super::dpi::scale(*r, c.bar.height);
+                b.window()
+                    .set_size(slint::PhysicalSize::new(r.w as u32, height as u32));
+                b.window().set_position(slint::PhysicalPosition::new(
+                    r.x,
+                    if c.bar.position == "top" {
+                        r.y
+                    } else {
+                        r.y + r.h - height
                     },
-                    Some(HWND_TOPMOST),
-                );
+                ));
+                b.show().map_err(|e| e.to_string())?;
                 self.bars.push(b);
             }
         }
@@ -192,6 +190,7 @@ impl Shell {
                 native::position(id(b.window()), *r, Some(HWND_BOTTOM));
             }
             for (b, r) in self.bars.iter().zip(monitors) {
+                let height = super::dpi::scale(*r, c.bar.height);
                 tool(b.window());
                 native::position(
                     id(b.window()),
@@ -200,10 +199,10 @@ impl Shell {
                         y: if c.bar.position == "top" {
                             r.y
                         } else {
-                            r.y + r.h - c.bar.height
+                            r.y + r.h - height
                         },
                         w: r.w,
-                        h: c.bar.height,
+                        h: height,
                     },
                     Some(HWND_TOPMOST),
                 );
@@ -213,8 +212,8 @@ impl Shell {
         if let Some(r) = self.launcher_pending
             && id(self.launcher.window()) != 0
         {
-            let w = c.launcher.width.min(r.w);
-            let h = (c.launcher.max_results as i32 * 38 + 65).min(r.h);
+            let w = super::dpi::scale(r, c.launcher.width).min(r.w);
+            let h = super::dpi::scale(r, c.launcher.max_results as i32 * 38 + 65).min(r.h);
             tool(self.launcher.window());
             native::position(
                 id(self.launcher.window()),
@@ -255,6 +254,7 @@ impl Shell {
     pub fn dismiss(&mut self) {
         let _ = self.launcher.hide();
         self.visible = false;
+        self.launcher_pending = None;
     }
     pub fn toggle(&mut self, c: &Config, r: Rect) -> Result<(), String> {
         if self.visible {
@@ -264,23 +264,19 @@ impl Shell {
         self.launcher.set_query("".into());
         self.launcher.set_selected(0);
         self.search("", c.launcher.max_results);
+        let w = super::dpi::scale(r, c.launcher.width).min(r.w);
+        let h = super::dpi::scale(r, c.launcher.max_results as i32 * 38 + 65).min(r.h);
+        self.launcher
+            .window()
+            .set_size(slint::PhysicalSize::new(w as u32, h as u32));
+        self.launcher
+            .window()
+            .set_position(slint::PhysicalPosition::new(
+                r.x + (r.w - w) / 2,
+                r.y + (r.h - h) / 2,
+            ));
         self.launcher.show().map_err(|e| e.to_string())?;
         self.launcher_pending = Some(r);
-        tool(self.launcher.window());
-        let w = c.launcher.width.min(r.w);
-        let h = (c.launcher.max_results as i32 * 38 + 65).min(r.h);
-        native::position(
-            id(self.launcher.window()),
-            Rect {
-                x: r.x + (r.w - w) / 2,
-                y: r.y + (r.h - h) / 2,
-                w,
-                h,
-            },
-            Some(HWND_TOPMOST),
-        );
-        native::focus(id(self.launcher.window()));
-        self.launcher.invoke_focus_search();
         self.visible = true;
         Ok(())
     }

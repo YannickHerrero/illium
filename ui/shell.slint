@@ -1,4 +1,3 @@
-import { LineEdit, ScrollView } from "std-widgets.slint";
 export component Background inherits Window {
     no-frame: true;
     in property <color> bg;
@@ -56,7 +55,23 @@ export component Launcher inherits Window {
         }
         VerticalLayout {
             padding: 12px; spacing: 6px;
-            input := LineEdit { text <=> root.query; placeholder-text: "Search applications"; edited => {root.selected = 0; root.search(self.text);} accepted => {root.activate(root.selected);} }
+            Rectangle {
+                height: 36px;
+                border-width: 1px;
+                border-color: root.overlay;
+                Text { x: 8px; text: ">"; color: root.accent; vertical-alignment: center; }
+                input := TextInput {
+                    x: 28px; width: parent.width - 36px; height: parent.height;
+                    text <=> root.query;
+                    color: root.fg;
+                    selection-background-color: root.accent;
+                    selection-foreground-color: root.bg;
+                    single-line: true;
+                    vertical-alignment: center;
+                    edited => {root.selected = 0; root.search(self.text);}
+                    accepted => {root.activate(root.selected);}
+                }
+            }
             for name[index] in root.results: Rectangle {
                 height: 32px;
                 background: root.selected == index ? root.overlay : root.bg;
