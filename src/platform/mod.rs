@@ -3,6 +3,9 @@ mod input;
 mod instance;
 pub mod ipc;
 mod native;
+mod pipe_io;
+#[cfg(test)]
+mod pipe_io_tests;
 mod security;
 mod session;
 mod shell;

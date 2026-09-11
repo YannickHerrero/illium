@@ -1,9 +1,21 @@
-use super::{Event, native::wide};
-use crate::{command::Reply, protocol::read_command};
+use super::{
+    Event,
+    native::wide,
+    pipe_io::{self, PipeIo},
+};
+use crate::{
+    command::Reply,
+    protocol::read_command,
+    request::{ReplyTo, Ticket},
+};
 use std::{
-    io::{Read, Write},
-    os::windows::{fs::OpenOptionsExt, io::FromRawHandle},
-    sync::mpsc::Sender,
+    io::{BufReader, Read, Write},
+    os::windows::{
+        fs::OpenOptionsExt,
+        io::{AsRawHandle, FromRawHandle},
+    },
+    sync::{Arc, mpsc::Sender},
+    time::{Duration, Instant},
 };
 use windows::{
     Win32::{
@@ -14,6 +26,8 @@ use windows::{
     },
     core::PCWSTR,
 };
+const MAX_REPLY: usize = 65535;
+const ACK: u8 = 6;
 pub fn pipe_name() -> String {
     format!(
         r"\\.\pipe\winarchy-{}",
@@ -21,41 +35,48 @@ pub fn pipe_name() -> String {
     )
 }
 pub fn client(command: &str) -> Result<Reply, String> {
-    let command = command.to_owned();
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = tx.send(exchange(&command));
-    });
-    rx.recv_timeout(std::time::Duration::from_secs(10))
-        .map_err(|_| "Winarchy IPC timed out".to_owned())?
-}
-fn exchange(command: &str) -> Result<Reply, String> {
+    // No detached blocking worker: each pending operation has a cancellation deadline.
+    let deadline = Instant::now() + Duration::from_secs(12);
     let name = pipe_name();
     let wide_name = wide(&name);
     unsafe {
         let _ = WaitNamedPipeW(PCWSTR(wide_name.as_ptr()), 3000);
     }
-    let mut file = std::fs::OpenOptions::new()
+    let file = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
-        // A pre-created hostile pipe must never be able to impersonate this client.
-        .custom_flags(SECURITY_SQOS_PRESENT.0 | SECURITY_IDENTIFICATION.0)
+        .custom_flags(FILE_FLAG_OVERLAPPED.0 | SECURITY_SQOS_PRESENT.0 | SECURITY_IDENTIFICATION.0)
         .open(name)
         .map_err(|e| format!("Winarchy unavailable: {e}"))?;
-    file.write_all(format!("{command}\n").as_bytes())
+    let mut io = PipeIo {
+        handle: HANDLE(file.as_raw_handle()),
+        deadline,
+    };
+    io.write_all(format!("{command}\n").as_bytes())
         .map_err(|e| e.to_string())?;
-    let mut response = Vec::new();
-    let mut b = [0];
-    while response.len() < 65536 && file.read(&mut b).map_err(|e| e.to_string())? == 1 {
-        if b[0] == b'\n' {
-            return serde_json::from_slice(&response).map_err(|e| e.to_string());
+    let reply = {
+        let mut reader = BufReader::new(&mut io);
+        let mut bytes = Vec::new();
+        loop {
+            let mut b = [0];
+            reader.read_exact(&mut b).map_err(|e| {
+                format!("IPC response incomplete; command outcome may be unknown: {e}")
+            })?;
+            if b[0] == b'\n' {
+                break;
+            }
+            if bytes.len() == MAX_REPLY {
+                return Err("oversized IPC reply".into());
+            }
+            bytes.push(b[0]);
         }
-        response.push(b[0]);
-    }
-    Err("incomplete or oversized IPC reply".into())
+        serde_json::from_slice::<Reply>(&bytes).map_err(|e| e.to_string())?
+    };
+    // Acknowledgement replaces unbounded FlushFileBuffers on the server. The
+    // response is already known, so acknowledgement failure must not imply retry.
+    let _ = io.write_all(&[ACK]);
+    Ok(reply)
 }
-/// The File owns the single pipe instance for the full server lifetime, including
-/// between clients. Closing/recreating it would permit pipe-name takeover races.
 fn create_pipe() -> Result<std::fs::File, String> {
     unsafe {
         let name = wide(&pipe_name());
@@ -75,11 +96,11 @@ fn create_pipe() -> Result<std::fs::File, String> {
         };
         let h = CreateNamedPipeW(
             PCWSTR(name.as_ptr()),
-            PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
+            PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,
             PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
             1,
             65536,
-            65536,
+            8192,
             1000,
             Some(&security),
         );
@@ -91,50 +112,71 @@ fn create_pipe() -> Result<std::fs::File, String> {
         Ok(std::fs::File::from_raw_handle(h.0))
     }
 }
+fn dispatch(tx: &Sender<Event>, command: crate::command::Command) -> Result<String, String> {
+    let (sender, rx) = std::sync::mpsc::channel();
+    let ticket = Arc::new(Ticket::new(Instant::now() + Duration::from_secs(5)));
+    tx.send(Event::Command(
+        command,
+        Some(ReplyTo {
+            ticket: ticket.clone(),
+            sender,
+        }),
+    ))
+    .map_err(|e| e.to_string())?;
+    match rx.recv_timeout(Duration::from_secs(5)) {
+        Ok(result) => result,
+        Err(_) if ticket.cancel() => Err("IPC request cancelled before execution".into()),
+        Err(_) => {
+            Err("IPC execution already started; outcome unknown, do not retry blindly".into())
+        }
+    }
+}
+fn serve(file: &std::fs::File, tx: &Sender<Event>) -> Result<(), String> {
+    let mut io = PipeIo {
+        handle: HANDLE(file.as_raw_handle()),
+        deadline: Instant::now() + Duration::from_secs(3),
+    };
+    let result =
+        read_command(&mut BufReader::new(&mut io)).and_then(|command| dispatch(tx, command));
+    let reply = match result {
+        Ok(message) => Reply { ok: true, message },
+        Err(message) => Reply { ok: false, message },
+    };
+    let mut json = serde_json::to_vec(&reply).map_err(|e| e.to_string())?;
+    if json.len() > MAX_REPLY {
+        json = serde_json::to_vec(&Reply {
+            ok: false,
+            message: "IPC reply exceeds size limit".into(),
+        })
+        .map_err(|e| e.to_string())?;
+    }
+    json.push(b'\n');
+    io.deadline = Instant::now() + Duration::from_secs(2);
+    io.write_all(&json).map_err(|e| e.to_string())?;
+    io.deadline = Instant::now() + Duration::from_secs(1);
+    let mut ack = [0];
+    let _ = io.read_exact(&mut ack); // Old clients may close without ACK; wait is bounded.
+    Ok(())
+}
 pub fn start(tx: Sender<Event>) -> Result<(), String> {
-    use std::os::windows::io::AsRawHandle;
-    // Fail synchronously before any UI/window management on name/DACL errors.
-    let mut file = create_pipe()?;
-    std::thread::spawn(move || unsafe {
+    let file = create_pipe()?;
+    std::thread::spawn(move || {
         let h = HANDLE(file.as_raw_handle());
         loop {
-            if ConnectNamedPipe(h, None).is_err() && GetLastError() != ERROR_PIPE_CONNECTED {
-                tracing::error!(error = %windows::core::Error::from_win32(), "IPC listener stopped");
-                break;
-            }
-            let result = read_command(&mut file).and_then(|c| {
-                let (reply, rx) = std::sync::mpsc::channel();
-                let ticket = std::sync::Arc::new(crate::request::Ticket::new(
-                    std::time::Instant::now() + std::time::Duration::from_secs(5),
-                ));
-                tx.send(Event::Command(
-                    c,
-                    Some(crate::request::ReplyTo {
-                        ticket: ticket.clone(),
-                        sender: reply,
-                    }),
-                ))
-                .map_err(|e| e.to_string())?;
-                match rx.recv_timeout(std::time::Duration::from_secs(5)) {
-                    Ok(result) => result,
-                    Err(_) if ticket.cancel() => {
-                        Err("IPC request cancelled before execution".into())
-                    }
-                    Err(_) => Err(
-                        "IPC execution already started; outcome unknown, do not retry blindly"
-                            .into(),
-                    ),
+            if let Err(e) = pipe_io::connect(h) {
+                unsafe {
+                    let _ = DisconnectNamedPipe(h);
                 }
-            });
-            let reply = match result {
-                Ok(message) => Reply { ok: true, message },
-                Err(message) => Reply { ok: false, message },
-            };
-            if let Ok(json) = serde_json::to_string(&reply) {
-                let _ = writeln!(file, "{json}");
+                tracing::debug!(%e,"IPC connect interrupted");
+                std::thread::sleep(Duration::from_millis(50));
+                continue;
             }
-            let _ = FlushFileBuffers(h);
-            let _ = DisconnectNamedPipe(h);
+            if let Err(e) = serve(&file, &tx) {
+                tracing::debug!(%e,"IPC client disconnected or timed out");
+            }
+            unsafe {
+                let _ = DisconnectNamedPipe(h);
+            }
         }
     });
     Ok(())
