@@ -6,7 +6,7 @@
 fn main() {
     #[cfg(windows)]
     if let Err(e) = capture::run() {
-        eprintln!("{e}");
+        capture::log(&e);
         std::process::exit(1);
     }
     #[cfg(not(windows))]
@@ -22,12 +22,12 @@ mod capture {
         Win32::{
             Foundation::*,
             Graphics::Gdi::*,
-            System::{DataExchange::*, LibraryLoader::GetModuleHandleW},
+            System::{DataExchange::*, LibraryLoader::GetModuleHandleW, Memory::*},
             UI::{HiDpi::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
         },
         core::PCWSTR,
     };
-    const CF_BITMAP: u32 = 2;
+    const CF_DIB: u32 = 8;
     const VK_ESCAPE: usize = 0x1b;
     struct State {
         size: (i32, i32),
@@ -40,6 +40,17 @@ mod capture {
     }
     thread_local! {
         static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
+    }
+    /// No console in this subsystem: failures go to a file next to the user's temp data.
+    pub fn log(message: &str) {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(std::env::temp_dir().join("winarchy-shot.log"))
+        {
+            let _ = writeln!(f, "{message}");
+        }
     }
     fn err(context: &str) -> String {
         format!("{context}: {}", windows::core::Error::from_win32())
@@ -101,6 +112,8 @@ mod capture {
             Ok(dc)
         }
     }
+    /// Device-independent bitmap in global memory: the clipboard owns it after
+    /// SetClipboardData, so it outlives this short-lived process.
     unsafe fn copy_to_clipboard(h: HWND, s: &State, r: RECT) -> Result<(), String> {
         unsafe {
             let (w, hgt) = (r.right - r.left, r.bottom - r.top);
@@ -109,17 +122,58 @@ mod capture {
             let previous = SelectObject(dc, bitmap.into());
             let copied = BitBlt(dc, 0, 0, w, hgt, Some(s.frozen), r.left, r.top, SRCCOPY);
             SelectObject(dc, previous);
-            let _ = DeleteDC(dc);
             copied.map_err(|e| format!("selection copy failed: {e}"))?;
+            let header = std::mem::size_of::<BITMAPINFOHEADER>();
+            let pixels = (w as usize) * 4 * (hgt as usize);
+            let mut info = BITMAPINFO {
+                bmiHeader: BITMAPINFOHEADER {
+                    biSize: header as u32,
+                    biWidth: w,
+                    biHeight: hgt,
+                    biPlanes: 1,
+                    biBitCount: 32,
+                    biSizeImage: pixels as u32,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let global = GlobalAlloc(GMEM_MOVEABLE, header + pixels)
+                .map_err(|e| format!("clipboard memory failed: {e}"))?;
+            let base = GlobalLock(global).cast::<u8>();
+            if base.is_null() {
+                let _ = GlobalFree(Some(global));
+                return Err("clipboard memory lock failed".into());
+            }
+            let lines = GetDIBits(
+                dc,
+                bitmap,
+                0,
+                hgt as u32,
+                Some(base.add(header).cast()),
+                &mut info,
+                DIB_RGB_COLORS,
+            );
+            std::ptr::copy_nonoverlapping(
+                (&info.bmiHeader as *const BITMAPINFOHEADER).cast::<u8>(),
+                base,
+                header,
+            );
+            let _ = GlobalUnlock(global);
+            let _ = DeleteObject(bitmap.into());
+            let _ = DeleteDC(dc);
+            if lines != hgt {
+                let _ = GlobalFree(Some(global));
+                return Err(format!("pixel read failed: {lines} of {hgt} lines"));
+            }
             OpenClipboard(Some(h)).map_err(|e| format!("clipboard busy: {e}"))?;
             let result = EmptyClipboard().map_err(|e| e.to_string()).and_then(|()| {
-                SetClipboardData(CF_BITMAP, Some(HANDLE(bitmap.0)))
+                SetClipboardData(CF_DIB, Some(HANDLE(global.0)))
                     .map(|_| ())
                     .map_err(|e| e.to_string())
             });
             let _ = CloseClipboard();
             if result.is_err() {
-                let _ = DeleteObject(bitmap.into());
+                let _ = GlobalFree(Some(global));
             }
             result.map_err(|e| format!("clipboard write failed: {e}"))
         }
@@ -162,59 +216,93 @@ mod capture {
             let _ = EndPaint(h, &ps);
         }
     }
+    enum Action {
+        None,
+        Capture,
+        Release(RECT),
+        Quit,
+    }
     unsafe extern "system" fn procedure(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT {
-        let handled = STATE.with_borrow_mut(|state| {
-            let Some(s) = state.as_mut() else {
-                return false;
-            };
-            match m {
-                WM_PAINT => unsafe { paint(h, s) },
-                WM_SETCURSOR => unsafe {
-                    SetCursor(LoadCursorW(None, IDC_CROSS).ok());
-                },
-                WM_LBUTTONDOWN => unsafe {
-                    s.start = Some(point(l));
-                    s.current = point(l);
+        // Win32 re-enters this procedure synchronously from calls such as
+        // ReleaseCapture (WM_CAPTURECHANGED), so the state borrow must be
+        // non-blocking and those calls happen after it is released.
+        let outcome = STATE.with(|cell| {
+            let mut guard = cell.try_borrow_mut().ok()?;
+            let state = guard.as_mut()?;
+            Some(match m {
+                WM_PAINT => {
+                    unsafe { paint(h, state) };
+                    (true, Action::None)
+                }
+                WM_SETCURSOR => {
+                    unsafe { SetCursor(LoadCursorW(None, IDC_CROSS).ok()) };
+                    (true, Action::None)
+                }
+                WM_LBUTTONDOWN => {
+                    state.start = Some(point(l));
+                    state.current = point(l);
+                    let _ = unsafe { InvalidateRect(Some(h), None, false) };
+                    (true, Action::Capture)
+                }
+                WM_MOUSEMOVE if state.start.is_some() => {
+                    state.current = point(l);
+                    let _ = unsafe { InvalidateRect(Some(h), None, false) };
+                    (true, Action::None)
+                }
+                WM_LBUTTONUP if state.start.is_some() => {
+                    let start = state.start.take().unwrap_or(state.current);
+                    (true, Action::Release(selection(start, point(l))))
+                }
+                WM_RBUTTONDOWN | WM_KILLFOCUS => {
+                    state.cancelled = true;
+                    (true, Action::Quit)
+                }
+                WM_KEYDOWN if w.0 == VK_ESCAPE => {
+                    state.cancelled = true;
+                    (true, Action::Quit)
+                }
+                _ => (false, Action::None),
+            })
+        });
+        let Some((handled, action)) = outcome else {
+            return unsafe { DefWindowProcW(h, m, w, l) };
+        };
+        unsafe {
+            match action {
+                Action::None => {}
+                Action::Capture => {
                     SetCapture(h);
-                    let _ = InvalidateRect(Some(h), None, false);
-                },
-                WM_MOUSEMOVE if s.start.is_some() => unsafe {
-                    s.current = point(l);
-                    let _ = InvalidateRect(Some(h), None, false);
-                },
-                WM_LBUTTONUP if s.start.is_some() => unsafe {
+                }
+                Action::Release(r) => {
                     let _ = ReleaseCapture();
-                    let r = selection(s.start.take().unwrap_or(s.current), point(l));
-                    if let Err(e) = copy_to_clipboard(h, s, r) {
-                        eprintln!("{e}");
-                        s.cancelled = true;
+                    let result = STATE.with_borrow(|state| {
+                        state
+                            .as_ref()
+                            .map_or(Err("no capture state".to_owned()), |s| {
+                                copy_to_clipboard(h, s, r)
+                            })
+                    });
+                    if let Err(e) = result {
+                        log(&e);
+                        STATE.with_borrow_mut(|state| {
+                            if let Some(s) = state.as_mut() {
+                                s.cancelled = true;
+                            }
+                        });
                     }
                     PostQuitMessage(0);
-                },
-                WM_RBUTTONDOWN => unsafe {
-                    s.cancelled = true;
-                    PostQuitMessage(0);
-                },
-                WM_KEYDOWN if w.0 == VK_ESCAPE => unsafe {
-                    s.cancelled = true;
-                    PostQuitMessage(0);
-                },
-                // Losing activation mid-capture would leave a stale overlay.
-                WM_KILLFOCUS => unsafe {
-                    s.cancelled = true;
-                    PostQuitMessage(0);
-                },
-                _ => return false,
+                }
+                Action::Quit => PostQuitMessage(0),
             }
-            true
-        });
-        if handled {
-            LRESULT(0)
-        } else {
-            unsafe { DefWindowProcW(h, m, w, l) }
+            if handled {
+                LRESULT(0)
+            } else {
+                DefWindowProcW(h, m, w, l)
+            }
         }
     }
     pub fn run() -> Result<(), String> {
+        std::panic::set_hook(Box::new(|info| log(&format!("panic: {info}"))));
         unsafe {
             let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
             let origin = POINT {
