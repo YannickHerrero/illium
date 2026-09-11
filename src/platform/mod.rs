@@ -185,7 +185,7 @@ impl Manager {
                     .map(|c| c.id)
             });
         self.model.focused = id;
-        native::focus(id.unwrap_or_else(native::sink));
+        native::focus(id.unwrap_or_else(native::sink), id.is_some());
     }
     fn reload(&mut self) -> Result<(), String> {
         let config = Config::load(&self.config.home)?;
@@ -267,7 +267,7 @@ impl Manager {
                             self.layout();
                         } else {
                             self.model.focused = Some(other);
-                            native::focus(other);
+                            native::focus(other, true);
                         }
                     }
                 }
@@ -437,7 +437,7 @@ impl Manager {
                         .any(|c| c.id == id && c.workspace == self.model.active)
                 {
                     self.model.focused = Some(id);
-                    native::focus(id);
+                    native::focus(id, false);
                 }
             }
             Event::Display => {

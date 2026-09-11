@@ -181,7 +181,9 @@ pub fn sink() -> isize {
         sink.get()
     })
 }
-pub fn focus(id: isize) {
+/// `warp` centers the pointer on the window so the mouse follows keyboard-driven
+/// focus; pointer-driven focus passes `false` to leave the cursor alone.
+pub fn focus(id: isize, warp: bool) {
     if id == 0 {
         return;
     }
@@ -209,6 +211,10 @@ pub fn focus(id: isize) {
             if !SetForegroundWindow(hwnd(id)).as_bool() {
                 tracing::debug!(id, "foreground request rejected");
             }
+        }
+        if warp {
+            let r = rect(id);
+            let _ = SetCursorPos(r.x + r.w / 2, r.y + r.h / 2);
         }
     }
 }

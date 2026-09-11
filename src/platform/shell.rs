@@ -235,7 +235,7 @@ impl Shell {
                 },
                 Some(HWND_TOPMOST),
             );
-            native::focus(id(self.launcher.window()));
+            native::focus(id(self.launcher.window()), false);
             self.launcher.invoke_focus_search();
             self.launcher_pending = None;
         }
