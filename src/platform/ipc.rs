@@ -21,6 +21,15 @@ pub fn pipe_name() -> String {
     )
 }
 pub fn client(command: &str) -> Result<Reply, String> {
+    let command = command.to_owned();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(exchange(&command));
+    });
+    rx.recv_timeout(std::time::Duration::from_secs(10))
+        .map_err(|_| "Winarchy IPC timed out".to_owned())?
+}
+fn exchange(command: &str) -> Result<Reply, String> {
     let name = pipe_name();
     let wide_name = wide(&name);
     unsafe {
@@ -33,15 +42,15 @@ pub fn client(command: &str) -> Result<Reply, String> {
         .map_err(|e| format!("Winarchy unavailable: {e}"))?;
     file.write_all(format!("{command}\n").as_bytes())
         .map_err(|e| e.to_string())?;
-    let mut response = String::new();
+    let mut response = Vec::new();
     let mut b = [0];
     while response.len() < 65536 && file.read(&mut b).map_err(|e| e.to_string())? == 1 {
         if b[0] == b'\n' {
             break;
         }
-        response.push(b[0] as char);
+        response.push(b[0]);
     }
-    serde_json::from_str(&response).map_err(|e| e.to_string())
+    serde_json::from_slice(&response).map_err(|e| e.to_string())
 }
 pub fn start(tx: Sender<Event>) -> Result<(), String> {
     let (ready, rx) = std::sync::mpsc::channel();
@@ -103,9 +112,16 @@ pub fn start(tx: Sender<Event>) -> Result<(), String> {
                         _ => break,
                     }
                 }
+                let too_long = bytes.len() >= 8192;
                 let result = String::from_utf8(bytes)
                     .map_err(|e| e.to_string())
-                    .and_then(|s| s.parse::<Command>())
+                    .and_then(|s| {
+                        if too_long {
+                            Err("IPC command exceeds 8191 bytes".into())
+                        } else {
+                            s.parse::<Command>()
+                        }
+                    })
                     .and_then(|c| {
                         let (reply, rx) = std::sync::mpsc::channel();
                         tx.send(Event::Command(c, Some(reply)))
