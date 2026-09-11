@@ -426,25 +426,41 @@ pub fn run(replace: bool) -> Result<(), String> {
     let bindings = input::parse(&config.keys)?;
     let (tx, rx) = mpsc::channel();
     ipc::start(tx.clone())?;
-    let mut manager = Manager {
+    let manager = Manager {
         config,
         model: Model::new(),
         monitors: native::monitors(),
         shell: shell::Shell::new(tx.clone())?,
     };
-    manager
-        .shell
-        .configure(&manager.config, &manager.monitors)?;
-    for id in native::enumerate() {
-        manager.add(id);
-    }
-    manager.model.focused = Some(unsafe { GetForegroundWindow().0 as isize });
-    manager.layout();
-    input::start(tx.clone(), bindings)?;
-    watch(home, tx);
     let manager = Rc::new(RefCell::new(manager));
+    let startup_error = Rc::new(RefCell::new(None));
+    let recovery = Rc::new(RefCell::new(None));
+    let m = manager.clone();
+    let error = startup_error.clone();
+    slint::Timer::single_shot(std::time::Duration::from_millis(1), move || {
+        let result = (|| -> Result<(), String> {
+            let mut m = m.borrow_mut();
+            let config = m.config.clone();
+            let monitors = m.monitors.clone();
+            m.shell.configure(&config, &monitors)?;
+            for id in native::enumerate() {
+                m.add(id);
+            }
+            m.model.focused = Some(unsafe { GetForegroundWindow().0 as isize });
+            m.layout();
+            input::start(tx.clone(), bindings)?;
+            watch(home, tx);
+            tracing::info!("Winarchy core initialized");
+            Ok(())
+        })();
+        if let Err(e) = result {
+            *error.borrow_mut() = Some(e);
+            let _ = slint::quit_event_loop();
+        }
+    });
     let m = manager.clone();
     let timer = slint::Timer::default();
+    let guard = recovery.clone();
     timer.start(
         slint::TimerMode::Repeated,
         std::time::Duration::from_millis(10),
@@ -452,6 +468,23 @@ pub fn run(replace: bool) -> Result<(), String> {
             let mut m = m.borrow_mut();
             for event in rx.try_iter().take(128) {
                 m.event(event);
+            }
+            let config = m.config.clone();
+            let monitors = m.monitors.clone();
+            if m.shell.arrange(&config, &monitors)
+                && guard.borrow().is_none()
+                && !m.shell.backgrounds.is_empty()
+            {
+                match session::Recovery::new(replace) {
+                    Ok(recovery) => {
+                        *guard.borrow_mut() = Some(recovery);
+                        tracing::info!("Winarchy ready");
+                    }
+                    Err(e) => {
+                        tracing::error!(%e,"session initialization failed");
+                        let _ = slint::quit_event_loop();
+                    }
+                }
             }
         },
     );
@@ -465,7 +498,9 @@ pub fn run(replace: bool) -> Result<(), String> {
             m.shell.refresh(&m.model, &m.config);
         },
     );
-    let _guard = session::Recovery::new(replace)?;
-    tracing::info!("Winarchy ready");
-    slint::run_event_loop().map_err(|e| e.to_string())
+    slint::run_event_loop_until_quit().map_err(|e| e.to_string())?;
+    if let Some(e) = startup_error.borrow_mut().take() {
+        return Err(e);
+    }
+    Ok(())
 }

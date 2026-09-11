@@ -10,13 +10,16 @@ fn color(s: &str) -> slint::Color {
     slint::Color::from_rgb_u8((c >> 16) as u8, (c >> 8) as u8, c as u8)
 }
 fn id(w: &slint::Window) -> isize {
-    match w.window_handle().window_handle().unwrap().as_raw() {
-        RawWindowHandle::Win32(h) => h.hwnd.get(),
+    match w.window_handle().window_handle().map(|h| h.as_raw()) {
+        Ok(RawWindowHandle::Win32(h)) => h.hwnd.get(),
         _ => 0,
     }
 }
 fn tool(w: &slint::Window) {
     unsafe {
+        if id(w) == 0 {
+            return;
+        }
         let h = native::hwnd(id(w));
         let ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
         SetWindowLongPtrW(
@@ -40,6 +43,8 @@ pub struct Shell {
     pub results: Vec<App>,
     pub visible: bool,
     tx: Sender<Event>,
+    pub pending: bool,
+    launcher_pending: Option<Rect>,
 }
 fn scan(path: &std::path::Path, out: &mut Vec<App>) {
     if let Ok(entries) = std::fs::read_dir(path) {
@@ -96,10 +101,13 @@ impl Shell {
             apps: vec![],
             results: vec![],
             visible: false,
+            pending: false,
+            launcher_pending: None,
             tx,
         })
     }
     pub fn configure(&mut self, c: &Config, monitors: &[Rect]) -> Result<(), String> {
+        self.pending = true;
         for b in self.bars.drain(..) {
             let _ = b.hide();
         }
@@ -172,6 +180,58 @@ impl Shell {
         self.search("", c.launcher.max_results);
         Ok(())
     }
+    pub fn arrange(&mut self, c: &Config, monitors: &[Rect]) -> bool {
+        if self.pending {
+            if self.backgrounds.iter().any(|b| id(b.window()) == 0)
+                || self.bars.iter().any(|b| id(b.window()) == 0)
+            {
+                return false;
+            }
+            for (b, r) in self.backgrounds.iter().zip(monitors) {
+                tool(b.window());
+                native::position(id(b.window()), *r, Some(HWND_BOTTOM));
+            }
+            for (b, r) in self.bars.iter().zip(monitors) {
+                tool(b.window());
+                native::position(
+                    id(b.window()),
+                    Rect {
+                        x: r.x,
+                        y: if c.bar.position == "top" {
+                            r.y
+                        } else {
+                            r.y + r.h - c.bar.height
+                        },
+                        w: r.w,
+                        h: c.bar.height,
+                    },
+                    Some(HWND_TOPMOST),
+                );
+            }
+            self.pending = false;
+        }
+        if let Some(r) = self.launcher_pending
+            && id(self.launcher.window()) != 0
+        {
+            let w = c.launcher.width.min(r.w);
+            let h = (c.launcher.max_results as i32 * 38 + 65).min(r.h);
+            tool(self.launcher.window());
+            native::position(
+                id(self.launcher.window()),
+                Rect {
+                    x: r.x + (r.w - w) / 2,
+                    y: r.y + (r.h - h) / 2,
+                    w,
+                    h,
+                },
+                Some(HWND_TOPMOST),
+            );
+            native::focus(id(self.launcher.window()));
+            self.launcher.invoke_focus_search();
+            self.launcher_pending = None;
+        }
+        true
+    }
     pub fn search(&mut self, q: &str, max: usize) {
         let mut matches: Vec<_> = self
             .apps
@@ -205,6 +265,7 @@ impl Shell {
         self.launcher.set_selected(0);
         self.search("", c.launcher.max_results);
         self.launcher.show().map_err(|e| e.to_string())?;
+        self.launcher_pending = Some(r);
         tool(self.launcher.window());
         let w = c.launcher.width.min(r.w);
         let h = (c.launcher.max_results as i32 * 38 + 65).min(r.h);

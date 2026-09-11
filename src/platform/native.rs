@@ -130,6 +130,9 @@ pub fn show(id: isize, visible: bool) {
     }
 }
 pub fn focus(id: isize) {
+    if id == 0 {
+        return;
+    }
     unsafe {
         let foreground = GetWindowThreadProcessId(GetForegroundWindow(), None);
         let current = GetCurrentThreadId();
@@ -152,6 +155,9 @@ pub fn close(id: isize) {
     }
 }
 pub fn position(id: isize, r: Rect, layer: Option<HWND>) {
+    if id == 0 {
+        return;
+    }
     unsafe {
         if let Err(e) = SetWindowPos(
             hwnd(id),
