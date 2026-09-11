@@ -28,16 +28,13 @@ use windows::{
 };
 const MAX_REPLY: usize = 65535;
 const ACK: u8 = 6;
-pub fn pipe_name() -> String {
-    format!(
-        r"\\.\pipe\winarchy-{}",
-        std::env::var("USERNAME").unwrap_or_default()
-    )
+pub fn pipe_name() -> Result<String, String> {
+    Ok(format!(r"\\.\pipe\{}", super::identity::endpoint()?))
 }
 pub fn client(command: &str) -> Result<Reply, String> {
     // No detached blocking worker: each pending operation has a cancellation deadline.
     let deadline = Instant::now() + Duration::from_secs(12);
-    let name = pipe_name();
+    let name = pipe_name()?;
     let wide_name = wide(&name);
     unsafe {
         let _ = WaitNamedPipeW(PCWSTR(wide_name.as_ptr()), 3000);
@@ -48,6 +45,10 @@ pub fn client(command: &str) -> Result<Reply, String> {
         .custom_flags(FILE_FLAG_OVERLAPPED.0 | SECURITY_SQOS_PRESENT.0 | SECURITY_IDENTIFICATION.0)
         .open(name)
         .map_err(|e| format!("Winarchy unavailable: {e}"))?;
+    let mut pid = 0;
+    unsafe { GetNamedPipeServerProcessId(HANDLE(file.as_raw_handle()), &mut pid) }
+        .map_err(|e| e.to_string())?;
+    super::identity::verify_server(pid)?;
     let mut io = PipeIo {
         handle: HANDLE(file.as_raw_handle()),
         deadline,
@@ -79,7 +80,7 @@ pub fn client(command: &str) -> Result<Reply, String> {
 }
 fn create_pipe() -> Result<std::fs::File, String> {
     unsafe {
-        let name = wide(&pipe_name());
+        let name = wide(&pipe_name()?);
         let sddl = wide("D:P(A;;GA;;;OW)");
         let mut descriptor = PSECURITY_DESCRIPTOR::default();
         ConvertStringSecurityDescriptorToSecurityDescriptorW(

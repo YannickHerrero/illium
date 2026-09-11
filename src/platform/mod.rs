@@ -1,4 +1,5 @@
 mod dpi;
+mod identity;
 mod input;
 mod instance;
 pub mod ipc;

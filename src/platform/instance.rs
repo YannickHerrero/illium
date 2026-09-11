@@ -8,10 +8,7 @@ pub struct Instance(HANDLE);
 impl Instance {
     pub fn acquire() -> Result<Self, String> {
         unsafe {
-            let name = wide(&format!(
-                "Local\\Winarchy-{}",
-                std::env::var("USERNAME").unwrap_or_default()
-            ));
+            let name = wide(&format!("Local\\{}", super::identity::endpoint()?));
             let h = CreateMutexW(None, false, PCWSTR(name.as_ptr())).map_err(|e| e.to_string())?;
             if GetLastError() == ERROR_ALREADY_EXISTS {
                 let _ = CloseHandle(h);
