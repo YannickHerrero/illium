@@ -26,6 +26,9 @@ pub fn rect(id: isize) -> Rect {
         }
     }
 }
+pub fn visible(id: isize) -> bool {
+    unsafe { IsWindowVisible(hwnd(id)).as_bool() }
+}
 pub fn minimized(id: isize) -> bool {
     unsafe { IsIconic(hwnd(id)).as_bool() }
 }

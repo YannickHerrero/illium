@@ -43,6 +43,13 @@ struct Manager {
 impl Manager {
     fn prune(&mut self) -> bool {
         let previous = self.model.clients.len();
+        // A client that is invisible without Winarchy having hidden it has left
+        // the desktop on its own; keeping it would make it a dead focus target.
+        for c in &self.model.clients {
+            if !c.hidden && !native::minimized(c.id) && !native::visible(c.id) {
+                session::untag(c.id);
+            }
+        }
         self.model
             .clients
             .retain(|c| session::owns(c.id, c.generation));
@@ -61,8 +68,9 @@ impl Manager {
         if self.prune() {
             self.layout();
         }
-        if let Some(c) = self.model.clients.iter().find(|c| c.id == id) {
+        if let Some(c) = self.model.clients.iter_mut().find(|c| c.id == id) {
             if c.workspace != self.model.active {
+                c.hidden = true;
                 native::show(id, false);
             }
             return false;
@@ -97,6 +105,7 @@ impl Manager {
             workspace,
             floating,
             fullscreen: false,
+            hidden: false,
             restore: native::rect(id),
         });
         tracing::info!(id, workspace, "window added");
@@ -122,12 +131,12 @@ impl Manager {
     }
     fn layout(&mut self) {
         self.prune();
-        for c in &self.model.clients {
+        for c in &mut self.model.clients {
             let visible = c.workspace == self.model.active;
-            let currently = unsafe { IsWindowVisible(native::hwnd(c.id)).as_bool() };
-            if visible != currently {
+            if visible != native::visible(c.id) {
                 native::show(c.id, visible);
             }
+            c.hidden = !visible;
         }
         let area = self.area();
         let ids: Vec<_> = self
@@ -366,15 +375,7 @@ impl Manager {
                     }
                 }
                 EVENT_OBJECT_HIDE => {
-                    if self
-                        .model
-                        .clients
-                        .iter()
-                        .any(|c| c.id == id && c.workspace == self.model.active)
-                        && !unsafe { IsWindowVisible(native::hwnd(id)).as_bool() }
-                    {
-                        self.model.clients.retain(|c| c.id != id);
-                        session::untag(id);
+                    if self.model.clients.iter().any(|c| c.id == id) && self.prune() {
                         self.layout();
                     }
                 }

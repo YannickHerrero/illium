@@ -97,6 +97,7 @@ fn direction_reorder_changes_geometry() {
             workspace: 1,
             floating: false,
             fullscreen: false,
+            hidden: false,
             restore: Rect::default(),
         });
     }
@@ -143,6 +144,7 @@ fn workspace_move_preserves_uniqueness() {
         workspace: 1,
         floating: true,
         fullscreen: false,
+        hidden: false,
         restore: Rect::default(),
     });
     for n in 1..=9 {
@@ -162,6 +164,7 @@ fn occupied_wraps() {
         workspace: 2,
         floating: false,
         fullscreen: false,
+        hidden: false,
         restore: Rect::default(),
     });
     m.switch(9);

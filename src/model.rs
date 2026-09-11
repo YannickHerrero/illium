@@ -6,6 +6,8 @@ pub struct Client {
     pub workspace: u8,
     pub floating: bool,
     pub fullscreen: bool,
+    /// Hidden by Winarchy because its workspace is inactive.
+    pub hidden: bool,
     pub restore: Rect,
 }
 #[derive(Default)]
@@ -78,6 +80,7 @@ mod tests {
                 workspace: 1,
                 floating: false,
                 fullscreen: false,
+                hidden: false,
                 restore: Rect::default(),
             });
         }
