@@ -185,9 +185,7 @@ impl Manager {
                     .map(|c| c.id)
             });
         self.model.focused = id;
-        if let Some(id) = id {
-            native::focus(id);
-        }
+        native::focus(id.unwrap_or_else(native::sink));
     }
     fn reload(&mut self) -> Result<(), String> {
         let config = Config::load(&self.config.home)?;
@@ -372,6 +370,9 @@ impl Manager {
                         // that has reused the same numeric HWND.
                         self.prune();
                         self.layout();
+                        if self.model.focused.is_none() {
+                            self.focus_visible();
+                        }
                     }
                 }
                 EVENT_OBJECT_HIDE => {

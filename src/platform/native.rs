@@ -135,6 +135,49 @@ pub fn show(id: isize, visible: bool) {
         let _ = ShowWindow(hwnd(id), if visible { SW_SHOWNA } else { SW_HIDE });
     }
 }
+/// Zero-size activatable window that takes the foreground when no client can,
+/// so keystrokes never land in a window Winarchy just hid. Without Explorer
+/// nothing else picks up activation from a hidden foreground window.
+pub fn sink() -> isize {
+    unsafe extern "system" fn procedure(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+        unsafe { DefWindowProcW(h, m, w, l) }
+    }
+    thread_local! {
+        static SINK: std::cell::Cell<isize> = const { std::cell::Cell::new(0) };
+    }
+    SINK.with(|sink| {
+        if sink.get() == 0 {
+            unsafe {
+                let class = wide("WinarchyFocusSink");
+                let instance = windows::Win32::System::LibraryLoader::GetModuleHandleW(None)
+                    .unwrap_or_default();
+                RegisterClassW(&WNDCLASSW {
+                    lpfnWndProc: Some(procedure),
+                    hInstance: instance.into(),
+                    lpszClassName: PCWSTR(class.as_ptr()),
+                    ..Default::default()
+                });
+                if let Ok(h) = CreateWindowExW(
+                    WS_EX_TOOLWINDOW,
+                    PCWSTR(class.as_ptr()),
+                    PCWSTR(class.as_ptr()),
+                    WS_POPUP | WS_VISIBLE,
+                    0,
+                    0,
+                    0,
+                    0,
+                    None,
+                    None,
+                    Some(instance.into()),
+                    None,
+                ) {
+                    sink.set(h.0 as isize);
+                }
+            }
+        }
+        sink.get()
+    })
+}
 pub fn focus(id: isize) {
     if id == 0 {
         return;
