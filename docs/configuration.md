@@ -17,8 +17,8 @@ theme = "catppuccin-mocha"
 ```toml
 workspaces = 9
 layout = "fibonacci"
-gap = 6
-outer_gap = 6
+gap = 16
+outer_gap = 16
 focus_follows_mouse = true
 square_corners = true
 ```

@@ -353,7 +353,7 @@ fn ipc_desktop_smoke() {
     let home = winarchy::config::Config::home();
     let wm = home.join("wm.toml");
     if let Ok(old) = std::fs::read_to_string(&wm) {
-        std::fs::write(&wm, old.replace("gap = 6", "gap = 10")).unwrap();
+        std::fs::write(&wm, old.replace("gap = 16", "gap = 10")).unwrap();
         std::thread::sleep(Duration::from_secs(1));
         assert_eq!(status()["gap"], 10);
         std::fs::write(&wm, "not valid TOML").unwrap();

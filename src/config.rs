@@ -263,7 +263,7 @@ mod tests {
         assert!(Config::load(&p).is_err());
         Config::install(&p).unwrap();
         assert!(Config::load(&p).is_err());
-        assert_eq!(c.wm.gap, 6);
+        assert_eq!(c.wm.gap, 16);
         std::fs::remove_dir_all(p).unwrap();
     }
     #[test]
