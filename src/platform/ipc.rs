@@ -6,7 +6,12 @@ use std::{
     sync::mpsc::Sender,
 };
 use windows::{
-    Win32::{Foundation::*, Storage::FileSystem::*, System::Pipes::*},
+    Win32::{
+        Foundation::*,
+        Security::{Authorization::*, *},
+        Storage::FileSystem::*,
+        System::Pipes::*,
+    },
     core::PCWSTR,
 };
 pub fn pipe_name() -> String {
@@ -17,6 +22,10 @@ pub fn pipe_name() -> String {
 }
 pub fn client(command: &str) -> Result<Reply, String> {
     let name = pipe_name();
+    let wide_name = wide(&name);
+    unsafe {
+        let _ = WaitNamedPipeW(PCWSTR(wide_name.as_ptr()), 3000);
+    }
     let mut file = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -38,6 +47,23 @@ pub fn start(tx: Sender<Event>) -> Result<(), String> {
     let (ready, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || unsafe {
         let name = wide(&pipe_name());
+        // Owner-only access. Never expose command execution to other local users.
+        let sddl = wide("D:P(A;;GA;;;OW)");
+        let mut descriptor = PSECURITY_DESCRIPTOR::default();
+        if let Err(e) = ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            PCWSTR(sddl.as_ptr()),
+            SDDL_REVISION_1,
+            &mut descriptor,
+            None,
+        ) {
+            let _ = ready.send(Err(e.to_string()));
+            return;
+        }
+        let security = SECURITY_ATTRIBUTES {
+            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: descriptor.0,
+            bInheritHandle: false.into(),
+        };
         let mut first = true;
         loop {
             let h = CreateNamedPipeW(
@@ -53,7 +79,7 @@ pub fn start(tx: Sender<Event>) -> Result<(), String> {
                 65536,
                 65536,
                 1000,
-                None,
+                Some(&security),
             );
             if h == INVALID_HANDLE_VALUE {
                 let e = windows::core::Error::from_win32().to_string();
@@ -103,6 +129,7 @@ pub fn start(tx: Sender<Event>) -> Result<(), String> {
                 let _ = CloseHandle(h);
             }
         }
+        let _ = LocalFree(Some(HLOCAL(descriptor.0)));
     });
     rx.recv().map_err(|e| e.to_string())?
 }
