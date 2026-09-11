@@ -7,5 +7,5 @@ if not defined VS (
 )
 call "%VS%\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
 if errorlevel 1 exit /b 1
-cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test && cargo build --release
+cargo fmt --all --check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked && cargo build --workspace --release --locked
 exit /b %errorlevel%
