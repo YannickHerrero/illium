@@ -1,6 +1,6 @@
 # Installation
 
-**Current candidate is blocked by an unresolved Defender quarantine.** Read [security validation](security-validation.md) before attempting to install it. These are build/run instructions, not a recommendation to bypass endpoint protection.
+**Build with the MSVC target.** The MinGW-built candidates were quarantined by Defender; the MSVC build with embedded resources was not, on the development host. Read [security validation](security-validation.md) and [the controller investigation](controller-investigation.md) before installing. These are build/run instructions, not a recommendation to bypass endpoint protection.
 
 ## Windows build
 
@@ -19,16 +19,29 @@ Install WezTerm separately, for example `winget install wez.wezterm`. Restart th
 
 ## Developing from WSL
 
-The application is a Windows binary, **not** a Linux/Wayland window manager. Two build paths:
+The application is a Windows binary, **not** a Linux/Wayland window manager. Three build paths:
 
 1. Copy the repository to a Windows filesystem directory and run the Windows Rust toolchain from a Developer PowerShell.
-2. Cross-compile using MinGW from WSL:
+2. Cross-compile for the MSVC target from WSL with [cargo-xwin](https://github.com/rust-cross/cargo-xwin). It downloads the Microsoft CRT and Windows SDK headers/libraries itself, so no Visual Studio or administrator rights are needed on the Windows side:
+
+```sh
+cargo install cargo-xwin --locked
+rustup target add x86_64-pc-windows-msvc
+cargo xwin build --workspace --release --target x86_64-pc-windows-msvc --locked
+# Copy both .exe files from target/x86_64-pc-windows-msvc/release
+# to %LOCALAPPDATA%\Programs\Winarchy.
+```
+
+`clang-cl`, `lld-link` and `llvm-rc` must be on PATH: `llvm-rc` compiles the embedded version information and manifest (`build.rs`, `winarchy.manifest`). Without root, download the Debian `clang-19`, `lld-19` and `llvm-19` packages with `apt-get download`, extract them with `dpkg -x` into a user prefix, and add its `bin` directory to PATH. Any `cargo clippy --target x86_64-pc-windows-msvc` from WSL needs the same PATH.
+
+The resulting executables depend on `VCRUNTIME140.dll` and the Universal CRT, which Windows 11 and the Visual C++ Redistributable provide.
+
+3. Cross-compile using MinGW from WSL (`x86_64-pc-windows-gnu`). This still builds, but the resulting binaries were the ones Defender classified as malicious; prefer the MSVC target:
 
 ```sh
 sudo apt install gcc-mingw-w64-x86-64
 rustup target add x86_64-pc-windows-gnu
 cargo build --release --target x86_64-pc-windows-gnu
-# Copy both .exe files from target/x86_64-pc-windows-gnu/release to C:\Tools\Winarchy.
 ```
 
 For a Windows-path configuration override from WSL:

@@ -85,3 +85,18 @@ Visual Studio is installed, but `vswhere` finds no `Microsoft.VisualStudio.Compo
 The test daemon was never launched during this follow-up; Explorer remains running. The user-local installation is incomplete because the controller was quarantined. Defender remains in normal mode with antivirus and realtime protection enabled.
 
 Source/dependency cleanup and a passing scan cannot guarantee runtime acceptance. The exact cause of the classification remains unknown. Native MSVC validation in an appropriately equipped environment and an independent security review remain legitimate avenues, not promises that a different build will be accepted. Do not retry the quarantined executable through exclusions, renaming, or a different launcher.
+
+## MSVC build with embedded resources
+
+All binaries above were MinGW cross-builds (`x86_64-pc-windows-gnu`): they imported `msvcrt.dll`, carried no `.rsrc` section (no version information, no manifest) and were unsigned with zero prevalence. No MSVC build had ever been produced: the repository has no remote, so the Windows CI job never ran, and the Windows host has the `stable-x86_64-pc-windows-msvc` toolchain but neither the MSVC compiler nor the Windows SDK, and no administrator rights to install them.
+
+The build now targets `x86_64-pc-windows-msvc` from WSL through cargo-xwin, with clang-cl/lld-link/llvm-rc extracted from Debian packages into a user prefix. `build.rs` and `crates/winarchyctl/build.rs` embed VERSIONINFO and the `asInvoker` manifest from `winarchy.manifest` through `winresource`. Results on 2026-09-11, from the working tree after `804f14e`:
+
+```text
+f85882b84f5a99c2fd4efec90eb907b6d38d7cffeacd5127809dedd415c71a12  winarchy.exe   (5,100,544 bytes)
+4fc57c4daa665b1839c119b84d3e7aede5199ad1728e530d535016cbec77ea7b  winarchyctl.exe  (262,144 bytes)
+```
+
+Both have a `.rsrc` section. The controller imports only kernel32, ntdll, advapi32, oleaut32, the synch API set, `VCRUNTIME140.dll` and UCRT API sets; `ws2_32`, `userenv` and `msvcrt` are gone. They were installed in `%LOCALAPPDATA%\Programs\Winarchy`, an on-demand Defender scan of that directory found no threats, `winarchyctl status` ran (reporting the daemon unavailable, as expected), then the daemon was started from PowerShell and `winarchyctl status` returned the managed-window state. No Defender detection, quarantine or block event was recorded in the interval. Realtime protection stayed enabled and no exclusion was added.
+
+This is a single host with one signature version and does not establish a false positive or predict acceptance elsewhere. It does show that the classification was tied to the MinGW build artifacts rather than to an observed runtime behavior, since the same source now runs. Submission of the earlier hashes to Microsoft for review remains a separate, user-approved step.
