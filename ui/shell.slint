@@ -6,6 +6,13 @@ export component Background inherits Window {
     height: surface-height;
     in property <color> bg;
     background: bg;
+    in property <image> wallpaper;
+    Image {
+        width: parent.width;
+        height: parent.height;
+        source: root.wallpaper;
+        image-fit: cover;
+    }
 }
 export struct StatusItem { kind: string, value: string, icon: image, has-icon: bool }
 component StatusModule inherits Rectangle {

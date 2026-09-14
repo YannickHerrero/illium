@@ -33,6 +33,8 @@ cargo test --test desktop -- --ignored --exact crash_restores_hidden_windows --n
 cargo test --test desktop -- --ignored --exact replacement_crash_restores_explorer --nocapture
 ```
 
+`wallpapers_follow_selection_and_directory_changes` temporarily installs a tiny fixture theme and checks image discovery, cycling, solid backgrounds, remembered choices, and corrupt/deleted image fallback through IPC. It restores the original theme and wallpaper-selection files. Run it only with an upgraded daemon and matching `WINARCHY_CONFIG_HOME`.
+
 Do not run the ignored tests concurrently: they share the current user's daemon and desktop. From WSL, compile with `cargo xwin test --target x86_64-pc-windows-msvc --no-run`, copy the reported executables to Windows and run them there.
 
 `ipc_desktop_smoke` creates disposable native windows and checks discovery, directional moves, floating and fullscreen geometry, workspace membership and visibility, launcher toggling, theme changes and reload behaviour through IPC. `crash_restores_hidden_windows` and `replacement_crash_restores_explorer` kill a daemon and check that the watchdog restores hidden windows and Explorer. `desktop_smoke` asserts real foreground changes and application launches and needs an unlocked, interactive desktop.

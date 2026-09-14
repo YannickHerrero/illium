@@ -33,6 +33,9 @@ pub enum Command {
     App(String),
     Reload,
     Theme(String),
+    WallpaperNext,
+    /// None selects the solid theme background.
+    Wallpaper(Option<String>),
     Explorer(bool),
     Quit,
     Status,
@@ -40,6 +43,22 @@ pub enum Command {
 impl FromStr for Command {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, String> {
+        // Preserve spaces in image names, including CLI arguments joined below.
+        if let Some(name) = s.trim().strip_prefix("wallpaper set ") {
+            let name = name.trim();
+            let name = name
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+                .unwrap_or(name);
+            if name.is_empty()
+                || name.contains(['/', '\\', ':', '"'])
+                || name.chars().any(char::is_control)
+                || matches!(name, "." | "..")
+            {
+                return Err("wallpaper must be a plain file name".into());
+            }
+            return Ok(Self::Wallpaper(Some(name.into())));
+        }
         let parts: Vec<_> = s.split_whitespace().collect();
         let ws = |s: &str| {
             s.parse::<u8>()
@@ -73,6 +92,8 @@ impl FromStr for Command {
                 Self::App((*name).into())
             }
             ["config", "reload"] => Self::Reload,
+            ["wallpaper", "next"] => Self::WallpaperNext,
+            ["wallpaper", "clear"] => Self::Wallpaper(None),
             ["theme", "set", name] if !name.contains(['/', '\\', '.']) => {
                 Self::Theme((*name).into())
             }
@@ -114,6 +135,29 @@ mod tests {
             "app Shot",
         ] {
             assert!(s.parse::<Command>().is_err(), "{s}");
+        }
+    }
+    #[test]
+    fn wallpapers() {
+        assert_eq!("wallpaper next".parse(), Ok(Command::WallpaperNext));
+        assert_eq!("wallpaper clear".parse(), Ok(Command::Wallpaper(None)));
+        for command in [
+            "wallpaper set A painting.jpg",
+            "wallpaper set \"A painting.jpg\"",
+        ] {
+            assert_eq!(
+                command.parse(),
+                Ok(Command::Wallpaper(Some("A painting.jpg".into())))
+            );
+        }
+        for command in [
+            "wallpaper set",
+            "wallpaper set ../x.jpg",
+            "wallpaper set C:\\x.jpg",
+            "wallpaper set \"\"",
+            "wallpaper next extra",
+        ] {
+            assert!(command.parse::<Command>().is_err(), "{command}");
         }
     }
     #[test]

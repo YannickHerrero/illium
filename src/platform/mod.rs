@@ -33,6 +33,7 @@ pub enum Event {
     Launch(i32),
     Dismiss,
     Reload,
+    Wallpapers,
     Display,
     Mouse(isize),
     /// Bar module clicked: kind, horizontal center in logical bar pixels, monitor index.
@@ -345,6 +346,7 @@ impl Manager {
             Command::Status => return Ok(serde_json::json!({
                 "workspace": self.model.active, "recent": self.model.recent,
                 "focused": self.model.focused, "theme": self.config.global.theme,
+                "wallpaper": self.shell.wallpaper,
                 "gap": self.config.wm.gap, "launcher": self.shell.visible,
                 "monitors": self.monitors, "bar_count": self.shell.bars.len(),
                 "clients": self.model.clients.iter().map(|c| serde_json::json!({"id":c.id,"workspace":c.workspace,"floating":c.floating,"fullscreen":c.fullscreen,"title":native::title(c.id),"rect":native::rect(c.id)})).collect::<Vec<_>>()
@@ -460,6 +462,8 @@ impl Manager {
             }
             Command::App(name) => native::spawn(&app_command(&name)?)?,
             Command::Reload => self.reload()?,
+            Command::WallpaperNext => self.shell.next_wallpaper()?,
+            Command::Wallpaper(name) => self.shell.set_wallpaper(name)?,
             Command::Theme(name) => {
                 let path = self.config.home.join("winarchy.toml");
                 let old = crate::files::read_config(&path)?;
@@ -656,6 +660,9 @@ impl Manager {
                     self.layout();
                 }
             }
+            Event::Wallpapers => self
+                .shell
+                .refresh_wallpaper(self.config.launcher.max_results),
             Event::Reload => {
                 if let Err(e) = self.reload() {
                     tracing::warn!(%e,"keeping previous configuration");
@@ -690,11 +697,23 @@ fn watch(home: std::path::PathBuf, tx: EventSender) {
         let Ok(h) = FindFirstChangeNotificationW(
             PCWSTR(path.as_ptr()),
             true,
-            FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_FILE_NAME,
+            FILE_NOTIFY_CHANGE_LAST_WRITE
+                | FILE_NOTIFY_CHANGE_FILE_NAME
+                | FILE_NOTIFY_CHANGE_DIR_NAME,
         ) else {
             return;
         };
+        let wallpaper_snapshot = || {
+            let images = winarchy_theme::Theme::selected(&home).and_then(|theme| {
+                winarchy_theme::pack::fingerprint(&home, &theme).map(|images| (theme, images))
+            });
+            (
+                images,
+                crate::files::read_config(&home.join("wallpapers.json")),
+            )
+        };
         let mut previous = crate::files::snapshot(&home);
+        let mut previous_wallpapers = wallpaper_snapshot();
         loop {
             if WaitForSingleObject(h, INFINITE) != WAIT_OBJECT_0 {
                 break;
@@ -704,10 +723,14 @@ fn watch(home: std::path::PathBuf, tx: EventSender) {
             }
             std::thread::sleep(std::time::Duration::from_millis(150));
             let next = crate::files::snapshot(&home);
+            let next_wallpapers = wallpaper_snapshot();
             if next != previous {
                 previous = next;
                 let _ = tx.send(Event::Reload);
+            } else if next_wallpapers != previous_wallpapers {
+                let _ = tx.send(Event::Wallpapers);
             }
+            previous_wallpapers = next_wallpapers;
         }
         let _ = FindCloseChangeNotification(h);
     });

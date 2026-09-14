@@ -1,0 +1,101 @@
+//! Opt-in IPC test. Temporarily changes the desktop theme; restores original files.
+#![cfg(windows)]
+use std::{
+    path::PathBuf,
+    time::{Duration, Instant},
+};
+use winarchy_ipc::client::client;
+const IMAGE: &[u8] = include_bytes!("fixtures/wallpaper.png");
+fn command(s: &str) {
+    let reply = client(s).expect("running Winarchy");
+    assert!(reply.ok, "{s}: {}", reply.message);
+}
+fn status() -> serde_json::Value {
+    let reply = client("status").expect("running Winarchy");
+    assert!(reply.ok);
+    serde_json::from_str(&reply.message).unwrap()
+}
+fn wait_wallpaper(name: Option<&str>) {
+    let deadline = Instant::now() + Duration::from_secs(6);
+    loop {
+        if status()["wallpaper"].as_str() == name {
+            return;
+        }
+        assert!(Instant::now() < deadline, "expected wallpaper {name:?}");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+struct Restore {
+    home: PathBuf,
+    name: String,
+    global: Vec<u8>,
+    selections: Option<Vec<u8>>,
+}
+impl Drop for Restore {
+    fn drop(&mut self) {
+        let _ = std::fs::write(self.home.join("winarchy.toml"), &self.global);
+        match &self.selections {
+            Some(bytes) => {
+                let _ = std::fs::write(self.home.join("wallpapers.json"), bytes);
+            }
+            None => {
+                let _ = std::fs::remove_file(self.home.join("wallpapers.json"));
+            }
+        }
+        let _ = client("config reload");
+        let _ = std::fs::remove_file(self.home.join("themes").join(format!("{}.toml", self.name)));
+        let _ = std::fs::remove_dir_all(self.home.join("themes").join(&self.name));
+    }
+}
+#[test]
+#[ignore = "temporarily changes themes; requires a running upgraded daemon with the same config home"]
+fn wallpapers_follow_selection_and_directory_changes() {
+    let initial = status();
+    let home = winarchy_theme::config_home();
+    let name = format!("wallpaper-smoke-{}", std::process::id());
+    let dir = home.join("themes").join(&name);
+    assert!(!dir.exists());
+    assert!(!home.join("themes").join(format!("{name}.toml")).exists());
+    let _restore = Restore {
+        global: std::fs::read(home.join("winarchy.toml")).unwrap(),
+        selections: std::fs::read(home.join("wallpapers.json")).ok(),
+        home: home.clone(),
+        name: name.clone(),
+    };
+    std::fs::create_dir_all(dir.join("wallpapers")).unwrap();
+    std::fs::write(
+        home.join("themes").join(format!("{name}.toml")),
+        include_str!("../config/themes/catppuccin-mocha.toml"),
+    )
+    .unwrap();
+    command(&format!("theme set {name}"));
+    wait_wallpaper(None);
+    let a = dir.join("wallpapers/A painting.png");
+    let b = dir.join("wallpapers/B painting.png");
+    std::fs::write(&b, IMAGE).unwrap();
+    wait_wallpaper(Some("B painting.png"));
+    std::fs::write(&a, IMAGE).unwrap();
+    wait_wallpaper(Some("A painting.png"));
+    command("wallpaper next");
+    wait_wallpaper(Some("B painting.png"));
+    command("wallpaper next");
+    wait_wallpaper(Some("A painting.png"));
+    command("wallpaper clear");
+    wait_wallpaper(None);
+    command(&format!("theme set {}", initial["theme"].as_str().unwrap()));
+    command(&format!("theme set {name}"));
+    wait_wallpaper(None);
+    command("wallpaper set \"A painting.png\"");
+    command("config reload");
+    wait_wallpaper(Some("A painting.png"));
+    assert!(!client("wallpaper set missing.png").unwrap().ok);
+    wait_wallpaper(Some("A painting.png"));
+    std::fs::write(&a, "corrupt image").unwrap();
+    wait_wallpaper(Some("B painting.png"));
+    std::fs::remove_file(&b).unwrap();
+    wait_wallpaper(None);
+    std::fs::write(&a, IMAGE).unwrap();
+    wait_wallpaper(Some("A painting.png"));
+    // Invalid assets did not force a change of palette/theme.
+    assert_eq!(status()["theme"], name);
+}

@@ -1,6 +1,7 @@
 [keybindings]
 "Alt+Space" = "launcher toggle"
 "Alt+Shift+Space" = "meta toggle"
+"Ctrl+Alt+Shift+W" = "wallpaper next"
 "Alt+Enter" = "spawn terminal"
 "Alt+F" = "window toggle-fullscreen"
 "Alt+T" = "window set-tiling"

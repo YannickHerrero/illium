@@ -67,7 +67,11 @@ mod tests {
         let keys: Keys =
             toml::from_str(include_str!("../config/defaults/keybindings.toml")).unwrap();
         let bs = parse(&keys).unwrap();
-        assert_eq!(bs.len(), 47);
+        assert_eq!(bs.len(), 48);
+        assert!(
+            bs.iter()
+                .any(|b| b.command == Command::WallpaperNext && b.key == 87 && b.modifiers == 7)
+        );
         assert!(
             bs.iter()
                 .all(|b| b.modifiers & 1 != 0 || matches!(b.command, Command::App(_)))

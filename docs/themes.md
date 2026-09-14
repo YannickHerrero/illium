@@ -24,7 +24,7 @@ yellow = "#f9e2af"
 red = "#f38ba8"
 ```
 
-`mode` is optional: `"dark"` or `"light"` switches the Windows color mode for apps and system surfaces when the theme is applied (a per-user registry preference, followed by the usual settings-change broadcast so open applications follow). Use exactly six hexadecimal RGB digits. Background is the desktop and launcher base; surface is the bar; overlay is selection/border; text is normal and occupied-workspace text; subtext is inactive text; accent marks the active workspace, the launcher selection and the focused window border; overlay frames the unfocused windows. Green/yellow/red are available semantic colors. No wallpaper or application theming is performed.
+`mode` is optional: `"dark"` or `"light"` switches the Windows color mode for apps and system surfaces when the theme is applied (a per-user registry preference, followed by the usual settings-change broadcast so open applications follow). Use exactly six hexadecimal RGB digits. Background is the desktop and launcher base; surface is the bar; overlay is selection/border; text is normal and occupied-workspace text; subtext is inactive text; accent marks the active workspace, the launcher selection and the focused window border; overlay frames the unfocused windows. Green/yellow/red are available semantic colors. Application theming is left to external integrations; wallpapers are described below.
 
 Themes may also provide `ansi` and `brights`, each an array of exactly eight `"#rrggbb"` colors in this order: black, red, green, yellow, blue, magenta, cyan, white. Both fields are optional and independent; older themes remain valid. They describe terminal colors for external consumers and do not change Winarchy's shell colors or automatically configure applications. Consumers choose their own fallback when either array is absent.
 
@@ -54,4 +54,24 @@ winarchyctl theme set my-theme
 
 The installer validates the palette and decodes the images, installs assets under `themes/my-theme/`, then publishes `themes/my-theme.toml`. Existing palettes or asset directories are never overwritten. No scripts are executed and no network access is performed. Keep external packs outside the Winarchy repository; adding a pack requires no rebuild. A theme can also be installed manually using the same layout.
 
-Limits: 64 wallpapers per theme, 32 MiB and 32 megapixels per image (maximum dimension 16384), 512 MiB of images per pack, 256 entries per wallpaper directory. Only regular files/directories are used, not symlinks or Windows reparse points. Atomic palette publication requires hard-link support on the configuration volume (NTFS on Windows). Failed installations remove their own staged files, not existing themes. Source folders are never modified.
+## Wallpapers
+
+For an installed `my-theme.toml`, place images in `themes/my-theme/wallpapers/`. No manifest entries are needed. The first readable JPEG/PNG in alphabetical order is used on first activation. The menu **Alt+Shift+Space → Wallpaper** lists the active theme's images, marks the current one, and offers **Solid background**. **Ctrl+Alt+Shift+W** cycles through the same theme's images, wrapping around and skipping unreadable files. From a solid background it starts with the first image; without images it does nothing.
+
+```powershell
+winarchyctl wallpaper next
+winarchyctl wallpaper set "A painting.jpg"
+winarchyctl wallpaper clear
+```
+
+The last explicit choice is saved per theme in `wallpapers.json`, independently of the palette and window-placement state. Switching away and back or restarting restores that choice, including an explicit solid background. If the chosen image disappears or cannot be decoded, Winarchy tries the other images and ultimately the theme's solid `background`. An explicit invalid `wallpaper set` fails without changing the current image or saved choice.
+
+Images fill Winarchy's own desktop surfaces on every monitor with centered, aspect-preserving cropping. The same image is used on all monitors. The Windows wallpaper preference is not modified, so leaving Winarchy restores the underlying desktop as before. Image additions, edits, removals and saved-selection edits are watched separately from configuration: they do not restart applets or change WezTerm's palette. Only the current image is cached in memory.
+
+Existing keybinding files are not overwritten by an upgrade. Add this entry under `[keybindings]` if needed:
+
+```toml
+"Ctrl+Alt+Shift+W" = "wallpaper next"
+```
+
+Limits: 64 wallpapers per theme, 32 MiB and 64 megapixels per image (maximum dimension 16384), 512 MiB of images per pack, 256 entries per wallpaper directory. Only regular files/directories are used, not symlinks or Windows reparse points. Atomic palette publication requires hard-link support on the configuration volume (NTFS on Windows). Failed installations remove their own staged files, not existing themes. Source folders are never modified.
