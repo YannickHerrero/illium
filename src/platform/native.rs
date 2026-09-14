@@ -554,20 +554,37 @@ pub fn packaged_apps() -> Vec<(String, String)> {
     out
 }
 pub fn shortcut(path: &str) -> Result<(), String> {
-    unsafe {
-        let path = wide(path);
-        let result = ShellExecuteW(
-            None,
-            PCWSTR::null(),
-            PCWSTR(path.as_ptr()),
-            None,
-            None,
-            SW_SHOWNORMAL,
-        );
-        if result.0 as isize <= 32 {
-            Err("shortcut launch failed".into())
-        } else {
-            Ok(())
+    // ShellExecute on shell:AppsFolder targets is refused without Explorer;
+    // the activation manager launches packaged applications directly.
+    if let Some(aumid) = path.strip_prefix("shell:AppsFolder\\") {
+        use windows::Win32::{System::Com::*, UI::Shell::*};
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            let manager: IApplicationActivationManager =
+                CoCreateInstance(&ApplicationActivationManager, None, CLSCTX_LOCAL_SERVER)
+                    .map_err(|e| e.to_string())?;
+            let id = wide(aumid);
+            manager
+                .ActivateApplication(PCWSTR(id.as_ptr()), PCWSTR::null(), AO_NONE)
+                .map(|_| ())
+                .map_err(|e| format!("application activation failed: {e}"))
+        }
+    } else {
+        unsafe {
+            let path = wide(path);
+            let result = ShellExecuteW(
+                None,
+                PCWSTR::null(),
+                PCWSTR(path.as_ptr()),
+                None,
+                None,
+                SW_SHOWNORMAL,
+            );
+            if result.0 as isize <= 32 {
+                Err("shortcut launch failed".into())
+            } else {
+                Ok(())
+            }
         }
     }
 }
