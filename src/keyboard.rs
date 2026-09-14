@@ -67,7 +67,7 @@ mod tests {
         let keys: Keys =
             toml::from_str(include_str!("../config/defaults/keybindings.toml")).unwrap();
         let bs = parse(&keys).unwrap();
-        assert_eq!(bs.len(), 45);
+        assert_eq!(bs.len(), 46);
         assert!(
             bs.iter()
                 .all(|b| b.modifiers & 1 != 0 || matches!(b.command, Command::App(_)))
