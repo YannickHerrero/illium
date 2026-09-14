@@ -9,6 +9,21 @@ use crate::{
 use slint::ComponentHandle;
 use slint_interpreter::{ComponentDefinition, ComponentInstance, Value};
 use std::time::{Duration, Instant};
+fn set_colors(instance: &ComponentInstance, theme: &crate::config::Theme) {
+    for (prop, value) in [
+        ("bg", &theme.background),
+        ("surface", &theme.surface),
+        ("overlay", &theme.overlay),
+        ("fg", &theme.text),
+        ("muted", &theme.subtext),
+        ("accent", &theme.accent),
+    ] {
+        let _ = instance.set_property(
+            prop,
+            Value::Brush(slint::Brush::SolidColor(shell::color(value))),
+        );
+    }
+}
 pub struct Entry {
     pub applet: Applet,
     pub icon: Option<slint::Image>,
@@ -64,6 +79,14 @@ impl Runtime {
                 instance: None,
                 applet,
             });
+        }
+    }
+    /// Recolor existing views without resetting providers, data, intervals or compiled definitions.
+    pub fn apply_theme(&self, c: &Config) {
+        for entry in &self.entries {
+            if let Some(instance) = &entry.instance {
+                set_colors(instance, &c.theme);
+            }
         }
     }
     pub fn is_applet(&self, name: &str) -> bool {
@@ -184,19 +207,7 @@ impl Runtime {
                 instance
             }
         };
-        for (prop, value) in [
-            ("bg", &c.theme.background),
-            ("surface", &c.theme.surface),
-            ("overlay", &c.theme.overlay),
-            ("fg", &c.theme.text),
-            ("muted", &c.theme.subtext),
-            ("accent", &c.theme.accent),
-        ] {
-            let _ = instance.set_property(
-                prop,
-                Value::Brush(slint::Brush::SolidColor(shell::color(value))),
-            );
-        }
+        set_colors(&instance, &c.theme);
         if e.data != serde_json::Value::Null {
             set_data(&instance, def, &e.data)?;
         }

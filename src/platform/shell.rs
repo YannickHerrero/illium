@@ -242,6 +242,29 @@ impl Shell {
             tx,
         })
     }
+    /// Update existing surfaces in place; application index, geometry and UI state stay intact.
+    pub fn apply_theme(&mut self, c: &Config) {
+        self.home = c.home.clone();
+        self.theme = c.global.theme.clone();
+        self.popup.set_bg(color(&c.theme.background));
+        self.popup.set_fg(color(&c.theme.text));
+        self.popup.set_muted(color(&c.theme.subtext));
+        self.popup.set_overlay(color(&c.theme.overlay));
+        for b in &self.backgrounds {
+            b.set_bg(color(&c.theme.background));
+        }
+        for b in &self.bars {
+            b.set_bg(color(&c.theme.surface));
+            b.set_fg(color(&c.theme.text));
+            b.set_accent(color(&c.theme.accent));
+            b.set_muted(color(&c.theme.subtext));
+        }
+        self.launcher.set_bg(color(&c.theme.background));
+        self.launcher.set_fg(color(&c.theme.text));
+        self.launcher.set_accent(color(&c.theme.accent));
+        self.launcher.set_overlay(color(&c.theme.overlay));
+        self.refresh_wallpaper(c.launcher.max_results);
+    }
     pub fn configure(&mut self, c: &Config, monitors: &[Rect]) -> Result<(), String> {
         self.pending = true;
         self.descriptions = c.launcher.show_descriptions;

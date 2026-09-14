@@ -40,6 +40,22 @@ pub fn read_bounded(path: &Path, max: usize) -> Result<Vec<u8>, String> {
     })();
     result.map_err(|e| format!("{}: {e}", path.display()))
 }
+/// Palette-only edits must not rebuild the shell or restart applet providers.
+pub fn same_subsystems(
+    home: &Path,
+    before: &[(PathBuf, Vec<u8>)],
+    after: &[(PathBuf, Vec<u8>)],
+) -> bool {
+    let global = home.join("winarchy.toml");
+    let themes = home.join("themes");
+    let subsystem = |entry: &&(PathBuf, Vec<u8>)| {
+        entry.0 != global && entry.0.parent() != Some(themes.as_path())
+    };
+    before
+        .iter()
+        .filter(subsystem)
+        .eq(after.iter().filter(subsystem))
+}
 pub fn snapshot(home: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, String> {
     let mut result = Vec::new();
     let mut examined = 0;
@@ -141,6 +157,25 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+    #[test]
+    fn recognizes_palette_only_edits_but_not_applet_changes() {
+        let home = Path::new("home");
+        let before = vec![
+            (home.join("applets/test/script.ps1"), vec![1]),
+            (home.join("themes/dark.toml"), vec![2]),
+            (home.join("winarchy.toml"), vec![3]),
+            (home.join("wm.toml"), vec![4]),
+        ];
+        let mut after = before.clone();
+        after[1].1 = vec![5];
+        after[2].1 = vec![6];
+        assert!(same_subsystems(home, &before, &after));
+        after[0].1 = vec![7];
+        assert!(!same_subsystems(home, &before, &after));
+        after = before.clone();
+        after[3].1 = vec![8];
+        assert!(!same_subsystems(home, &before, &after));
     }
     #[test]
     fn bounded_reads() {

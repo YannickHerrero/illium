@@ -58,6 +58,7 @@ pub fn app_command(name: &str) -> Result<String, String> {
 }
 struct Manager {
     config: Config,
+    config_files: Vec<(std::path::PathBuf, Vec<u8>)>,
     model: Model,
     monitors: Vec<Rect>,
     shell: shell::Shell,
@@ -307,8 +308,35 @@ impl Manager {
         native::focus(id.unwrap_or_else(session::sink), id.is_some());
     }
     fn reload(&mut self) -> Result<(), String> {
+        self.reload_config(true)
+    }
+    fn reload_config(&mut self, force: bool) -> Result<(), String> {
         let started = std::time::Instant::now();
+        let files = crate::files::snapshot(&self.config.home)?;
+        if !force && files == self.config_files {
+            return Ok(()); // e.g. watcher notification after an IPC theme change
+        }
         let config = Config::load(&self.config.home)?;
+        if !force && crate::files::same_subsystems(&config.home, &self.config_files, &files) {
+            if config.global.theme != self.config.global.theme || config.theme != self.config.theme
+            {
+                self.shell.apply_theme(&config);
+                self.applets.apply_theme(&config);
+                if config.theme.mode != self.config.theme.mode
+                    && let Some(mode) = &config.theme.mode
+                {
+                    native::color_mode(mode == "light");
+                }
+                self.config = config;
+                self.borders();
+                tracing::info!(
+                    elapsed_ms = started.elapsed().as_millis(),
+                    "theme updated in place"
+                );
+            }
+            self.config_files = files;
+            return Ok(());
+        }
         let bindings = input::parse(&config.keys)?;
         self.shell.configure(&config, &self.monitors)?;
         input::update(bindings);
@@ -325,6 +353,7 @@ impl Manager {
             }
         }
         self.layout();
+        self.config_files = files;
         tracing::info!(
             shell_ms,
             total_ms = started.elapsed().as_millis(),
@@ -474,7 +503,7 @@ impl Manager {
                 let path = self.config.home.join("winarchy.toml");
                 let old = crate::files::read_config(&path)?;
                 std::fs::write(&path, format!("theme = {name:?}\n")).map_err(|e| e.to_string())?;
-                if let Err(e) = self.reload() {
+                if let Err(e) = self.reload_config(false) {
                     let _ = std::fs::write(path, old);
                     return Err(e);
                 }
@@ -670,7 +699,7 @@ impl Manager {
                 .shell
                 .refresh_wallpaper(self.config.launcher.max_results),
             Event::Reload => {
-                if let Err(e) = self.reload() {
+                if let Err(e) = self.reload_config(false) {
                     tracing::warn!(%e,"keeping previous configuration");
                 }
             }
@@ -733,7 +762,10 @@ fn watch(home: std::path::PathBuf, tx: EventSender) {
             if next != previous {
                 previous = next;
                 let _ = tx.send(Event::Reload);
-            } else if next_wallpapers != previous_wallpapers {
+            }
+            // Config and image edits can be coalesced into one notification.
+            // An already-applied IPC theme change must not hide the image edit.
+            if next_wallpapers != previous_wallpapers {
                 let _ = tx.send(Event::Wallpapers);
             }
             previous_wallpapers = next_wallpapers;
@@ -754,6 +786,7 @@ pub fn run(replace: bool) -> Result<(), String> {
     let home = Config::home();
     Config::install(&home)?;
     let state_path = home.join("state.json");
+    let config_files = crate::files::snapshot(&home)?;
     let config = Config::load(&home)?;
     let bindings = input::parse(&config.keys)?;
     let (tx, rx) = crate::queue::channel(1024);
@@ -761,6 +794,7 @@ pub fn run(replace: bool) -> Result<(), String> {
     ipc::start(tx.clone())?;
     let manager = Manager {
         config,
+        config_files,
         model: Model::new(),
         monitors: native::monitors(),
         shell: shell::Shell::new(tx.clone())?,
