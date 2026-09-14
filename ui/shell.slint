@@ -8,23 +8,29 @@ export component Background inherits Window {
     background: bg;
 }
 export struct StatusItem { kind: string, value: string }
-component StatusModule inherits HorizontalLayout {
+component StatusModule inherits Rectangle {
     in property <StatusItem> item;
     in property <color> fg;
     in property <color> muted;
+    /// Horizontal center of the module in window coordinates, for anchoring a popup.
+    callback clicked(length);
     property <bool> has-icon: item.kind == "battery" || item.kind == "cpu" || item.kind == "memory";
-    spacing: 6px;
-    Image {
-        visible: has-icon;
-        width: has-icon ? 14px : 0px;
-        height: 14px;
-        y: (parent.height - self.height) / 2;
-        source: item.kind == "battery" ? @image-url("icons/battery.svg")
-            : item.kind == "cpu" ? @image-url("icons/cpu.svg")
-            : @image-url("icons/memory.svg");
-        colorize: muted;
+    width: layout.preferred-width;
+    layout := HorizontalLayout {
+        spacing: 6px;
+        Image {
+            visible: has-icon;
+            width: has-icon ? 14px : 0px;
+            height: 14px;
+            y: (parent.height - self.height) / 2;
+            source: item.kind == "battery" ? @image-url("icons/battery.svg")
+                : item.kind == "cpu" ? @image-url("icons/cpu.svg")
+                : @image-url("icons/memory.svg");
+            colorize: muted;
+        }
+        Text { text: item.value; color: fg; vertical-alignment: center; }
     }
-    Text { text: item.value; color: fg; vertical-alignment: center; }
+    TouchArea { clicked => { root.clicked(root.x + root.width / 2); } }
 }
 export component Bar inherits Window {
     no-frame: true;
@@ -40,18 +46,20 @@ export component Bar inherits Window {
     /// Workspace numbers to show: the occupied ones and the active one.
     in property <[int]> workspaces;
     in property <[StatusItem]> left-items;
-    in property <string> center-text;
+    in property <[StatusItem]> center-items;
     in property <[StatusItem]> right-items;
     callback workspace(int);
+    /// A module was clicked: its kind and horizontal center in the bar.
+    callback module(string, length);
     background: bg;
-    // The center is positioned against the whole bar, never against the
-    // width of the side groups, so the clock stays centered on the screen.
-    Text {
-        x: 0; width: root.width; height: root.height;
-        text: root.center-text; color: root.fg;
-        horizontal-alignment: center; vertical-alignment: center;
+    // Each group is anchored on its own, so the center group is centered on
+    // the screen whatever the side groups measure.
+    center-group := HorizontalLayout {
+        x: (root.width - self.width) / 2; height: root.height; width: self.preferred-width;
+        padding-top: 4px; padding-bottom: 4px; spacing: 16px;
+        for item in root.center-items: StatusModule { item: item; fg: root.fg; muted: root.muted; clicked(x) => { root.module(item.kind, center-group.x + x); } }
     }
-    HorizontalLayout {
+    left-group := HorizontalLayout {
         x: 0; height: root.height; width: self.preferred-width;
         padding-left: 4px; padding-top: 4px; padding-bottom: 4px; spacing: 8px;
         for n in root.workspaces: Rectangle {
@@ -60,12 +68,35 @@ export component Bar inherits Window {
             Text { text: "\{n}"; color: root.active == n ? root.bg : root.fg; horizontal-alignment: center; vertical-alignment: center; }
             TouchArea { clicked => { root.workspace(n); } }
         }
-        for item in root.left-items: StatusModule { item: item; fg: root.fg; muted: root.muted; }
+        for item in root.left-items: StatusModule { item: item; fg: root.fg; muted: root.muted; clicked(x) => { root.module(item.kind, left-group.x + x); } }
     }
-    HorizontalLayout {
+    right-group := HorizontalLayout {
         x: root.width - self.width; height: root.height; width: self.preferred-width;
         padding-right: 12px; padding-top: 4px; padding-bottom: 4px; spacing: 16px;
-        for item in root.right-items: StatusModule { item: item; fg: root.fg; muted: root.muted; }
+        for item in root.right-items: StatusModule { item: item; fg: root.fg; muted: root.muted; clicked(x) => { root.module(item.kind, right-group.x + x); } }
+    }
+}
+export component Popup inherits Window {
+    no-frame: true;
+    in property <length> surface-width;
+    in property <length> surface-height;
+    width: surface-width;
+    height: surface-height;
+    in property <color> bg;
+    in property <color> fg;
+    in property <color> muted;
+    in property <color> overlay;
+    in property <string> heading;
+    in property <[string]> lines;
+    background: bg;
+    Rectangle {
+        border-width: 1px;
+        border-color: root.overlay;
+        VerticalLayout {
+            padding: 14px; spacing: 6px;
+            Text { text: root.heading; color: root.muted; font-size: 11px; letter-spacing: 1px; }
+            for line in root.lines: Text { text: line; color: root.fg; }
+        }
     }
 }
 export component Launcher inherits Window {

@@ -96,6 +96,14 @@ unsafe extern "system" fn mouse(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                 let _ = tx.send(Event::Mouse(h));
             }
         }
+        if code >= 0
+            && w.0 as u32 == WM_LBUTTONDOWN
+            && let Some((tx, _)) = STATE.get()
+        {
+            let event = *(l.0 as *const MSLLHOOKSTRUCT);
+            let h = GetAncestor(WindowFromPoint(event.pt), GA_ROOT).0 as isize;
+            let _ = tx.send(Event::Click(h));
+        }
         CallNextHookEx(None, code, w, l)
     }
 }

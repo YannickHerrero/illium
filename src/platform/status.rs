@@ -98,3 +98,83 @@ pub fn items(c: &Config, title: &str, modules: &[String]) -> Vec<(String, String
     }
     out
 }
+/// Popup content for a built-in module, when it has more to say than its label.
+pub fn details(c: &Config, kind: &str) -> Option<(String, Vec<String>)> {
+    match kind {
+        "clock" => unsafe {
+            let t = GetLocalTime();
+            let moment = crate::clock::Moment {
+                weekday: t.wDayOfWeek as u8,
+                day: t.wDay as u8,
+                month: t.wMonth as u8,
+                hour: t.wHour as u8,
+                minute: t.wMinute as u8,
+                second: t.wSecond as u8,
+            };
+            Some((
+                "DATE".into(),
+                vec![
+                    crate::clock::format("%A %d %B", moment) + &format!(" {}", t.wYear),
+                    crate::clock::format("%H:%M:%S", moment),
+                ],
+            ))
+        },
+        "battery" => unsafe {
+            let mut p = SYSTEM_POWER_STATUS::default();
+            if GetSystemPowerStatus(&mut p).is_err() || p.BatteryLifePercent > 100 {
+                return None;
+            }
+            let mut lines = vec![format!("Level: {}%", p.BatteryLifePercent)];
+            lines.push(match p.ACLineStatus {
+                1 => "Power: plugged in".into(),
+                0 => "Power: on battery".into(),
+                _ => "Power: unknown".into(),
+            });
+            if p.BatteryLifeTime != u32::MAX {
+                lines.push(format!(
+                    "Remaining: {}h{:02}",
+                    p.BatteryLifeTime / 3600,
+                    p.BatteryLifeTime % 3600 / 60
+                ));
+            }
+            Some(("BATTERY".into(), lines))
+        },
+        "cpu" => {
+            let load = cpu().unwrap_or_else(|| "measuring".into());
+            Some((
+                "CPU".into(),
+                vec![
+                    format!("Load: {load}"),
+                    format!(
+                        "Logical processors: {}",
+                        std::thread::available_parallelism().map_or(0, |n| n.get())
+                    ),
+                ],
+            ))
+        }
+        "memory" => {
+            let mut status = MEMORYSTATUSEX {
+                dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
+                ..Default::default()
+            };
+            unsafe { GlobalMemoryStatusEx(&mut status) }.ok()?;
+            let gb = |b: u64| b as f64 / (1024.0 * 1024.0 * 1024.0);
+            Some((
+                "MEMORY".into(),
+                vec![
+                    format!("Available: {:.1} GB", gb(status.ullAvailPhys)),
+                    format!(
+                        "In use: {:.1} GB ({}%)",
+                        gb(status.ullTotalPhys - status.ullAvailPhys),
+                        status.dwMemoryLoad
+                    ),
+                    format!("Total: {:.1} GB", gb(status.ullTotalPhys)),
+                ],
+            ))
+        }
+        _ => {
+            let _ = c;
+            None
+        }
+    }
+}

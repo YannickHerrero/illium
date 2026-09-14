@@ -33,6 +33,10 @@ pub enum Event {
     Reload,
     Display,
     Mouse(isize),
+    /// Bar module clicked: kind, horizontal center in logical bar pixels, monitor index.
+    Module(String, i32, usize),
+    /// Left button pressed on the root window `isize`, anywhere on the desktop.
+    Click(isize),
 }
 struct Manager {
     config: Config,
@@ -504,6 +508,24 @@ impl Manager {
             Event::Dismiss => {
                 self.shell.dismiss();
                 self.focus_visible();
+            }
+            Event::Module(kind, x, monitor) => {
+                if self.shell.popup_open.as_deref() == Some(kind.as_str()) {
+                    self.shell.close_popup();
+                } else if let Some((title, lines)) = status::details(&self.config, &kind) {
+                    let r = self
+                        .monitors
+                        .get(monitor)
+                        .copied()
+                        .unwrap_or_else(|| self.area());
+                    self.shell
+                        .open_popup(&self.config, r, kind, x, title, lines);
+                }
+            }
+            Event::Click(id) => {
+                if self.shell.popup_open.is_some() && !self.shell.owns(id) {
+                    self.shell.close_popup();
+                }
             }
             Event::Mouse(id) => {
                 if self.config.wm.focus_follows_mouse

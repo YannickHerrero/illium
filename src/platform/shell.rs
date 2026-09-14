@@ -98,6 +98,10 @@ pub struct Shell {
     pub backgrounds: Vec<Background>,
     pub bars: Vec<Bar>,
     pub launcher: Launcher,
+    popup: Popup,
+    /// Kind of the module whose popup is open.
+    pub popup_open: Option<String>,
+    popup_pending: Option<Rect>,
     pub apps: Vec<App>,
     pub results: Vec<App>,
     pub visible: bool,
@@ -148,10 +152,14 @@ impl Shell {
         launcher.on_dismiss(move || {
             let _ = t.send(Event::Dismiss);
         });
+        let popup = Popup::new().map_err(|e| e.to_string())?;
         Ok(Self {
             backgrounds: vec![],
             bars: vec![],
             launcher,
+            popup,
+            popup_open: None,
+            popup_pending: None,
             apps: vec![],
             results: vec![],
             visible: false,
@@ -173,7 +181,12 @@ impl Shell {
         for b in self.backgrounds.drain(..) {
             let _ = b.hide();
         }
-        for r in monitors {
+        self.close_popup();
+        self.popup.set_bg(color(&c.theme.background));
+        self.popup.set_fg(color(&c.theme.text));
+        self.popup.set_muted(color(&c.theme.subtext));
+        self.popup.set_overlay(color(&c.theme.overlay));
+        for (index, r) in monitors.iter().enumerate() {
             let b = Background::new().map_err(|e| e.to_string())?;
             b.set_bg(color(&c.theme.background));
             b.set_surface_width(super::dpi::logical(*r, r.w));
@@ -192,6 +205,10 @@ impl Shell {
                         crate::command::Command::Workspace(n as u8),
                         None,
                     ));
+                });
+                let tx = self.tx.clone();
+                b.on_module(move |kind, x| {
+                    let _ = tx.send(Event::Module(kind.to_string(), x as i32, index));
                 });
                 b.set_surface_width(super::dpi::logical(*r, r.w));
                 b.set_surface_height(c.bar.height as f32);
@@ -285,7 +302,68 @@ impl Shell {
             self.launcher.invoke_focus_search();
             self.launcher_pending = None;
         }
+        if let Some(r) = self.popup_pending
+            && id(self.popup.window()) != 0
+        {
+            tool(self.popup.window(), true);
+            native::position(id(self.popup.window()), r, Some(HWND_TOPMOST));
+            self.popup_pending = None;
+        }
         true
+    }
+    /// Popups, bars and backgrounds are the shell's own windows.
+    pub fn owns(&self, id_: isize) -> bool {
+        id(self.popup.window()) == id_
+            || self.bars.iter().any(|b| id(b.window()) == id_)
+            || self.backgrounds.iter().any(|b| id(b.window()) == id_)
+    }
+    /// Shows `lines` under the bar module centered at logical `x` on `monitor`.
+    pub fn open_popup(
+        &mut self,
+        c: &Config,
+        monitor: Rect,
+        kind: String,
+        x: i32,
+        title: String,
+        lines: Vec<String>,
+    ) {
+        let width = super::dpi::scale(monitor, 300);
+        let height = super::dpi::scale(monitor, 52 + 22 * lines.len() as i32);
+        let bar = super::dpi::scale(monitor, c.bar.height);
+        let gap = super::dpi::scale(monitor, 6);
+        let center = monitor.x + super::dpi::scale(monitor, x);
+        let r = Rect {
+            x: (center - width / 2).clamp(monitor.x, monitor.x + monitor.w - width),
+            y: if c.bar.position == "top" {
+                monitor.y + bar + gap
+            } else {
+                monitor.y + monitor.h - bar - gap - height
+            },
+            w: width,
+            h: height,
+        };
+        self.popup.set_heading(title.into());
+        self.popup.set_lines(ModelRc::from(Rc::new(VecModel::from(
+            lines
+                .into_iter()
+                .map(slint::SharedString::from)
+                .collect::<Vec<_>>(),
+        ))));
+        self.popup
+            .set_surface_width(super::dpi::logical(monitor, width));
+        self.popup
+            .set_surface_height(super::dpi::logical(monitor, height));
+        if self.popup.show().is_err() {
+            return;
+        }
+        self.popup_open = Some(kind);
+        self.popup_pending = Some(r);
+    }
+    pub fn close_popup(&mut self) {
+        if self.popup_open.take().is_some() {
+            let _ = self.popup.hide();
+        }
+        self.popup_pending = None;
     }
     pub fn search(&mut self, q: &str, max: usize) {
         if self.meta {
@@ -420,18 +498,25 @@ impl Shell {
                 .collect::<Vec<_>>()
         };
         let left = items(&c.bar.left);
-        let center = items(&c.bar.center)
-            .iter()
-            .map(|i| i.value.to_string())
-            .collect::<Vec<_>>()
-            .join("  ");
+        let center = items(&c.bar.center);
         let right = items(&c.bar.right);
         for b in &self.bars {
             b.set_active(m.active as i32);
             b.set_workspaces(ModelRc::from(Rc::new(VecModel::from(workspaces.clone()))));
             b.set_left_items(ModelRc::from(Rc::new(VecModel::from(left.clone()))));
-            b.set_center_text(center.clone().into());
+            b.set_center_items(ModelRc::from(Rc::new(VecModel::from(center.clone()))));
             b.set_right_items(ModelRc::from(Rc::new(VecModel::from(right.clone()))));
+        }
+        if let Some(kind) = &self.popup_open
+            && let Some((title, lines)) = super::status::details(c, kind)
+        {
+            self.popup.set_heading(title.into());
+            self.popup.set_lines(ModelRc::from(Rc::new(VecModel::from(
+                lines
+                    .into_iter()
+                    .map(slint::SharedString::from)
+                    .collect::<Vec<_>>(),
+            ))));
         }
     }
 }
