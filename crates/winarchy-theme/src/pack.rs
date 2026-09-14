@@ -182,13 +182,28 @@ pub fn cover(
             ((u64::from(iw) * u64::from(height) / u64::from(width)) as u32).max(1),
         )
     };
-    let cropped = image::imageops::crop_imm(pixels, (iw - cw) / 2, (ih - ch) / 2, cw, ch);
-    Ok(image::imageops::resize(
-        &*cropped,
-        width,
-        height,
-        image::imageops::FilterType::Triangle,
-    ))
+    use fast_image_resize::{
+        FilterType, PixelType, ResizeAlg, ResizeOptions, Resizer,
+        images::{Image, ImageRef},
+    };
+    let source =
+        ImageRef::new(iw, ih, pixels.as_raw(), PixelType::U8x4).map_err(|e| e.to_string())?;
+    let mut destination = Image::new(width, height, PixelType::U8x4);
+    // Bilinear convolution is the triangular filter used previously, but SIMD
+    // accelerates it. Alpha-aware filtering avoids dark fringes in transparent PNGs.
+    let options = ResizeOptions::new()
+        .resize_alg(ResizeAlg::Convolution(FilterType::Bilinear))
+        .crop(
+            f64::from((iw - cw) / 2),
+            f64::from((ih - ch) / 2),
+            f64::from(cw),
+            f64::from(ch),
+        );
+    Resizer::new()
+        .resize(&source, &mut destination, &options)
+        .map_err(|e| e.to_string())?;
+    image::RgbaImage::from_raw(width, height, destination.into_vec())
+        .ok_or_else(|| "invalid resized image buffer".into())
 }
 /// Installs `<source>/theme.toml` as `themes/<source-name>.toml`, publishing the
 /// palette last. Existing themes/assets are never replaced. The source is untouched.
@@ -311,6 +326,24 @@ mod tests {
         assert_eq!(fs::read_dir(t.home().join("themes")).unwrap().count(), 0);
         fs::write(t.source().join("theme.toml"), "broken").unwrap();
         assert!(install(&t.home(), &t.source()).is_err());
+    }
+    #[test]
+    fn accelerated_cover_preserves_opaque_colors_and_transparency() {
+        let gradient = image::RgbaImage::from_fn(32, 16, |x, y| {
+            image::Rgba([(x * 7) as u8, (y * 13) as u8, 40, 255])
+        });
+        let fitted = cover(&gradient, 16, 8).unwrap();
+        let reference =
+            image::imageops::resize(&gradient, 16, 8, image::imageops::FilterType::Triangle);
+        for (a, b) in fitted.as_raw().iter().zip(reference.as_raw()) {
+            assert!(a.abs_diff(*b) <= 2);
+        }
+        let transparent = image::RgbaImage::from_pixel(4, 4, image::Rgba([120, 60, 30, 128]));
+        let fitted = cover(&transparent, 8, 8).unwrap();
+        for pixel in fitted.pixels() {
+            assert_eq!(pixel[3], 128);
+            assert!(pixel[0].abs_diff(120) <= 2 && pixel[1].abs_diff(60) <= 2);
+        }
     }
     #[test]
     fn cover_handles_tiny_images_and_extreme_aspect_ratios() {

@@ -10,3 +10,4 @@ repository = "https://github.com/YannickHerrero/winarchy"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+fast_image_resize = { version = "6.1", default-features = false, features = ["std", "only_u8x4"] }
