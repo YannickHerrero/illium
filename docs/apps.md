@@ -7,7 +7,22 @@ directory with the `app <name>` command, so `keybindings.toml` binds them
 for `app shot` by default) and the `Apps` submenu of Alt+Shift+Space and the
 launcher list them as Files, Tasks and Screenshot.
 
-They read the active theme from the configuration home when they start and
+## Resident process
+
+`winarchy-apps.exe serve` keeps the file manager and the task manager ready:
+both windows are built once and hidden, and `app files` or `app tasks` only
+shows them. The daemon starts it when it is ready, asks it over an
+owner-only named pipe (`winarchy-apps-<SID>-<session>`, one instance per
+user and session), and falls back to a plain `winarchy-apps.exe <name>`
+process when it does not answer, restarting it for the next time. `q` hides
+the window and keeps its state (directory, sort, filter); the next show reads
+the theme again. Showing a window takes 10 to 60 ms in the resident, against
+0.5 s for a fresh process and 2 to 3 s when Defender has not yet scanned a
+newly installed executable. The screenshot tool stays a short-lived process.
+The resident uses 25 to 45 MB and samples processes only while Tasks is
+shown; `winarchyctl quit` stops it with the daemon.
+
+They read the active theme from the configuration home when they are shown and
 are otherwise ordinary windows: Winarchy tiles them like any client, and a
 rule on `winarchy-apps.exe` in `rules.toml` can float them instead. Their
 Slint markup is compiled into the executable; the interpreter is reserved
@@ -73,7 +88,8 @@ entries with a notice. Nothing is previewed as an image, and there are no
 tabs, bookmarks or plugins.
 
 `winarchy-apps.exe files <directory>` starts in that directory instead of
-the user profile.
+the user profile; through the resident, `winarchyctl app files` shows the
+directory left open, or the profile the first time.
 
 ## Screenshot
 
