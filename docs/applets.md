@@ -14,9 +14,11 @@ right = ["battery", "cpu", "memory", "wifi"]
 Built-in module names are reserved; any other name must match an applet
 folder holding an `applet.toml`, or the configuration is rejected.
 
-Winarchy ships `weather`, `wifi`, `calendar` and `_template`; they are
-installed with the other defaults and never overwritten. `calendar` uses
-`attach = "clock"`: it has no icon and opens when the clock is clicked.
+Winarchy ships `weather`, `wifi`, `calendar`, `volume` and `_template`; they
+are installed with the other defaults and never overwritten. `calendar` uses
+`attach = "clock"`: it has no icon and opens when the clock is clicked;
+`volume` attaches to the volume module the same way and takes keyboard focus
+so the arrows adjust the level.
 
 ## Anatomy
 
@@ -38,7 +40,7 @@ applets/weather/
 | `popup` | `{ width = 360, height = 240 }` | Popup size in logical pixels |
 | `script` | `<name>.ps1` | PowerShell script run hidden with `-NoProfile -ExecutionPolicy Bypass` |
 | `command` | none | Full command line instead of `script` |
-| `provider` | none | `builtin:clock` or `builtin:system` instead of a process |
+| `provider` | none | `builtin:clock`, `builtin:system` or `builtin:volume` instead of a process |
 | `focusable` | `false` | Let the popup take keyboard focus |
 | `attach` | none | Built-in module (`clock`, `battery`, `cpu`, `memory`, `volume`, `window-title`) whose click opens this applet; it then has no icon and is loaded whenever that module is in a section |
 | `[settings]` | empty | Passed to the provider as `WINARCHY_APPLET_<KEY>` variables |
@@ -61,6 +63,10 @@ Built-in providers avoid a process for fast cadences:
   grid of `{ day, current, today }` cells.
 - `builtin:system`: `cpu`, `memory_available_gb`, `memory_total_gb`,
   `memory_load`, `battery` (-1 without one), `plugged`, `processors`.
+- `builtin:volume`: `volume` (percent) and `muted` of the default output
+  device. It is the only built-in provider that acts on the view's action:
+  `set <percent>`, `up`, `down` (5% steps) and `toggle-mute`. Setting a
+  level above zero also unmutes.
 
 ### The view
 

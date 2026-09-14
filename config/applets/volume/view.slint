@@ -1,0 +1,45 @@
+struct Data { volume: int, muted: bool }
+export component View inherits Window {
+    no-frame: true;
+    in property <length> popup-width: 300px;
+    in property <length> popup-height: 120px;
+    width: popup-width;
+    height: popup-height;
+    in property <color> bg: #1e1e2e;
+    in property <color> overlay: #45475a;
+    in property <color> fg: #cdd6f4;
+    in property <color> muted: #a6adc8;
+    in property <color> accent: #cba6f7;
+    in property <Data> data;
+    callback action(string);
+    background: bg;
+    forward-focus: keys;
+    keys := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.LeftArrow || event.text == "h" || event.text == "j" || event.text == Key.DownArrow) { root.action("down"); return accept; }
+            if (event.text == Key.RightArrow || event.text == "l" || event.text == "k" || event.text == Key.UpArrow) { root.action("up"); return accept; }
+            if (event.text == "m") { root.action("toggle-mute"); return accept; }
+            if (event.text == "0") { root.action("set 0"); return accept; }
+            return reject;
+        }
+        Rectangle {
+            border-width: 1px;
+            border-color: root.overlay;
+            VerticalLayout {
+                padding: 18px; spacing: 14px;
+                HorizontalLayout {
+                    Text { text: "VOLUME"; color: root.muted; font-size: 13px; letter-spacing: 1px; horizontal-stretch: 1; }
+                    Text { text: root.data.muted ? "muted" : "\{root.data.volume}%"; color: root.data.muted ? root.muted : root.fg; font-size: 14px; }
+                }
+                slider := Rectangle {
+                    height: 8px; background: root.overlay;
+                    Rectangle { x: 0; width: parent.width * max(0, min(100, root.data.volume)) / 100; height: parent.height; background: root.data.muted ? root.muted : root.accent; }
+                    TouchArea {
+                        clicked => { root.action("set \{round(self.mouse-x / self.width * 100)}"); }
+                    }
+                }
+                Text { text: "← → adjust   m mute   0 silence"; color: root.muted; font-size: 11px; }
+            }
+        }
+    }
+}

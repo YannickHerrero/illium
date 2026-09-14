@@ -3,5 +3,5 @@ position = "top"
 height = 28
 left = ["workspaces"]
 center = ["clock"]
-right = ["battery", "cpu", "memory", "wifi"]
+right = ["battery", "cpu", "memory", "volume", "wifi"]
 clock_format = "%A %d %b - %H:%M"

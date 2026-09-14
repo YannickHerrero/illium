@@ -191,6 +191,14 @@ const DEFAULTS: &[(&str, &str)] = &[
         include_str!("../config/applets/calendar/view.slint"),
     ),
     (
+        "applets/volume/applet.toml",
+        include_str!("../config/applets/volume/applet.toml"),
+    ),
+    (
+        "applets/volume/view.slint",
+        include_str!("../config/applets/volume/view.slint"),
+    ),
+    (
         "applets/_template/applet.toml",
         include_str!("../config/applets/_template/applet.toml"),
     ),

@@ -1,0 +1,6 @@
+# Master volume of the default output, opened by clicking the volume module.
+attach = "volume"
+provider = "builtin:volume"
+interval = "5s"
+focusable = true
+popup = { width = 300, height = 120 }
