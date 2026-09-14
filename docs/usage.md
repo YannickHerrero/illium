@@ -31,7 +31,7 @@ winarchyctl workspace next-active
 winarchyctl workspace recent
 ```
 
-The bar highlights the current workspace and distinguishes occupied from empty workspaces. Workspaces have a monitor association; focusing a client on a monitor updates that association. Switching workspaces is global, not independently per monitor.
+The bar lists the occupied workspaces plus the active one and highlights the active one; empty workspaces are not shown. Workspaces have a monitor association; focusing a client on a monitor updates that association. Switching workspaces is global, not independently per monitor.
 
 ## Windows
 

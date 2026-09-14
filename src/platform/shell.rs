@@ -401,17 +401,21 @@ impl Shell {
         Ok(())
     }
     pub fn refresh(&self, m: &Model, c: &Config) {
-        let occupied = (1..=9)
-            .map(|n| m.clients.iter().any(|w| w.workspace == n))
-            .collect::<Vec<_>>();
+        let workspaces: Vec<i32> = if c.bar.left.iter().any(|s| s == "workspaces") {
+            (1..=9u8)
+                .filter(|n| *n == m.active || m.clients.iter().any(|w| w.workspace == *n))
+                .map(i32::from)
+                .collect()
+        } else {
+            vec![]
+        };
         let title = m.focused.map(native::title).unwrap_or_default();
         let left = super::status::text(c, &title, &c.bar.left);
         let center = super::status::text(c, &title, &c.bar.center);
         let status = super::status::text(c, &title, &c.bar.right);
         for b in &self.bars {
             b.set_active(m.active as i32);
-            b.set_occupied(ModelRc::from(Rc::new(VecModel::from(occupied.clone()))));
-            b.set_workspaces_visible(c.bar.left.iter().any(|s| s == "workspaces"));
+            b.set_workspaces(ModelRc::from(Rc::new(VecModel::from(workspaces.clone()))));
             b.set_left_text(left.clone().into());
             b.set_title_text(center.clone().into());
             b.set_status(status.clone().into());
