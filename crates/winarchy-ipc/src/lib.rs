@@ -10,6 +10,8 @@ pub mod pipe_io;
 mod pipe_io_tests;
 pub mod protocol;
 #[cfg(windows)]
+pub mod server;
+#[cfg(windows)]
 pub fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(Some(0)).collect()
 }

@@ -4,6 +4,10 @@ use std::io::Read;
 pub const MAX_COMMAND_BYTES: usize = 8191;
 
 pub fn read_command(reader: &mut impl Read) -> Result<Command, String> {
+    read_line(reader)?.parse()
+}
+/// One newline-terminated UTF-8 command line, at most `MAX_COMMAND_BYTES` long.
+pub fn read_line(reader: &mut impl Read) -> Result<String, String> {
     let mut bytes = Vec::new();
     loop {
         let mut byte = [0];
@@ -18,9 +22,7 @@ pub fn read_command(reader: &mut impl Read) -> Result<Command, String> {
         }
         bytes.push(byte[0]);
     }
-    std::str::from_utf8(&bytes)
-        .map_err(|e| e.to_string())?
-        .parse()
+    String::from_utf8(bytes).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

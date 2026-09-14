@@ -1,6 +1,6 @@
 mod applet;
 mod dpi;
-use winarchy_ipc::{identity, pipe_io};
+use winarchy_ipc::identity;
 mod input;
 mod instance;
 pub mod ipc;

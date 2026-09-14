@@ -41,8 +41,12 @@ fn session(pid: u32) -> Result<u32, String> {
     Ok(id)
 }
 pub fn endpoint() -> Result<String, String> {
+    endpoint_named("winarchy")
+}
+/// `<prefix>-<user SID>-<session>`: one endpoint per server kind, user and session.
+pub fn endpoint_named(prefix: &str) -> Result<String, String> {
     Ok(format!(
-        "winarchy-{}-{}",
+        "{prefix}-{}-{}",
         user_sid(unsafe { GetCurrentProcess() })?,
         session(std::process::id())?
     ))

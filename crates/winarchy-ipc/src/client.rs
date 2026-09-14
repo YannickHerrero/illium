@@ -11,15 +11,25 @@ use windows::{
 pub const MAX_REPLY: usize = 65535;
 const ACK: u8 = 6;
 pub fn pipe_name() -> Result<String, String> {
-    Ok(format!(r"\\.\pipe\{}", crate::identity::endpoint()?))
+    Ok(pipe_path(&crate::identity::endpoint()?))
 }
+pub fn pipe_path(endpoint: &str) -> String {
+    format!(r"\\.\pipe\{endpoint}")
+}
+/// Sends `command` to the daemon.
 pub fn client(command: &str) -> Result<Reply, String> {
+    client_at(&pipe_name()?, command, Duration::from_secs(12))
+}
+/// Sends `command` to the server behind `name`, giving up after `timeout`.
+pub fn client_at(name: &str, command: &str, timeout: Duration) -> Result<Reply, String> {
     // No detached blocking worker: each pending operation has a cancellation deadline.
-    let deadline = Instant::now() + Duration::from_secs(12);
-    let name = pipe_name()?;
-    let wide_name = wide(&name);
+    let deadline = Instant::now() + timeout;
+    let wide_name = wide(name);
     unsafe {
-        let _ = WaitNamedPipeW(PCWSTR(wide_name.as_ptr()), 3000);
+        let _ = WaitNamedPipeW(
+            PCWSTR(wide_name.as_ptr()),
+            (timeout.as_millis() / 4).clamp(100, 3000) as u32,
+        );
     }
     let file = std::fs::OpenOptions::new()
         .read(true)
