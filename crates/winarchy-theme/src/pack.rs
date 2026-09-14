@@ -7,7 +7,8 @@ use std::{
 
 pub const MAX_IMAGES: usize = 64;
 pub const MAX_IMAGE_BYTES: usize = 32 * 1024 * 1024;
-pub const MAX_PIXELS: u64 = 32 * 1024 * 1024;
+// Includes slightly oversized 8K artwork such as Dracula's 8001×4501 base.png.
+pub const MAX_PIXELS: u64 = 64 * 1024 * 1024;
 const MAX_PACK_BYTES: u64 = 512 * 1024 * 1024;
 
 pub fn plain_name(name: &str) -> bool {
@@ -137,12 +138,12 @@ fn decode_bytes(bytes: &[u8]) -> Result<image::RgbaImage, String> {
     let mut limits = image::Limits::default();
     limits.max_image_width = Some(16384);
     limits.max_image_height = Some(16384);
-    limits.max_alloc = Some(256 * 1024 * 1024);
+    limits.max_alloc = Some(512 * 1024 * 1024);
     reader.limits(limits);
     let decoder = reader.into_decoder().map_err(|e| e.to_string())?;
     let (width, height) = image::ImageDecoder::dimensions(&decoder);
     if width == 0 || height == 0 || u64::from(width) * u64::from(height) > MAX_PIXELS {
-        return Err("wallpaper exceeds 32 megapixels or has zero dimensions".into());
+        return Err("wallpaper exceeds 64 megapixels or has zero dimensions".into());
     }
     image::DynamicImage::from_decoder(decoder)
         .map(|i| i.to_rgba8())
@@ -150,6 +151,44 @@ fn decode_bytes(bytes: &[u8]) -> Result<image::RgbaImage, String> {
 }
 pub fn decode(path: &Path) -> Result<image::RgbaImage, String> {
     decode_bytes(&read(path, MAX_IMAGE_BYTES)?).map_err(|e| format!("{}: {e}", path.display()))
+}
+/// Center-crop before resizing, so even a 1-pixel-wide panorama never creates
+/// an enormous intermediate buffer. Preparing native-sized pixels also avoids
+/// Slint 1.12's fixed-point division by zero when upscaling tiny images >256×.
+pub fn cover(
+    pixels: &image::RgbaImage,
+    width: u32,
+    height: u32,
+) -> Result<image::RgbaImage, String> {
+    if width == 0
+        || height == 0
+        || width > 16384
+        || height > 16384
+        || u64::from(width) * u64::from(height) > MAX_PIXELS
+        || pixels.width() == 0
+        || pixels.height() == 0
+    {
+        return Err("invalid wallpaper display dimensions".into());
+    }
+    let (iw, ih) = pixels.dimensions();
+    let (cw, ch) = if u64::from(iw) * u64::from(height) > u64::from(ih) * u64::from(width) {
+        (
+            ((u64::from(ih) * u64::from(width) / u64::from(height)) as u32).max(1),
+            ih,
+        )
+    } else {
+        (
+            iw,
+            ((u64::from(iw) * u64::from(height) / u64::from(width)) as u32).max(1),
+        )
+    };
+    let cropped = image::imageops::crop_imm(pixels, (iw - cw) / 2, (ih - ch) / 2, cw, ch);
+    Ok(image::imageops::resize(
+        &*cropped,
+        width,
+        height,
+        image::imageops::FilterType::Triangle,
+    ))
 }
 /// Installs `<source>/theme.toml` as `themes/<source-name>.toml`, publishing the
 /// palette last. Existing themes/assets are never replaced. The source is untouched.
@@ -272,6 +311,17 @@ mod tests {
         assert_eq!(fs::read_dir(t.home().join("themes")).unwrap().count(), 0);
         fs::write(t.source().join("theme.toml"), "broken").unwrap();
         assert!(install(&t.home(), &t.source()).is_err());
+    }
+    #[test]
+    fn cover_handles_tiny_images_and_extreme_aspect_ratios() {
+        for (width, height) in [(1, 1), (2, 2), (1, 16384), (16384, 1)] {
+            let pixels = image::RgbaImage::from_pixel(width, height, image::Rgba([255, 0, 0, 255]));
+            let fitted = cover(&pixels, 640, 360).unwrap();
+            assert_eq!(fitted.dimensions(), (640, 360));
+            assert_eq!(fitted.get_pixel(320, 180).0, [255, 0, 0, 255]);
+        }
+        assert!(cover(&image::RgbaImage::new(1, 1), 0, 100).is_err());
+        assert!(cover(&image::RgbaImage::new(1, 1), 16384, 16384).is_err());
     }
     #[test]
     fn no_images_and_bounded_names() {
