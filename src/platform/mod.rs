@@ -307,12 +307,14 @@ impl Manager {
         native::focus(id.unwrap_or_else(session::sink), id.is_some());
     }
     fn reload(&mut self) -> Result<(), String> {
+        let started = std::time::Instant::now();
         let config = Config::load(&self.config.home)?;
         let bindings = input::parse(&config.keys)?;
         self.shell.configure(&config, &self.monitors)?;
         input::update(bindings);
         self.config = config;
         self.applets.load(&self.config);
+        let shell_ms = started.elapsed().as_millis();
         if let Some(mode) = &self.config.theme.mode {
             native::color_mode(mode == "light");
         }
@@ -323,7 +325,11 @@ impl Manager {
             }
         }
         self.layout();
-        tracing::info!("configuration reloaded");
+        tracing::info!(
+            shell_ms,
+            total_ms = started.elapsed().as_millis(),
+            "configuration reloaded"
+        );
         Ok(())
     }
     fn execute(&mut self, c: Command) -> Result<String, String> {

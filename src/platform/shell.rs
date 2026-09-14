@@ -671,7 +671,9 @@ impl Shell {
         if self.wallpaper_stamp.as_ref() == Some(&stamp) {
             return Ok((self.wallpaper_images.clone(), stamp));
         }
+        let start = std::time::Instant::now();
         let pixels = winarchy_theme::pack::decode(&stamp.0)?;
+        let decode_ms = start.elapsed().as_millis();
         let mut images: Vec<slint::Image> = Vec::new();
         for (index, &(width, height)) in self.wallpaper_sizes.iter().enumerate() {
             if let Some(previous) = self.wallpaper_sizes[..index]
@@ -689,6 +691,11 @@ impl Shell {
             );
             images.push(slint::Image::from_rgba8(buffer));
         }
+        tracing::info!(
+            decode_ms,
+            total_ms = start.elapsed().as_millis(),
+            "wallpaper prepared"
+        );
         Ok((images, stamp))
     }
     fn show_wallpaper(
