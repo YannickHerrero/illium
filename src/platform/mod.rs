@@ -468,7 +468,7 @@ impl Manager {
                     self.shell.refresh(&self.model, &self.config);
                     self.borders();
                 }
-                EVENT_OBJECT_CREATE | EVENT_OBJECT_SHOW => {
+                EVENT_OBJECT_CREATE | EVENT_OBJECT_SHOW | EVENT_OBJECT_UNCLOAKED => {
                     if self.add(id) {
                         self.layout();
                     }
