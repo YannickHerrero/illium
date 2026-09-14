@@ -27,6 +27,8 @@ mod app {
         window: TasksWindow,
         /// The sampler only works while the window is shown.
         visible: Arc<AtomicBool>,
+        /// The native window exists after the first show; later shows reuse it.
+        shown: std::cell::Cell<bool>,
         _timer: slint::Timer,
     }
     fn render(window: &TasksWindow, rows: &VecModel<TaskRow>, t: &Tasks) {
@@ -80,7 +82,7 @@ mod app {
                         Action::Quit => {
                             if resident {
                                 visible.store(false, Ordering::Relaxed);
-                                let _ = window.hide();
+                                ui::set_visible(&window, false);
                             } else {
                                 let _ = slint::quit_event_loop();
                             }
@@ -136,6 +138,7 @@ mod app {
             Ok(Self {
                 window,
                 visible,
+                shown: std::cell::Cell::new(false),
                 _timer: timer,
             })
         }
@@ -145,7 +148,11 @@ mod app {
                 &winarchy_theme::Theme::current(&ui::config_home()),
             );
             self.visible.store(true, Ordering::Relaxed);
-            self.window.show().map_err(|e| e.to_string())?;
+            if self.shown.replace(true) {
+                ui::set_visible(&self.window, true);
+            } else {
+                self.window.show().map_err(|e| e.to_string())?;
+            }
             ui::raise(&self.window);
             Ok(())
         }

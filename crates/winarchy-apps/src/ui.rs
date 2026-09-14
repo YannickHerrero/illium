@@ -54,3 +54,24 @@ pub fn raise(window: &impl slint::ComponentHandle) {
         }
     }
 }
+/// Hides or shows the native window without destroying it, so a resident
+/// application comes back without recreating its window. `Window::hide`
+/// would drop the winit window and `show` recreate it.
+pub fn set_visible(window: &impl slint::ComponentHandle, visible: bool) {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use windows::Win32::{
+        Foundation::HWND,
+        UI::WindowsAndMessaging::{SW_HIDE, SW_SHOW, SetForegroundWindow, ShowWindow},
+    };
+    if let Ok(handle) = window.window().window_handle().window_handle()
+        && let RawWindowHandle::Win32(h) = handle.as_raw()
+    {
+        let hwnd = HWND(h.hwnd.get() as *mut _);
+        unsafe {
+            let _ = ShowWindow(hwnd, if visible { SW_SHOW } else { SW_HIDE });
+            if visible {
+                let _ = SetForegroundWindow(hwnd);
+            }
+        }
+    }
+}
