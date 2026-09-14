@@ -346,11 +346,8 @@ impl Shell {
         }
         true
     }
-    /// Popups, bars and backgrounds are the shell's own windows.
-    pub fn owns(&self, id_: isize) -> bool {
-        id(self.popup.window()) == id_
-            || self.bars.iter().any(|b| id(b.window()) == id_)
-            || self.backgrounds.iter().any(|b| id(b.window()) == id_)
+    pub fn popup_hwnd(&self) -> isize {
+        id(self.popup.window())
     }
     /// Shows `lines` under the bar module centered at logical `x` on `monitor`.
     pub fn open_popup(

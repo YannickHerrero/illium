@@ -52,6 +52,9 @@ struct Manager {
     shell: shell::Shell,
     borders: std::collections::HashMap<isize, native::Border>,
     applets: applet::Runtime,
+    /// Popup closed by a press on the bar: the module click that follows the
+    /// release must not reopen it.
+    just_closed: Option<(String, std::time::Instant)>,
 }
 impl Manager {
     fn prune(&mut self) -> bool {
@@ -526,12 +529,19 @@ impl Manager {
                 self.focus_visible();
             }
             Event::Module(kind, x, monitor) => {
+                let target = self.applets.attached(&kind).unwrap_or_else(|| kind.clone());
+                if self
+                    .just_closed
+                    .take()
+                    .is_some_and(|(k, at)| k == target && at.elapsed().as_millis() < 500)
+                {
+                    return;
+                }
                 let r = self
                     .monitors
                     .get(monitor)
                     .copied()
                     .unwrap_or_else(|| self.area());
-                let target = self.applets.attached(&kind).unwrap_or_else(|| kind.clone());
                 if self.applets.is_applet(&target) {
                     self.shell.close_popup();
                     if let Err(e) = self.applets.toggle(&self.config, r, &target, x) {
@@ -550,9 +560,16 @@ impl Manager {
                 }
             }
             Event::Click(id) => {
-                if !self.shell.owns(id) && !self.applets.owns(id) {
+                // Any press outside the open popup closes it, the bar included.
+                if !self.applets.owns(id) && self.shell.popup_hwnd() != id {
+                    let open = self
+                        .applets
+                        .open
+                        .clone()
+                        .or_else(|| self.shell.popup_open.clone());
                     self.shell.close_popup();
                     self.applets.close();
+                    self.just_closed = open.map(|k| (k, std::time::Instant::now()));
                 }
             }
             Event::Escape => {
@@ -669,6 +686,7 @@ pub fn run(replace: bool) -> Result<(), String> {
         shell: shell::Shell::new(tx.clone())?,
         borders: std::collections::HashMap::new(),
         applets: applet::Runtime::new(tx.clone()),
+        just_closed: None,
     };
     let manager = Rc::new(RefCell::new(manager));
     let startup_error = Rc::new(RefCell::new(None));
