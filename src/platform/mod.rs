@@ -16,6 +16,7 @@ use crate::{
     config::Config,
     layout::{Rect, fibonacci, neighbor},
     model::{Client, Model},
+    state::{Placement, State},
 };
 pub use security::require_standard_user;
 pub use session::watchdog;
@@ -129,6 +130,30 @@ impl Manager {
         });
         tracing::info!(id, workspace, "window added");
         true
+    }
+    fn snapshot(&self) -> State {
+        State {
+            active: self.model.active,
+            recent: self.model.recent,
+            monitors: self.model.monitors,
+            clients: self
+                .model
+                .clients
+                .iter()
+                .filter_map(|c| {
+                    let (pid, exe) = native::process(c.id)?;
+                    Some(Placement {
+                        id: c.id,
+                        pid,
+                        exe,
+                        workspace: c.workspace,
+                        floating: c.floating,
+                        fullscreen: c.fullscreen,
+                        restore: c.restore,
+                    })
+                })
+                .collect(),
+        }
     }
     fn area(&self) -> Rect {
         let index = self.model.monitors[(self.model.active - 1) as usize]
@@ -674,6 +699,7 @@ pub fn run(replace: bool) -> Result<(), String> {
     }
     let home = Config::home();
     Config::install(&home)?;
+    let state_path = home.join("state.json");
     let config = Config::load(&home)?;
     let bindings = input::parse(&config.keys)?;
     let (tx, rx) = crate::queue::channel(1024);
@@ -782,6 +808,7 @@ pub fn run(replace: bool) -> Result<(), String> {
     );
     let m = manager.clone();
     let status = slint::Timer::default();
+    let mut saved = String::new();
     status.start(
         slint::TimerMode::Repeated,
         std::time::Duration::from_secs(1),
@@ -789,6 +816,13 @@ pub fn run(replace: bool) -> Result<(), String> {
             let mut m = m.borrow_mut();
             if m.prune() {
                 m.layout();
+            }
+            let json = m.snapshot().to_json();
+            if json != saved {
+                match State::save(&json, &state_path) {
+                    Ok(()) => saved = json,
+                    Err(e) => tracing::warn!(%e, "placement state not saved"),
+                }
             }
             if maintenance.take_overflow() {
                 tracing::warn!("event queue overflow; reconciling windows and configuration");

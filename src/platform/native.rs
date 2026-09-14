@@ -220,14 +220,37 @@ pub fn title(id: isize) -> String {
         String::from_utf16_lossy(&s[..n.max(0) as usize])
     }
 }
+/// Owning process id and executable path of a window; `None` once the
+/// window is gone.
+pub fn process(id: isize) -> Option<(u32, String)> {
+    unsafe {
+        let h = hwnd(id);
+        if !IsWindow(Some(h)).as_bool() {
+            return None;
+        }
+        let mut pid = 0;
+        GetWindowThreadProcessId(h, Some(&mut pid));
+        let mut exe = String::new();
+        if let Ok(p) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
+            let mut buf = [0u16; 2048];
+            let mut n = buf.len() as u32;
+            if QueryFullProcessImageNameW(p, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut n)
+                .is_ok()
+            {
+                exe = String::from_utf16_lossy(&buf[..n as usize]);
+            }
+            let _ = CloseHandle(p);
+        }
+        Some((pid, exe))
+    }
+}
 pub fn metadata(id: isize) -> Option<(String, String, bool)> {
     unsafe {
         let h = hwnd(id);
         if !IsWindow(Some(h)).as_bool() || !IsWindowVisible(h).as_bool() || IsIconic(h).as_bool() {
             return None;
         }
-        let mut pid = 0;
-        GetWindowThreadProcessId(h, Some(&mut pid));
+        let (pid, exe) = process(id)?;
         if pid == std::process::id() {
             return None;
         }
@@ -258,17 +281,6 @@ pub fn metadata(id: isize) -> Option<(String, String, bool)> {
         .contains(&class.as_str())
         {
             return None;
-        }
-        let mut exe = String::new();
-        if let Ok(p) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
-            let mut buf = [0u16; 2048];
-            let mut n = buf.len() as u32;
-            if QueryFullProcessImageNameW(p, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut n)
-                .is_ok()
-            {
-                exe = String::from_utf16_lossy(&buf[..n as usize]);
-            }
-            let _ = CloseHandle(p);
         }
         // Fixed-size and always-on-top windows (Teams' compact meeting view,
         // for one) are overlays; stretching them into a tile serves nobody.
