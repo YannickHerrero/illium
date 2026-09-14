@@ -1,4 +1,5 @@
-# Wireless connection from `netsh wlan show interfaces`.
+# Wireless status and network chooser from `netsh wlan`.
 icon = "icon.svg"
 interval = "30s"
-popup = { width = 320, height = 190 }
+focusable = true
+popup = { width = 320, height = 380 }

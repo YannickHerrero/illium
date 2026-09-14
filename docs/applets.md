@@ -18,7 +18,10 @@ Winarchy ships `weather`, `wifi`, `calendar`, `volume` and `_template`; they
 are installed with the other defaults and never overwritten. `calendar` uses
 `attach = "clock"`: it has no icon and opens when the clock is clicked;
 `volume` attaches to the volume module the same way and takes keyboard focus
-so the arrows adjust the level.
+so the arrows adjust the level. `wifi` lists the nearby networks: `j`/`k` or
+the arrows move, Enter connects (asking for the key of an unknown secured
+network, stored as a WPA2 profile), `d` disconnects, `f` forgets the saved
+profile and `r` rescans. The key travels only as the provider's argument.
 
 ## Anatomy
 

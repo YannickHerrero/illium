@@ -1,40 +1,109 @@
-struct Data { connected: bool, ssid: string, signal: int, rate: float, band: string }
-component Row inherits HorizontalLayout {
-    in property <string> name;
-    in property <string> value;
-    in property <color> fg;
-    in property <color> muted;
-    Text { text: name; color: muted; font-size: 13px; letter-spacing: 1px; horizontal-stretch: 1; }
-    Text { text: value; color: fg; font-size: 14px; }
-}
+struct Network { ssid: string, signal: int, secured: bool, known: bool, connected: bool }
+struct Data { connected: bool, ssid: string, signal: int, rate: float, band: string, networks: [Network], error: string }
 export component View inherits Window {
     no-frame: true;
     in property <length> popup-width: 320px;
-    in property <length> popup-height: 190px;
+    in property <length> popup-height: 380px;
     width: popup-width;
     height: popup-height;
     in property <color> bg: #1e1e2e;
+    in property <color> surface: #313244;
     in property <color> overlay: #45475a;
     in property <color> fg: #cdd6f4;
     in property <color> muted: #a6adc8;
     in property <color> accent: #cba6f7;
     in property <Data> data;
     callback action(string);
+    property <int> cursor: 0;
+    property <bool> asking: false;
+    property <length> row-height: 26px;
+    property <int> count: root.data.networks.length;
+    property <string> selected: count > 0 ? root.data.networks[min(root.cursor, count - 1)].ssid : "";
     background: bg;
-    Rectangle {
-        border-width: 1px;
-        border-color: root.overlay;
-        VerticalLayout {
-            padding: 18px; spacing: 12px;
-            Text { text: root.data.connected ? root.data.ssid : "Not connected"; color: root.fg; font-size: 18px; font-weight: 600; }
-            Rectangle {
-                height: 6px; background: root.overlay;
-                Rectangle { x: 0; width: parent.width * max(0, min(100, root.data.signal)) / 100; height: parent.height; background: root.accent; }
-            }
-            Row { name: "SIGNAL"; value: "\{root.data.signal}%"; fg: root.fg; muted: root.muted; }
-            Row { name: "RATE"; value: "\{round(root.data.rate)} Mbps"; fg: root.fg; muted: root.muted; }
-            Row { name: "BAND"; value: root.data.band == "" ? "—" : root.data.band; fg: root.fg; muted: root.muted; }
+    forward-focus: keys;
+    function connect() {
+        if (count == 0) { return; }
+        if (root.data.networks[min(root.cursor, count - 1)].known || !root.data.networks[min(root.cursor, count - 1)].secured) {
+            root.action("connect|" + selected);
+        } else {
+            root.asking = true;
+            key-input.focus();
         }
-        TouchArea { clicked => { root.action("refresh"); } }
+    }
+    keys := FocusScope {
+        key-pressed(event) => {
+            if (root.asking) { return reject; }
+            if (event.text == "j" || event.text == Key.DownArrow) { root.cursor = max(0, min(root.cursor + 1, count - 1)); return accept; }
+            if (event.text == "k" || event.text == Key.UpArrow) { root.cursor = max(0, root.cursor - 1); return accept; }
+            if (event.text == Key.Return || event.text == "l") { root.connect(); return accept; }
+            if (event.text == "d") { root.action("disconnect"); return accept; }
+            if (event.text == "f" && count > 0) { root.action("forget|" + selected); return accept; }
+            if (event.text == "r") { root.action("refresh"); return accept; }
+            return reject;
+        }
+        Rectangle {
+            border-width: 1px;
+            border-color: root.overlay;
+            VerticalLayout {
+                padding: 14px; spacing: 8px;
+                HorizontalLayout {
+                    Text { text: root.data.connected ? root.data.ssid : "Not connected"; color: root.fg; font-size: 16px; font-weight: 600; horizontal-stretch: 1; overflow: elide; }
+                    Text { text: root.data.connected ? "\{root.data.signal}%  \{round(root.data.rate)} Mbps" : ""; color: root.muted; font-size: 12px; vertical-alignment: center; }
+                }
+                Rectangle { height: 1px; background: root.overlay; }
+                Flickable {
+                    vertical-stretch: 1;
+                    viewport-height: max(self.height, count * root.row-height);
+                    viewport-y: -max(0px, (root.cursor + 1) * root.row-height - self.height);
+                    interactive: false;
+                    VerticalLayout {
+                        alignment: start;
+                        for n[i] in root.data.networks: Rectangle {
+                            height: root.row-height;
+                            background: i == root.cursor ? root.surface : transparent;
+                            HorizontalLayout {
+                                padding-left: 8px; padding-right: 8px; spacing: 8px;
+                                Text { text: n.connected ? "●" : (n.known ? "○" : " "); color: n.connected ? root.accent : root.muted; width: 14px; vertical-alignment: center; }
+                                Text { text: n.ssid; color: i == root.cursor ? root.fg : (n.connected ? root.fg : root.muted); horizontal-stretch: 1; vertical-alignment: center; overflow: elide; }
+                                Text { text: n.secured ? "wpa" : "open"; color: root.muted; font-size: 11px; vertical-alignment: center; }
+                                Text { text: "\{n.signal}%"; color: root.muted; font-size: 12px; width: 36px; horizontal-alignment: right; vertical-alignment: center; }
+                            }
+                            TouchArea { clicked => { root.cursor = i; root.connect(); } }
+                        }
+                    }
+                }
+                Rectangle {
+                    visible: root.asking;
+                    height: root.asking ? 30px : 0px;
+                    border-width: 1px;
+                    border-color: root.accent;
+                    key-input := TextInput {
+                        x: 8px; width: parent.width - 16px; height: parent.height;
+                        color: root.fg;
+                        input-type: password;
+                        single-line: true;
+                        vertical-alignment: center;
+                        selection-background-color: root.accent;
+                        selection-foreground-color: root.bg;
+                        accepted => {
+                            root.action("connect|" + root.selected + "|" + self.text);
+                            self.text = "";
+                            root.asking = false;
+                            keys.focus();
+                        }
+                        key-pressed(event) => {
+                            if (event.text == Key.Escape) { self.text = ""; root.asking = false; keys.focus(); return accept; }
+                            return reject;
+                        }
+                    }
+                }
+                Text {
+                    text: root.data.error != "" ? root.data.error : (root.asking ? "Enter key for \{root.selected}, Escape cancels" : "↵ connect   d disconnect   f forget   r rescan");
+                    color: root.data.error != "" ? root.accent : root.muted;
+                    font-size: 11px;
+                    overflow: elide;
+                }
+            }
+        }
     }
 }
