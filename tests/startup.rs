@@ -153,3 +153,63 @@ fn enrolls_preexisting_windows_and_tracks_restoration() {
     }
     wait_for(|s| ids.iter().all(|id| contains(s, *id)));
 }
+#[test]
+#[ignore = "rearranges existing desktop windows; set WINARCHY_TEST_DAEMON and use a disposable config, no running daemon"]
+fn restores_remembered_placement_and_drops_stale_entries() {
+    assert!(state().is_none(), "stop Winarchy before the startup test");
+    let exe = std::env::var("WINARCHY_TEST_DAEMON").expect("set test daemon path");
+    let ids = fixtures();
+    let placement = |id: isize, pid: u32, workspace: u8| winarchy::state::Placement {
+        id,
+        pid,
+        exe: std::env::current_exe().unwrap().display().to_string(),
+        workspace,
+        floating: false,
+        fullscreen: false,
+        restore: winarchy::layout::Rect::default(),
+    };
+    let saved = winarchy::state::State {
+        active: 3,
+        recent: 1,
+        monitors: [0; 9],
+        clients: vec![
+            placement(ids[1], std::process::id(), 3),
+            // Same handle number, foreign process: a reused HWND must be ignored.
+            placement(ids[2], std::process::id() + 1, 5),
+            placement(0x7fff_0001, std::process::id(), 7),
+        ],
+    };
+    let path = winarchy::config::Config::home().join("state.json");
+    winarchy::state::State::save(&saved.to_json(), &path).unwrap();
+    let _session = Session {
+        daemon: std::process::Command::new(exe).spawn().unwrap(),
+        ids: ids.clone(),
+    };
+    let s = wait_for(|s| ids[..3].iter().all(|id| contains(s, *id)));
+    assert_eq!(s["workspace"], 3);
+    let workspace = |id: isize| {
+        s["clients"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["id"].as_i64() == Some(id as i64))
+            .map(|c| c["workspace"].as_u64().unwrap())
+            .unwrap()
+    };
+    assert_eq!(workspace(ids[1]), 3, "remembered placement restored");
+    assert_eq!(workspace(ids[0]), 1, "unknown windows land on workspace 1");
+    assert_eq!(workspace(ids[2]), 1, "foreign-process entry ignored");
+    // The daemon rewrites the file on its one-second maintenance tick.
+    let until = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < until
+        && winarchy::state::State::load(&path)
+            .is_some_and(|s| s.clients.iter().any(|c| c.id == 0x7fff_0001))
+    {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let reloaded = winarchy::state::State::load(&path).unwrap();
+    assert!(
+        reloaded.clients.iter().all(|c| c.id != 0x7fff_0001),
+        "stale entries are dropped from the saved state"
+    );
+}
