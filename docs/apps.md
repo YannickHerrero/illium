@@ -40,8 +40,10 @@ Three columns after yazi: the parent directory, the current directory and a
 preview of the entry under the cursor (a directory listing, the first lines of
 a text file, or size, type and age for anything else). Directories come
 first, in natural order (`file2` before `file10`), hidden entries are hidden
-until `.` shows them. Going up from a drive root lists the drives. Coming back
-to a directory puts the cursor where it was.
+until `.` shows them. Going up from a drive root lists the drives and the WSL
+distributions (`wsl: Debian`, reached through `\\wsl.localhost\`, read from
+the registry since that share cannot be enumerated). Coming back to a
+directory puts the cursor where it was.
 
 | Keys | Action |
 |---|---|
@@ -61,6 +63,7 @@ to a directory puts the cursor where it was.
 | `s` | Cycle the sort: name, size, modified |
 | `o` | Open the `terminal` alias of `apps.toml` in the current directory |
 | `~` | Home directory |
+| `w` | Root of the default WSL distribution |
 | `?` / `q` | Help / quit |
 
 Copy, move and delete run through the shell's file operation service, so

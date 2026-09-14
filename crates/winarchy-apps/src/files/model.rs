@@ -92,7 +92,7 @@ pub enum Action {
     CreateDir(PathBuf),
     CreateFile(PathBuf),
 }
-pub const HELP: [&str; 14] = [
+pub const HELP: [&str; 15] = [
     "h / l, Enter       parent / enter or open",
     "j / k, gg / G      move, first / last",
     "Space, v, Ctrl+a   select, visual mode, select all",
@@ -105,6 +105,7 @@ pub const HELP: [&str; 14] = [
     "s                  cycle sort: name, size, modified",
     "o                  terminal here",
     "~                  home directory",
+    "w                  default WSL distribution (drives view lists them all)",
     "?                  this help",
     "q                  quit",
 ];
@@ -223,23 +224,29 @@ pub fn read_dir(dir: &Path) -> Result<(Vec<Entry>, Option<String>), String> {
     }
     Ok((entries, cut))
 }
+/// Top of the tree: the drives, then the WSL distributions as `wsl: <name>`.
 #[cfg(windows)]
-pub fn roots() -> Vec<PathBuf> {
-    let mask = unsafe { windows::Win32::Storage::FileSystem::GetLogicalDrives() };
-    (0..26)
-        .filter(|i| mask & (1 << i) != 0)
-        .map(|i| PathBuf::from(format!("{}:\\", (b'A' + i as u8) as char)))
-        .collect()
+pub fn roots() -> Vec<(String, PathBuf)> {
+    super::win::roots()
 }
 #[cfg(not(windows))]
-pub fn roots() -> Vec<PathBuf> {
-    vec![PathBuf::from("/")]
+pub fn roots() -> Vec<(String, PathBuf)> {
+    vec![("/".into(), PathBuf::from("/"))]
+}
+/// Root of the default WSL distribution, when one is registered.
+#[cfg(windows)]
+fn wsl_root() -> Option<PathBuf> {
+    super::win::default_wsl_root()
+}
+#[cfg(not(windows))]
+fn wsl_root() -> Option<PathBuf> {
+    None
 }
 fn root_entries() -> Vec<Entry> {
     roots()
         .into_iter()
-        .map(|path| Entry {
-            name: path.to_string_lossy().into_owned(),
+        .map(|(name, path)| Entry {
+            name,
             path,
             dir: true,
             hidden: false,
@@ -588,6 +595,13 @@ impl Files {
                 self.enter(Some(self.home.clone()));
                 Action::None
             }
+            Key::Char('w') => {
+                match wsl_root() {
+                    Some(root) => self.enter(Some(root)),
+                    None => self.notice = "no WSL distribution registered".into(),
+                }
+                Action::None
+            }
             Key::Char('?') => {
                 self.mode = Mode::Help;
                 Action::None
@@ -914,5 +928,9 @@ mod tests {
         f.key(Key::Char('l'), false, 10);
         assert!(f.cwd.is_some());
         assert_eq!(f.parent_cursor, Some(0));
+        if cfg!(not(windows)) {
+            f.key(Key::Char('w'), false, 10);
+            assert_eq!(f.status().0, "no WSL distribution registered");
+        }
     }
 }
