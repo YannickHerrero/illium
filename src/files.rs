@@ -17,21 +17,24 @@ fn reparse(metadata: &std::fs::Metadata) -> bool {
     }
 }
 pub fn read_config(path: &Path) -> Result<Vec<u8>, String> {
+    read_bounded(path, MAX_CONFIG_BYTES)
+}
+pub fn read_bounded(path: &Path, max: usize) -> Result<Vec<u8>, String> {
     let result = (|| -> Result<Vec<u8>, String> {
         let metadata = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
         if !metadata.is_file() || reparse(&metadata) {
             return Err("expected a regular non-reparse file".into());
         }
-        if metadata.len() > MAX_CONFIG_BYTES as u64 {
-            return Err("configuration exceeds 64 KiB".into());
+        if metadata.len() > max as u64 {
+            return Err(format!("file exceeds {} KiB", max / 1024));
         }
         let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
         let mut bytes = Vec::new();
-        file.take((MAX_CONFIG_BYTES + 1) as u64)
+        file.take((max + 1) as u64)
             .read_to_end(&mut bytes)
             .map_err(|e| e.to_string())?;
-        if bytes.len() > MAX_CONFIG_BYTES {
-            return Err("configuration exceeds 64 KiB".into());
+        if bytes.len() > max {
+            return Err(format!("file exceeds {} KiB", max / 1024));
         }
         Ok(bytes)
     })();
