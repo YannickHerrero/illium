@@ -52,6 +52,10 @@ export component FilesWindow inherits Window {
                 Text { x: 10px; text: root.path; color: Palette.accent; font-weight: 600; vertical-alignment: center; width: parent.width - 20px; overflow: elide; }
             }
             HorizontalLayout {
+                // Constant preferred size: the window must not follow the row
+                // count, the window manager decides its size.
+                preferred-height: 540px;
+                min-height: 80px;
                 vertical-stretch: 1;
                 spacing: 1px;
                 FileList { width: 22%; rows: root.parent-rows; cursor: root.parent-cursor; }
