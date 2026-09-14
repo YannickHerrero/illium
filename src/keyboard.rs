@@ -70,7 +70,7 @@ mod tests {
         assert_eq!(bs.len(), 45);
         assert!(
             bs.iter()
-                .all(|b| b.modifiers & 1 != 0 || b.command == Command::Screenshot)
+                .all(|b| b.modifiers & 1 != 0 || matches!(b.command, Command::App(_)))
         );
         assert_eq!(
             bs.iter()

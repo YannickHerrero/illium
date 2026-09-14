@@ -9,7 +9,7 @@
 "Alt+S" = "workspace next-active"
 "Alt+D" = "workspace recent"
 "Alt+Shift+R" = "config reload"
-"Super+Shift+S" = "screenshot"
+"Super+Shift+S" = "app shot"
 "Alt+H" = "window focus left"
 "Alt+Shift+H" = "window move left"
 "Alt+Left" = "window focus left"

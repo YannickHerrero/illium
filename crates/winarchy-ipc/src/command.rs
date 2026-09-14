@@ -29,7 +29,8 @@ pub enum Command {
     Launcher,
     /// Session menu: hibernate, lock, restart, shut down, quit.
     Meta,
-    Screenshot,
+    /// Launch a companion application from `winarchy-apps.exe`: `shot`, `tasks`, `files`.
+    App(String),
     Reload,
     Theme(String),
     Explorer(bool),
@@ -68,7 +69,9 @@ impl FromStr for Command {
             ["spawn", app] => Self::Spawn((*app).into()),
             ["launcher", "toggle"] => Self::Launcher,
             ["meta", "toggle"] => Self::Meta,
-            ["screenshot"] => Self::Screenshot,
+            ["app", name] if name.chars().all(|c| c.is_ascii_lowercase()) => {
+                Self::App((*name).into())
+            }
             ["config", "reload"] => Self::Reload,
             ["theme", "set", name] if !name.contains(['/', '\\', '.']) => {
                 Self::Theme((*name).into())
@@ -99,12 +102,16 @@ mod tests {
             "window focus left".parse(),
             Ok(Command::Focus(Direction::Left))
         );
+        assert_eq!("app shot".parse(), Ok(Command::App("shot".into())));
         for s in [
             "workspace 0",
             "workspace 10",
             "window move diagonal",
             "quit now",
             "theme set ../bad",
+            "app",
+            "app ../x",
+            "app Shot",
         ] {
             assert!(s.parse::<Command>().is_err(), "{s}");
         }

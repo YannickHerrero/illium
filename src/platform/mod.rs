@@ -451,11 +451,11 @@ impl Manager {
             Command::Meta => {
                 self.shell.toggle_meta(&self.config, self.area())?;
             }
-            Command::Screenshot => {
+            Command::App(name) => {
                 let tool = std::env::current_exe()
                     .map_err(|e| e.to_string())?
-                    .with_file_name("winarchy-shot.exe");
-                native::spawn(&format!("\"{}\"", tool.display()))?;
+                    .with_file_name("winarchy-apps.exe");
+                native::spawn(&format!("\"{}\" {name}", tool.display()))?;
             }
             Command::Reload => self.reload()?,
             Command::Theme(name) => {
