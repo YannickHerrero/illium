@@ -4929,14 +4929,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "winarchy-shot"
-version = "0.1.0"
-dependencies = [
- "windows",
- "winresource",
-]
-
-[[package]]
 name = "winarchy-theme"
 version = "0.1.0"
 dependencies = [
