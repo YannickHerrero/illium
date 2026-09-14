@@ -11,6 +11,7 @@
 "Alt+Shift+R" = "config reload"
 "Super+Shift+S" = "app shot"
 "Alt+Shift+Escape" = "app tasks"
+"Alt+E" = "app files"
 "Alt+H" = "window focus left"
 "Alt+Shift+H" = "window move left"
 "Alt+Left" = "window focus left"
