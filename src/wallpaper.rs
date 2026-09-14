@@ -1,4 +1,5 @@
 //! Per-theme wallpaper memory, separate from distributed palettes and placement state.
+pub mod loader;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path};
 use winarchy_theme::pack::plain_name;
