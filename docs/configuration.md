@@ -59,10 +59,10 @@ height = 28
 left = ["workspaces"]
 center = ["window-title"]
 right = ["volume", "battery", "clock"]
-clock_format = "%H:%M"
+clock_format = "%A %d %b - %H:%M"
 ```
 
-Positions: top/bottom. Height: 16–100 logical pixels. Text modules: window-title, volume, battery, clock. Workspaces are supported on the left. Battery disappears when unavailable; audio is read from the default render endpoint. Clock substitutions: `%H`, `%M`, `%S`. A bar is created on every monitor; its reservation is calculated directly, never from Explorer's taskbar work area.
+Positions: top/bottom. Height: 16–100 logical pixels. Text modules: window-title, volume, battery, clock. Workspaces are supported on the left. Battery disappears when unavailable; audio is read from the default render endpoint. Clock substitutions, in English: `%A` weekday, `%a` short weekday, `%d` day, `%B` month, `%b` short month (Jan, Feb, Mar, Apr, May, June, July, Aug, Sept, Oct, Nov, Dec), `%H`, `%M`, `%S`. A bar is created on every monitor; its reservation is calculated directly, never from Explorer's taskbar work area.
 
 ## launcher.toml
 

@@ -1,4 +1,5 @@
 pub use winarchy_ipc::{command, protocol};
+pub mod clock;
 pub mod config;
 pub mod files;
 pub mod keyboard;

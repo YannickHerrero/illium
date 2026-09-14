@@ -27,13 +27,17 @@ pub fn text(c: &Config, title: &str, modules: &[String]) -> String {
             "volume" => volume(),
             "clock" => unsafe {
                 let t = GetLocalTime();
-                Some(
-                    c.bar
-                        .clock_format
-                        .replace("%H", &format!("{:02}", t.wHour))
-                        .replace("%M", &format!("{:02}", t.wMinute))
-                        .replace("%S", &format!("{:02}", t.wSecond)),
-                )
+                Some(crate::clock::format(
+                    &c.bar.clock_format,
+                    crate::clock::Moment {
+                        weekday: t.wDayOfWeek as u8,
+                        day: t.wDay as u8,
+                        month: t.wMonth as u8,
+                        hour: t.wHour as u8,
+                        minute: t.wMinute as u8,
+                        second: t.wSecond as u8,
+                    },
+                ))
             },
             "battery" => unsafe {
                 let mut p = SYSTEM_POWER_STATUS::default();

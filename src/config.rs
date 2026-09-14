@@ -220,15 +220,7 @@ impl Config {
                 }
             }
         }
-        let clock = c
-            .bar
-            .clock_format
-            .replace("%H", "")
-            .replace("%M", "")
-            .replace("%S", "");
-        if clock.contains('%') {
-            return Err("clock_format supports only %H, %M, %S".into());
-        }
+        crate::clock::validate(&c.bar.clock_format)?;
         for r in &c.rules.rules {
             if r.workspace.is_some_and(|n| !(1..=9).contains(&n)) {
                 return Err("rule workspace must be 1..9".into());
