@@ -82,6 +82,11 @@ impl Manager {
         previous != self.model.clients.len()
     }
     fn add(&mut self, id: isize) -> bool {
+        self.enroll(id, None)
+    }
+    /// A remembered placement wins over the active workspace, the rules and
+    /// the floating heuristics: the user had already arranged that window.
+    fn enroll(&mut self, id: isize, saved: Option<&Placement>) -> bool {
         if self.prune() {
             self.layout();
         }
@@ -109,6 +114,13 @@ impl Manager {
                 workspace = r.workspace.unwrap_or(workspace);
             }
         }
+        let (mut fullscreen, mut restore) = (false, native::rect(id));
+        if let Some(p) = saved {
+            workspace = p.workspace;
+            floating = p.floating;
+            fullscreen = p.fullscreen;
+            restore = p.restore;
+        }
         let generation = match session::tag(id) {
             Ok(g) => g,
             Err(e) => {
@@ -124,9 +136,9 @@ impl Manager {
             generation,
             workspace,
             floating,
-            fullscreen: false,
+            fullscreen,
             hidden: false,
-            restore: native::rect(id),
+            restore,
         });
         tracing::info!(id, workspace, "window added");
         true
@@ -733,11 +745,23 @@ pub fn run(replace: bool) -> Result<(), String> {
             let foreground = unsafe { GetForegroundWindow().0 as isize };
             m.shell.configure(&config, &monitors)?;
             m.applets.load(&config);
-            for id in native::enumerate() {
-                m.add(id);
+            let mut state = State::load(&home.join("state.json")).unwrap_or_default();
+            state.retain_alive(native::process);
+            if !state.clients.is_empty() {
+                m.model.active = state.active;
+                m.model.recent = state.recent;
+                m.model.monitors = state.monitors;
+                for index in &mut m.model.monitors {
+                    *index = (*index).min(monitors.len().saturating_sub(1));
+                }
             }
+            for id in native::enumerate() {
+                m.enroll(id, state.placement(id));
+            }
+            m.model.clients.sort_by_key(|c| state.order(c.id));
             tracing::info!(
                 count = m.model.clients.len(),
+                restored = state.clients.len(),
                 "existing application windows enrolled"
             );
             m.model.focused = m
