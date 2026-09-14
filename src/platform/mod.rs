@@ -56,6 +56,8 @@ struct Manager {
     /// Popup closed by a press on the bar: the module click that follows the
     /// release must not reopen it.
     just_closed: Option<(String, std::time::Instant)>,
+    /// Placement may have changed since the last save.
+    dirty: bool,
 }
 impl Manager {
     fn prune(&mut self) -> bool {
@@ -186,6 +188,7 @@ impl Manager {
         r
     }
     fn layout(&mut self) {
+        self.dirty = true;
         self.prune();
         for c in &mut self.model.clients {
             let visible = c.workspace == self.model.active;
@@ -523,6 +526,7 @@ impl Manager {
                                 && r.y + r.h / 2 < m.y + m.h
                         }) {
                             self.model.monitors[(self.model.active - 1) as usize] = index;
+                            self.dirty = true;
                         }
                     }
                     self.shell.refresh(&self.model, &self.config, &self.applets);
@@ -725,6 +729,7 @@ pub fn run(replace: bool) -> Result<(), String> {
         borders: std::collections::HashMap::new(),
         applets: applet::Runtime::new(tx.clone()),
         just_closed: None,
+        dirty: false,
     };
     let manager = Rc::new(RefCell::new(manager));
     let startup_error = Rc::new(RefCell::new(None));
@@ -841,11 +846,15 @@ pub fn run(replace: bool) -> Result<(), String> {
             if m.prune() {
                 m.layout();
             }
-            let json = m.snapshot().to_json();
-            if json != saved {
-                match State::save(&json, &state_path) {
-                    Ok(()) => saved = json,
-                    Err(e) => tracing::warn!(%e, "placement state not saved"),
+            // Layout runs in bursts; the tick debounces them into one write.
+            if m.dirty {
+                m.dirty = false;
+                let json = m.snapshot().to_json();
+                if json != saved {
+                    match State::save(&json, &state_path) {
+                        Ok(()) => saved = json,
+                        Err(e) => tracing::warn!(%e, "placement state not saved"),
+                    }
                 }
             }
             if maintenance.take_overflow() {
