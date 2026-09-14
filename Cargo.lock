@@ -4936,6 +4936,7 @@ dependencies = [
 name = "winarchy-theme"
 version = "0.1.0"
 dependencies = [
+ "image",
  "serde",
  "toml 0.8.23",
 ]
@@ -4945,6 +4946,7 @@ name = "winarchyctl"
 version = "0.1.0"
 dependencies = [
  "winarchy-ipc",
+ "winarchy-theme",
  "winresource",
 ]
 

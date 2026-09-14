@@ -222,16 +222,7 @@ fn parse<T: serde::de::DeserializeOwned>(home: &Path, name: &str) -> Result<T, S
 }
 impl Config {
     pub fn home() -> PathBuf {
-        std::env::var_os("WINARCHY_CONFIG_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                PathBuf::from(
-                    std::env::var_os("USERPROFILE")
-                        .or_else(|| std::env::var_os("HOME"))
-                        .unwrap_or_default(),
-                )
-                .join(".config/winarchy")
-            })
+        winarchy_theme::config_home()
     }
     pub fn install(home: &Path) -> Result<(), String> {
         use std::io::Write;

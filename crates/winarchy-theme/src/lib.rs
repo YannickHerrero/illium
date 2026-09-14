@@ -1,6 +1,7 @@
 //! Theme palette read from `themes/<name>.toml` under the configuration home.
 //! No graphics dependency: the daemon and every application convert the
 //! `#rrggbb` strings to their own color type.
+pub mod pack;
 use serde::Deserialize;
 use std::path::Path;
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -29,6 +30,19 @@ pub struct Theme {
 #[derive(Deserialize)]
 struct Global {
     theme: String,
+}
+/// Configuration location shared by the daemon, installer and external consumers.
+pub fn config_home() -> std::path::PathBuf {
+    std::env::var_os("WINARCHY_CONFIG_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::path::PathBuf::from(
+                std::env::var_os("USERPROFILE")
+                    .or_else(|| std::env::var_os("HOME"))
+                    .unwrap_or_default(),
+            )
+            .join(".config/winarchy")
+        })
 }
 pub const DEFAULT_NAME: &str = "catppuccin-mocha";
 const DEFAULT: &str = include_str!("../../../config/themes/catppuccin-mocha.toml");
@@ -172,7 +186,7 @@ mod tests {
                         "{field} with {count} colors must be rejected"
                     );
                 }
-                let colors = vec!["\"#123456\""; 8].join(", ");
+                let colors = ["\"#123456\""; 8].join(", ");
                 let valid = format!("{legacy}{field} = [{colors}]\n");
                 assert!(Theme::parse(&valid).is_ok());
                 assert!(Theme::parse(&valid.replacen("#123456", "#xyzxyz", 1)).is_err());

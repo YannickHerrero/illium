@@ -8,6 +8,7 @@ repository = "https://github.com/YannickHerrero/winarchy"
 
 [dependencies]
 winarchy-ipc = { path = "../winarchy-ipc" }
+winarchy-theme = { path = "../winarchy-theme" }
 
 [build-dependencies]
 winresource = "0.1"
