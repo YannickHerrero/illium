@@ -221,8 +221,16 @@ impl Shell {
                 );
             }
         }
+        for (name, target) in native::packaged_apps() {
+            self.apps.push(App {
+                name,
+                target,
+                shortcut: true,
+            });
+        }
         self.apps.sort_by_key(|a| a.name.to_lowercase());
         self.apps.dedup_by(|a, b| a.name == b.name);
+        tracing::info!(count = self.apps.len(), "applications indexed");
         self.search("", c.launcher.max_results);
         Ok(())
     }

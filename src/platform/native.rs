@@ -508,6 +508,51 @@ pub fn spawn(command: &str) -> Result<(), String> {
         Ok(())
     }
 }
+/// Packaged (MSIX/Store) applications from the Applications shell folder,
+/// as (display name, `shell:AppsFolder\AUMID`) launch targets. They have no
+/// Start Menu .lnk files, so the shortcut scan never sees them.
+pub fn packaged_apps() -> Vec<(String, String)> {
+    use windows::Win32::{System::Com::*, UI::Shell::*};
+    let mut out = Vec::new();
+    unsafe {
+        // The UI toolkit may already have initialized COM on this thread.
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let Ok(folder) =
+            SHGetKnownFolderItem::<IShellItem>(&FOLDERID_AppsFolder, KF_FLAG_DEFAULT, None)
+        else {
+            return out;
+        };
+        let Ok(items) =
+            folder.BindToHandler::<Option<&IBindCtx>, IEnumShellItems>(None, &BHID_EnumItems)
+        else {
+            return out;
+        };
+        let text = |name: windows::core::PWSTR| {
+            let value = name.to_string().unwrap_or_default();
+            CoTaskMemFree(Some(name.0.cast()));
+            value
+        };
+        while out.len() < 8192 {
+            let mut batch = [None];
+            let mut fetched = 0;
+            if items.Next(&mut batch, Some(&mut fetched)).is_err() || fetched == 0 {
+                break;
+            }
+            let Some(item) = batch[0].take() else { break };
+            let (Ok(name), Ok(parsing)) = (
+                item.GetDisplayName(SIGDN_NORMALDISPLAY).map(text),
+                item.GetDisplayName(SIGDN_PARENTRELATIVEPARSING).map(text),
+            ) else {
+                continue;
+            };
+            // Unpackaged entries duplicate the .lnk scan; packaged ones carry an AUMID.
+            if parsing.contains('!') && !name.is_empty() {
+                out.push((name, format!("shell:AppsFolder\\{parsing}")));
+            }
+        }
+    }
+    out
+}
 pub fn shortcut(path: &str) -> Result<(), String> {
     unsafe {
         let path = wide(path);
