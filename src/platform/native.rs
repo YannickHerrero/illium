@@ -212,7 +212,35 @@ impl Drop for Border {
 }
 /// Switches the per-user Windows color mode (apps and system surfaces) and
 /// broadcasts the settings change so open applications follow.
+/// Serial latest-value worker: broadcasts can wait 200ms per foreign window,
+/// so they must not run on the desktop/UI thread. Rapid toggles still end in the
+/// most recently requested Windows mode.
 pub fn color_mode(light: bool) {
+    use std::sync::{Condvar, Mutex, Once};
+    static REQUEST: (Mutex<Option<bool>>, Condvar) = (Mutex::new(None), Condvar::new());
+    static START: Once = Once::new();
+    START.call_once(|| {
+        std::thread::spawn(|| {
+            loop {
+                let mut pending = REQUEST.0.lock().unwrap();
+                while pending.is_none() {
+                    pending = REQUEST.1.wait(pending).unwrap();
+                }
+                let light = pending.take().unwrap();
+                drop(pending);
+                let started = std::time::Instant::now();
+                apply_color_mode(light);
+                tracing::debug!(
+                    elapsed_ms = started.elapsed().as_millis(),
+                    "Windows color mode synchronized"
+                );
+            }
+        });
+    });
+    *REQUEST.0.lock().unwrap() = Some(light);
+    REQUEST.1.notify_one();
+}
+fn apply_color_mode(light: bool) {
     use windows::Win32::System::Registry::*;
     unsafe {
         let mut key = HKEY::default();
