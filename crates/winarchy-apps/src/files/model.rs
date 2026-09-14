@@ -297,6 +297,10 @@ impl Files {
         self.cursor = remembered.unwrap_or(0);
         self.refresh_preview();
     }
+    /// Changes to `dir`, as the caller's request rather than a key.
+    pub fn go(&mut self, dir: PathBuf) {
+        self.enter(Some(dir));
+    }
     /// Re-reads the current directory, keeping the cursor on the same name.
     pub fn reload(&mut self) {
         let name = self.entries.get(self.cursor).map(|e| e.name.clone());

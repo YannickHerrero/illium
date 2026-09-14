@@ -34,3 +34,23 @@ pub fn strings(lines: &[&str]) -> slint::ModelRc<slint::SharedString> {
             .collect::<Vec<_>>(),
     ))
 }
+pub fn init_com() {
+    unsafe {
+        let _ = windows::Win32::System::Com::CoInitializeEx(
+            None,
+            windows::Win32::System::Com::COINIT_APARTMENTTHREADED,
+        );
+    }
+}
+/// Brings an already shown window to the front, for a second `show` request.
+pub fn raise(window: &impl slint::ComponentHandle) {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use windows::Win32::{Foundation::HWND, UI::WindowsAndMessaging::SetForegroundWindow};
+    if let Ok(handle) = window.window().window_handle().window_handle()
+        && let RawWindowHandle::Win32(h) = handle.as_raw()
+    {
+        unsafe {
+            let _ = SetForegroundWindow(HWND(h.hwnd.get() as *mut _));
+        }
+    }
+}
