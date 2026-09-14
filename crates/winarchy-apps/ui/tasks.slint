@@ -1,0 +1,51 @@
+import { Palette, Column, StatusLine, KeyHelp } from "common.slint";
+export struct TaskRow { pid: int, name: string, cpu: string, memory: string, accessible: bool }
+export component TasksWindow inherits Window {
+    title: "Tasks";
+    preferred-width: 720px;
+    preferred-height: 480px;
+    in property <[TaskRow]> rows;
+    in property <int> cursor;
+    in property <string> status-left;
+    in property <string> status-right;
+    in property <bool> help;
+    in property <[string]> help-lines;
+    /// Key text as Slint reports it, with the control and shift state.
+    callback key(string, bool, bool);
+    out property <int> page: column.page;
+    background: Palette.bg;
+    forward-focus: keys;
+    keys := FocusScope {
+        key-pressed(event) => {
+            root.key(event.text, event.modifiers.control, event.modifiers.shift);
+            return accept;
+        }
+        VerticalLayout {
+            HorizontalLayout {
+                height: 26px;
+                padding-left: 10px; padding-right: 10px; spacing: 12px;
+                Text { text: "PID"; color: Palette.muted; font-size: 11px; width: 60px; vertical-alignment: center; }
+                Text { text: "NAME"; color: Palette.muted; font-size: 11px; horizontal-stretch: 1; vertical-alignment: center; }
+                Text { text: "CPU"; color: Palette.muted; font-size: 11px; width: 60px; horizontal-alignment: right; vertical-alignment: center; }
+                Text { text: "MEMORY"; color: Palette.muted; font-size: 11px; width: 80px; horizontal-alignment: right; vertical-alignment: center; }
+            }
+            column := Column {
+                cursor: root.cursor;
+                vertical-stretch: 1;
+                for row[i] in root.rows: Rectangle {
+                    height: column.row-height;
+                    background: i == root.cursor ? Palette.surface : transparent;
+                    HorizontalLayout {
+                        padding-left: 10px; padding-right: 10px; spacing: 12px;
+                        Text { text: "\{row.pid}"; color: Palette.muted; width: 60px; vertical-alignment: center; }
+                        Text { text: row.name; color: row.accessible ? Palette.fg : Palette.muted; horizontal-stretch: 1; vertical-alignment: center; overflow: elide; }
+                        Text { text: row.cpu; color: Palette.fg; width: 60px; horizontal-alignment: right; vertical-alignment: center; }
+                        Text { text: row.memory; color: Palette.fg; width: 80px; horizontal-alignment: right; vertical-alignment: center; }
+                    }
+                }
+            }
+            StatusLine { left: root.status-left; right: root.status-right; }
+        }
+    }
+    if root.help: KeyHelp { lines: root.help-lines; }
+}

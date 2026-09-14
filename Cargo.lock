@@ -4915,6 +4915,9 @@ dependencies = [
 name = "winarchy-apps"
 version = "0.1.0"
 dependencies = [
+ "slint",
+ "slint-build",
+ "winarchy-theme",
  "windows",
  "winresource",
 ]

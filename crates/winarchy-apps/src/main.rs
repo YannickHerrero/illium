@@ -10,9 +10,11 @@ mod log;
 #[cfg(windows)]
 mod shot;
 mod tasks;
+#[cfg(windows)]
+mod ui;
 /// Exit code for a missing or unknown subcommand, as for `winarchyctl` syntax errors.
 const USAGE: i32 = 2;
-const UNKNOWN: &str = "unknown application (expected: shot)";
+const UNKNOWN: &str = "unknown application (expected: shot, tasks)";
 fn main() {
     std::panic::set_hook(Box::new(|info| log::write(&format!("panic: {info}"))));
     let name = std::env::args().nth(1).unwrap_or_default();
@@ -25,6 +27,7 @@ fn main() {
 fn run(name: &str) -> Result<(), String> {
     match name {
         "shot" => shot::run(),
+        "tasks" => tasks::run(),
         _ => Err(UNKNOWN.into()),
     }
 }
