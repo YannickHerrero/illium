@@ -199,6 +199,7 @@ impl Manager {
             } else {
                 &self.config.theme.overlay
             };
+            native::dwm_border(c.id, Some(color));
             let frame = native::frame(c.id);
             if let Some(b) = match self.borders.entry(c.id) {
                 std::collections::hash_map::Entry::Occupied(e) => Some(e.into_mut()),
@@ -240,6 +241,9 @@ impl Manager {
         self.config = config;
         for c in &self.model.clients {
             native::corners(c.id, self.config.wm.square_corners);
+            if self.config.wm.border_width <= 0 {
+                native::dwm_border(c.id, None);
+            }
         }
         self.layout();
         tracing::info!("configuration reloaded");
@@ -534,6 +538,7 @@ impl Drop for Manager {
             }
             native::show(c.id, true);
             native::corners(c.id, false);
+            native::dwm_border(c.id, None);
             session::untag(c.id);
             if c.fullscreen {
                 native::position(c.id, c.restore, None);

@@ -90,6 +90,19 @@ pub fn frame(id: isize) -> Rect {
         }
     }
 }
+/// Tints the one-pixel border the DWM draws at the frame edge so it merges
+/// with the ring around it; `None` restores the system color.
+pub fn dwm_border(id: isize, color: Option<&str>) {
+    let value = color.map_or(DWMWA_COLOR_DEFAULT, |c| colorref(c).0);
+    unsafe {
+        let _ = DwmSetWindowAttribute(
+            hwnd(id),
+            DWMWA_BORDER_COLOR,
+            (&value as *const u32).cast(),
+            std::mem::size_of::<u32>() as u32,
+        );
+    }
+}
 const BORDER_CLASS: &str = "WinarchyBorder";
 const BORDER_COLOR: &str = "WinarchyBorderColor";
 fn colorref(color: &str) -> COLORREF {
