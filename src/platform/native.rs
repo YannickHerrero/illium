@@ -270,7 +270,12 @@ pub fn metadata(id: isize) -> Option<(String, String, bool)> {
             }
             let _ = CloseHandle(p);
         }
-        let floating = class == "#32770" || GetWindow(h, GW_OWNER).is_ok_and(|o| !o.is_invalid());
+        // Fixed-size and always-on-top windows (Teams' compact meeting view,
+        // for one) are overlays; stretching them into a tile serves nobody.
+        let floating = class == "#32770"
+            || GetWindow(h, GW_OWNER).is_ok_and(|o| !o.is_invalid())
+            || style & WS_THICKFRAME.0 == 0
+            || ex & WS_EX_TOPMOST.0 != 0;
         Some((exe, class, floating))
     }
 }
