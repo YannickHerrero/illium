@@ -305,6 +305,9 @@ impl Manager {
         input::update(bindings);
         self.config = config;
         self.applets.load(&self.config);
+        if let Some(mode) = &self.config.theme.mode {
+            native::color_mode(mode == "light");
+        }
         for c in &self.model.clients {
             native::corners(c.id, self.config.wm.square_corners);
             if self.config.wm.border_width <= 0 {
@@ -754,6 +757,9 @@ pub fn run(replace: bool) -> Result<(), String> {
             let foreground = unsafe { GetForegroundWindow().0 as isize };
             m.shell.configure(&config, &monitors)?;
             m.applets.load(&config);
+            if let Some(mode) = &config.theme.mode {
+                native::color_mode(mode == "light");
+            }
             let mut state = State::load(&home.join("state.json")).unwrap_or_default();
             state.retain_alive(native::process);
             if !state.clients.is_empty() {

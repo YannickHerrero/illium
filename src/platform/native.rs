@@ -210,6 +210,64 @@ impl Drop for Border {
         }
     }
 }
+/// Switches the per-user Windows color mode (apps and system surfaces) and
+/// broadcasts the settings change so open applications follow.
+pub fn color_mode(light: bool) {
+    use windows::Win32::System::Registry::*;
+    unsafe {
+        let mut key = HKEY::default();
+        let path = wide("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize");
+        if RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(path.as_ptr()),
+            None,
+            PCWSTR::null(),
+            REG_OPTION_NON_VOLATILE,
+            KEY_QUERY_VALUE | KEY_SET_VALUE,
+            None,
+            &mut key,
+            None,
+        )
+        .is_err()
+        {
+            return;
+        }
+        let wanted = u32::from(light).to_le_bytes();
+        let mut changed = false;
+        for name in ["AppsUseLightTheme", "SystemUsesLightTheme"] {
+            let name = wide(name);
+            let mut current = [0u8; 4];
+            let mut size = 4u32;
+            let same = RegQueryValueExW(
+                key,
+                PCWSTR(name.as_ptr()),
+                None,
+                None,
+                Some(current.as_mut_ptr()),
+                Some(&mut size),
+            )
+            .is_ok()
+                && current == wanted;
+            if !same {
+                let _ = RegSetValueExW(key, PCWSTR(name.as_ptr()), None, REG_DWORD, Some(&wanted));
+                changed = true;
+            }
+        }
+        let _ = RegCloseKey(key);
+        if changed {
+            let area = wide("ImmersiveColorSet");
+            let _ = SendMessageTimeoutW(
+                HWND_BROADCAST,
+                WM_SETTINGCHANGE,
+                WPARAM(0),
+                LPARAM(area.as_ptr() as isize),
+                SMTO_ABORTIFHUNG,
+                200,
+                None,
+            );
+        }
+    }
+}
 pub fn minimized(id: isize) -> bool {
     unsafe { IsIconic(hwnd(id)).as_bool() }
 }

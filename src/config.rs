@@ -99,6 +99,9 @@ pub struct Theme {
     pub green: String,
     pub yellow: String,
     pub red: String,
+    /// Windows color mode to apply with this theme: "dark" or "light".
+    #[serde(default)]
+    pub mode: Option<String>,
 }
 #[derive(Clone)]
 pub struct Config {
@@ -310,6 +313,11 @@ impl Config {
             }
         }
         crate::clock::validate(&c.bar.clock_format)?;
+        if let Some(mode) = &c.theme.mode
+            && !["dark", "light"].contains(&mode.as_str())
+        {
+            return Err("theme mode must be \"dark\" or \"light\"".into());
+        }
         for r in &c.rules.rules {
             if r.workspace.is_some_and(|n| !(1..=9).contains(&n)) {
                 return Err("rule workspace must be 1..9".into());
