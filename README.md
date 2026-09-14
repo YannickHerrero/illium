@@ -2,7 +2,7 @@
 
 [![Made with Slint](https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-whitebg.png)](https://slint.dev)
 
-A minimal, keyboard-first Windows 11 x64 tiling window manager and experimental shell, written in Rust. One process owns the Slint background, per-monitor bars and fuzzy application launcher. No web runtime, desktop icons, tray or shell-registry replacement.
+A minimal, keyboard-first Windows 11 x64 tiling window manager and experimental shell, written in Rust. One process owns the Slint background, per-monitor bars and fuzzy application launcher; a second executable holds the companion applications (file manager, task manager, screenshot). No web runtime, desktop icons, tray or shell-registry replacement.
 
 **Status: V1 implementation under integration validation — not yet a verified V1 release.** See [test results and limitations](docs/testing.md). Do not use as your unattended primary shell yet.
 
@@ -38,7 +38,8 @@ This does **not** stop Explorer. Defaults are installed without overwriting exis
 - Catppuccin Mocha/Latte; modular TOML configuration and directory-change reloads
 - Start Menu shortcut discovery, fuzzy search, native process launching
 - Theme background, bar with workspaces, clock, battery, CPU and memory modules and detail popups
-- Applets: icon + Slint popup fed by a PowerShell script or a built-in provider, examples included (weather, wifi, calendar)
+- Applets: icon + Slint popup fed by a PowerShell script or a built-in provider, examples included (weather, wifi network chooser, calendar, volume)
+- Companion applications sharing the theme: keyboard-first file manager after yazi, task manager, region screenshot
 - Monitor enumeration, display-change handling and physical-pixel layout
 - Opt-in Explorer stop/restore session, with no permanent registry changes
 
@@ -48,7 +49,9 @@ This does **not** stop Explorer. Defaults are installed without overwriting exis
 |---|---|
 | Alt+Enter | WezTerm |
 | Alt+Space | Launcher |
-| Alt+Shift+Space | Menu: System (hibernate, lock, restart, shut down, quit) and Theme |
+| Alt+Shift+Space | Menu: Apps, System (hibernate, lock, restart, shut down, quit) and Theme |
+| Alt+E | File manager |
+| Alt+Shift+Escape | Task manager |
 | Alt+H/J/K/L or arrows | Focus left/down/up/right |
 | Alt+Shift+H/J/K/L or arrows | Swap tiled windows directionally |
 | Alt+1…9 | Workspace |
@@ -63,7 +66,7 @@ All bindings come from `keybindings.toml`, not hard-coded actions in the keyboar
 
 ## Documentation
 
-[Installation](docs/installation.md) · [Usage](docs/usage.md) · [Configuration](docs/configuration.md) · [Applets](docs/applets.md) · [Themes](docs/themes.md) · [Architecture](docs/architecture.md) · [Recovery](docs/recovery.md) · [Testing](docs/testing.md)
+[Installation](docs/installation.md) · [Usage](docs/usage.md) · [Configuration](docs/configuration.md) · [Applets](docs/applets.md) · [Applications](docs/apps.md) · [Themes](docs/themes.md) · [Architecture](docs/architecture.md) · [Recovery](docs/recovery.md) · [Testing](docs/testing.md)
 
 ## Screenshots
 

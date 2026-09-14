@@ -12,7 +12,7 @@ cargo test --workspace --locked
 python3 scripts/check-cli-dependencies.py
 ```
 
-The Linux test suite covers the command grammar, configuration loading and invalid reloads, palettes, rule matching, keyboard chords and modifier tracking, Fibonacci geometry and non-overlap, directional navigation, workspace ordering, IPC framing and timeouts. The dependency check keeps `winarchyctl` free of the daemon and UI toolkit. CI runs the same checks on `windows-latest` and packages the release binaries.
+The Linux test suite covers the command grammar, configuration loading and invalid reloads, palettes, rule matching, keyboard chords and modifier tracking, Fibonacci geometry and non-overlap, directional navigation, workspace ordering, IPC framing and timeouts, and the models of the companion applications (process sorting and filtering, file listing, selection, clipboard and prompts against a temporary tree). The dependency check keeps `winarchyctl` free of the daemon and UI toolkit. CI runs the same checks on `windows-latest` and packages the release binaries.
 
 ## Desktop tests
 

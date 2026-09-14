@@ -3,7 +3,9 @@
 ## Boundaries
 
 - `crates/winarchy-ipc`: canonical command grammar, JSON envelope, bounded pipe I/O and token/session identity. Shared by daemon and CLI without graphical dependencies.
+- `crates/winarchy-theme`: theme file types, validation and lookup of the selected theme, without graphics or Windows dependencies; shared by the daemon and the applications.
 - `crates/winarchyctl`: standalone CLI depending only on `winarchy-ipc`, not on the daemon or Slint.
+- `crates/winarchy-apps`: one executable, one subcommand per companion application (`shot`, `tasks`, `files`). Each application keeps its state and key handling in a `model.rs` without Win32 calls, tested on Linux, and its Win32 or shell calls in a `win.rs`; `ui/common.slint` holds the shared palette, scrolling column, status line and key help, compiled at build time. The daemon launches it with `app <name>` and manages its windows like any client.
 - `config.rs`: subsystem TOML types, first-run defaults, validation, rules, themes.
 - `layout.rs`: pure Fibonacci rectangles and deterministic geometric neighbor scoring.
 - `model.rs`: ordered client list, nine workspaces, monitor associations and recent history.
@@ -35,4 +37,4 @@ Workspace switches show/hide managed clients. A client carries its floating stat
 
 `\\.\pipe\winarchy-SID-SESSION` accepts a UTF-8 command line and returns a newline-terminated JSON `{ok,message}` reply, followed by a client acknowledgement byte (`0x06`). Commands are capped at 8191 bytes. Overlapped reads/writes use cancellation deadlines; the client exchange has a 12-second deadline. Unstarted queued commands can be cancelled atomically; already-started operations cannot be rolled back and may report an unknown outcome. The pipe rejects remote clients, has an owner-only DACL and retains its single handle between clients. The client verifies the server's token SID and session and requests identification-level access only. A named local mutex covers the daemon lifetime.
 
-A second invocation of the same executable in watchdog mode has no UI. It verifies the daemon's PID plus process creation time, waits on that process, restores windows tagged with the unique session GUID, and restarts Explorer if a GUID-scoped session marker requests it. Its handshake completes before client windows are touched; Explorer is stopped only after the native UI surfaces are ready. This is the only extra process; all visible shell surfaces remain in the daemon.
+Companion applications are separate processes: file, process and screen-capture code never runs in the daemon, which holds the keyboard hook. A second invocation of the same executable in watchdog mode has no UI. It verifies the daemon's PID plus process creation time, waits on that process, restores windows tagged with the unique session GUID, and restarts Explorer if a GUID-scoped session marker requests it. Its handshake completes before client windows are touched; Explorer is stopped only after the native UI surfaces are ready. Apart from the applications the user opens, this is the only extra process; all visible shell surfaces remain in the daemon.

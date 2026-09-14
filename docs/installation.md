@@ -28,7 +28,7 @@ The application is a Windows binary, **not** a Linux/Wayland window manager. Thr
 cargo install cargo-xwin --locked
 rustup target add x86_64-pc-windows-msvc
 cargo xwin build --workspace --release --target x86_64-pc-windows-msvc --locked
-# Copy the three .exe files from target/x86_64-pc-windows-msvc/release
+# Copy winarchy.exe, winarchyctl.exe and winarchy-apps.exe from target/x86_64-pc-windows-msvc/release
 # to %LOCALAPPDATA%\Programs\Winarchy.
 ```
 
