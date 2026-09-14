@@ -16,6 +16,12 @@ pub struct Theme {
     pub green: String,
     pub yellow: String,
     pub red: String,
+    /// Optional terminal colors, in ANSI order (black through white).
+    #[serde(default)]
+    pub ansi: Option<Vec<String>>,
+    /// Optional bright terminal colors, in the same order.
+    #[serde(default)]
+    pub brights: Option<Vec<String>>,
     /// Windows color mode to apply with this theme: "dark" or "light".
     #[serde(default)]
     pub mode: Option<String>,
@@ -61,7 +67,17 @@ impl Theme {
         {
             return Err("theme mode must be \"dark\" or \"light\"".into());
         }
-        for color in self.colors() {
+        for (name, palette) in [("ansi", &self.ansi), ("brights", &self.brights)] {
+            if palette.as_ref().is_some_and(|colors| colors.len() != 8) {
+                return Err(format!("theme {name} must contain exactly eight colors"));
+            }
+        }
+        for color in self
+            .colors()
+            .into_iter()
+            .chain(self.ansi.iter().flatten().map(String::as_str))
+            .chain(self.brights.iter().flatten().map(String::as_str))
+        {
             if rgb(color).is_none() {
                 return Err(format!("invalid theme color: {color}"));
             }
@@ -134,6 +150,34 @@ mod tests {
         assert!(Theme::parse(&format!("{DEFAULT}extra = 1\n")).is_err());
         assert_eq!(rgb("#zz0000"), None);
         assert_eq!(rgb("#fff"), None);
+    }
+    #[test]
+    fn terminal_palettes() {
+        for source in [
+            DEFAULT,
+            include_str!("../../../config/themes/catppuccin-latte.toml"),
+        ] {
+            let theme = Theme::parse(source).unwrap();
+            assert_eq!(theme.ansi.as_ref().unwrap()[1], theme.red);
+            assert_eq!(theme.brights.as_ref().unwrap()[2], theme.green);
+            let legacy = source.split("# Terminal palette").next().unwrap();
+            let theme = Theme::parse(legacy).unwrap();
+            assert!(theme.ansi.is_none());
+            assert!(theme.brights.is_none());
+            for field in ["ansi", "brights"] {
+                for count in [0, 7, 9] {
+                    let colors = vec!["\"#123456\""; count].join(", ");
+                    assert!(
+                        Theme::parse(&format!("{legacy}{field} = [{colors}]\n")).is_err(),
+                        "{field} with {count} colors must be rejected"
+                    );
+                }
+                let colors = vec!["\"#123456\""; 8].join(", ");
+                let valid = format!("{legacy}{field} = [{colors}]\n");
+                assert!(Theme::parse(&valid).is_ok());
+                assert!(Theme::parse(&valid.replacen("#123456", "#xyzxyz", 1)).is_err());
+            }
+        }
     }
     #[test]
     fn selected_and_loaded_from_home() {
