@@ -86,23 +86,7 @@ impl Rule {
 pub struct Rules {
     pub rules: Vec<Rule>,
 }
-#[derive(Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Theme {
-    pub name: String,
-    pub background: String,
-    pub surface: String,
-    pub overlay: String,
-    pub text: String,
-    pub subtext: String,
-    pub accent: String,
-    pub green: String,
-    pub yellow: String,
-    pub red: String,
-    /// Windows color mode to apply with this theme: "dark" or "light".
-    #[serde(default)]
-    pub mode: Option<String>,
-}
+pub use winarchy_theme::Theme;
 #[derive(Clone)]
 pub struct Config {
     pub home: PathBuf,
@@ -264,7 +248,7 @@ impl Config {
         // Apply the same bounds at startup/reload as in the directory watcher.
         crate::files::snapshot(home)?;
         let global: Global = parse(home, "winarchy.toml")?;
-        if global.theme.contains(['/', '\\', '.']) {
+        if !winarchy_theme::valid_name(&global.theme) {
             return Err("invalid theme name".into());
         }
         let c = Self {
@@ -313,32 +297,10 @@ impl Config {
             }
         }
         crate::clock::validate(&c.bar.clock_format)?;
-        if let Some(mode) = &c.theme.mode
-            && !["dark", "light"].contains(&mode.as_str())
-        {
-            return Err("theme mode must be \"dark\" or \"light\"".into());
-        }
+        c.theme.validate()?;
         for r in &c.rules.rules {
             if r.workspace.is_some_and(|n| !(1..=9).contains(&n)) {
                 return Err("rule workspace must be 1..9".into());
-            }
-        }
-        for color in [
-            &c.theme.background,
-            &c.theme.surface,
-            &c.theme.overlay,
-            &c.theme.text,
-            &c.theme.subtext,
-            &c.theme.accent,
-            &c.theme.green,
-            &c.theme.yellow,
-            &c.theme.red,
-        ] {
-            if color.len() != 7
-                || !color.starts_with('#')
-                || u32::from_str_radix(&color[1..], 16).is_err()
-            {
-                return Err(format!("invalid theme color: {color}"));
             }
         }
         Ok(c)
@@ -375,7 +337,7 @@ mod tests {
     #[test]
     fn palettes() {
         for (_, s) in DEFAULTS.iter().filter(|(n, _)| n.starts_with("themes/")) {
-            assert!(toml::from_str::<Theme>(s).is_ok());
+            assert!(Theme::parse(s).is_ok());
         }
     }
 }

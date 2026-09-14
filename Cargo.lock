@@ -4906,6 +4906,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "winarchy-ipc",
+ "winarchy-theme",
  "windows",
  "winresource",
 ]
