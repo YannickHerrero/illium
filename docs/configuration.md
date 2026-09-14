@@ -57,7 +57,7 @@ enabled = true
 position = "top"
 height = 28
 left = ["workspaces"]
-center = ["clock", "calendar"]
+center = ["clock"]
 right = ["battery", "cpu", "memory", "wifi"]
 clock_format = "%A %d %b - %H:%M"
 ```

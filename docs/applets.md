@@ -15,7 +15,8 @@ Built-in module names are reserved; any other name must match an applet
 folder holding an `applet.toml`, or the configuration is rejected.
 
 Winarchy ships `weather`, `wifi`, `calendar` and `_template`; they are
-installed with the other defaults and never overwritten.
+installed with the other defaults and never overwritten. `calendar` uses
+`attach = "clock"`: it has no icon and opens when the clock is clicked.
 
 ## Anatomy
 
@@ -39,6 +40,7 @@ applets/weather/
 | `command` | none | Full command line instead of `script` |
 | `provider` | none | `builtin:clock` or `builtin:system` instead of a process |
 | `focusable` | `false` | Let the popup take keyboard focus |
+| `attach` | none | Built-in module (`clock`, `battery`, `cpu`, `memory`, `volume`, `window-title`) whose click opens this applet; it then has no icon and is loaded whenever that module is in a section |
 | `[settings]` | empty | Passed to the provider as `WINARCHY_APPLET_<KEY>` variables |
 
 ### The provider
@@ -81,7 +83,7 @@ monochrome icons with a theme color.
 ## Popup behaviour
 
 One popup at a time, anchored under the module and kept on screen. It closes
-on a click anywhere else or on the module again. By default it does not take
+on a click anywhere else, on the module again, or with Escape. By default it does not take
 keyboard focus, so global Alt chords keep working while it is open. Errors in
 the manifest, provider or view appear in a plain popup under the icon and in
 the daemon log.

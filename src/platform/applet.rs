@@ -69,9 +69,19 @@ impl Runtime {
     pub fn is_applet(&self, name: &str) -> bool {
         self.entries.iter().any(|e| e.applet.name == name)
     }
-    /// Bar label and icon for an applet module.
+    /// The applet that opens when the built-in `module` is clicked.
+    pub fn attached(&self, module: &str) -> Option<String> {
+        self.entries
+            .iter()
+            .find(|e| e.applet.manifest.attach.as_deref() == Some(module))
+            .map(|e| e.applet.name.clone())
+    }
+    /// Bar label and icon for an applet module; attached applets have none.
     pub fn item(&self, name: &str) -> Option<(String, Option<slint::Image>)> {
-        let e = self.entries.iter().find(|e| e.applet.name == name)?;
+        let e = self
+            .entries
+            .iter()
+            .find(|e| e.applet.name == name && e.applet.manifest.attach.is_none())?;
         let label = match (&e.error, &e.applet.manifest.label) {
             (Some(_), _) => "!".into(),
             (None, Some(t)) => applets::label(t, &e.data),

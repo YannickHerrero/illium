@@ -32,6 +32,9 @@ pub struct Manifest {
     /// Let the popup take keyboard focus (global Alt chords stop while it does).
     #[serde(default)]
     pub focusable: bool,
+    /// Built-in module whose click opens this applet instead of its details;
+    /// the applet then has no icon of its own.
+    pub attach: Option<String>,
     /// Passed to the provider as WINARCHY_APPLET_<KEY> environment variables.
     #[serde(default)]
     pub settings: BTreeMap<String, toml::Value>,
@@ -96,27 +99,59 @@ pub fn load(home: &Path, name: &str) -> Result<Applet, String> {
     {
         return Err(format!("applet {name}: unknown provider {p}"));
     }
+    if let Some(module) = &manifest.attach
+        && (!crate::config::BUILTIN_MODULES.contains(&module.as_str()) || module == "workspaces")
+    {
+        return Err(format!("applet {name}: attach must name a built-in module"));
+    }
     Ok(Applet {
         name: name.to_owned(),
         dir,
         manifest,
     })
 }
-/// Applets referenced by the bar sections, in order, without duplicates.
+/// Applets referenced by the bar sections, in order, plus the ones attached to
+/// a built-in module that appears in a section; no duplicates.
 pub fn referenced(home: &Path, sections: &[&Vec<String>]) -> Vec<Result<Applet, String>> {
     let mut seen = Vec::new();
     let mut out = Vec::new();
-    for name in sections.iter().flat_map(|s| s.iter()) {
-        if crate::config::BUILTIN_MODULES.contains(&name.as_str()) || seen.contains(name) {
-            continue;
+    let mut push = |name: &str, out: &mut Vec<Result<Applet, String>>| {
+        if seen.iter().any(|s| s == name) || out.len() >= MAX_APPLETS {
+            return;
         }
-        seen.push(name.clone());
-        if out.len() >= MAX_APPLETS {
-            break;
-        }
+        seen.push(name.to_owned());
         out.push(load(home, name));
+    };
+    let modules: Vec<&String> = sections.iter().flat_map(|s| s.iter()).collect();
+    for name in &modules {
+        if !crate::config::BUILTIN_MODULES.contains(&name.as_str()) {
+            push(name, &mut out);
+        }
+    }
+    for name in folders(home) {
+        if let Ok(a) = load(home, &name)
+            && let Some(module) = &a.manifest.attach
+            && modules.contains(&module)
+        {
+            push(&name, &mut out);
+        }
     }
     out
+}
+/// Applet folder names under `applets/`, bounded and sorted.
+pub fn folders(home: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(home.join("applets")) else {
+        return vec![];
+    };
+    let mut names: Vec<String> = entries
+        .flatten()
+        .take(256)
+        .filter(|e| e.path().join("applet.toml").is_file())
+        .filter_map(|e| e.file_name().to_str().map(str::to_owned))
+        .filter(|n| valid_name(n))
+        .collect();
+    names.sort();
+    names
 }
 /// `30s`, `10m`, `2h`; at least one second.
 pub fn interval(text: &str) -> Result<Duration, String> {
@@ -241,6 +276,27 @@ mod tests {
         )
         .unwrap();
         assert!(exists(&home, "sample") && !exists(&home, "other"));
+        assert_eq!(folders(&home), vec!["sample".to_owned()]);
+        std::fs::write(
+            dir.join("applet.toml"),
+            "provider = \"builtin:clock\"\nattach = \"clock\"\n",
+        )
+        .unwrap();
+        let clock = vec!["clock".to_owned()];
+        let loaded = referenced(&home, &[&clock]);
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(
+            loaded[0].as_ref().unwrap().manifest.attach.as_deref(),
+            Some("clock")
+        );
+        assert!(referenced(&home, &[&vec!["cpu".to_owned()]]).is_empty());
+        std::fs::write(dir.join("applet.toml"), "attach = \"workspaces\"\n").unwrap();
+        assert!(load(&home, "sample").is_err());
+        std::fs::write(
+            dir.join("applet.toml"),
+            "interval = \"5m\"\nlabel = \"{value}\"\n[settings]\ncity = \"Lyon\"\ncount = 3\n",
+        )
+        .unwrap();
         let a = load(&home, "sample").unwrap();
         assert_eq!(a.manifest.icon, "icon.svg");
         assert_eq!(a.manifest.popup.width, 360);

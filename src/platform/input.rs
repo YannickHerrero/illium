@@ -7,6 +7,9 @@ use windows::Win32::{
     UI::{Accessibility::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
 };
 static STATE: OnceLock<(EventSender, RwLock<Vec<Binding>>)> = OnceLock::new();
+/// Set while a bar popup is shown so Escape is consumed and closes it instead
+/// of reaching the foreground application.
+pub static POPUP_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static CONSUMED: std::sync::Mutex<[bool; 256]> = std::sync::Mutex::new([false; 256]);
 static MODIFIERS: std::sync::Mutex<crate::modifiers::Modifiers> =
     std::sync::Mutex::new(crate::modifiers::Modifiers::new());
@@ -35,6 +38,15 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                     }
                     state.mask() | u8::from(k.flags.0 & LLKHF_ALTDOWN.0 != 0)
                 };
+                if k.vkCode == 0x1b
+                    && POPUP_OPEN.load(std::sync::atomic::Ordering::Relaxed)
+                    && let Some((tx, _)) = STATE.get()
+                {
+                    if down {
+                        let _ = tx.send(Event::Escape);
+                    }
+                    return LRESULT(1);
+                }
                 if up {
                     let mut consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner());
                     if consumed[k.vkCode as usize] {

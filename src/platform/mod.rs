@@ -42,6 +42,8 @@ pub enum Event {
     AppletData(String, Result<String, String>),
     /// An applet view asked for an action to be run by its provider.
     AppletAction(String, Option<String>),
+    /// Escape pressed while a bar popup was open.
+    Escape,
 }
 struct Manager {
     config: Config,
@@ -425,6 +427,13 @@ impl Manager {
         Ok("ok".into())
     }
     fn event(&mut self, event: Event) {
+        self.dispatch(event);
+        input::POPUP_OPEN.store(
+            self.shell.popup_open.is_some() || self.applets.open.is_some(),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+    }
+    fn dispatch(&mut self, event: Event) {
         match event {
             Event::Command(c, reply) => {
                 if let Some(reply) = &reply
@@ -522,12 +531,13 @@ impl Manager {
                     .get(monitor)
                     .copied()
                     .unwrap_or_else(|| self.area());
-                if self.applets.is_applet(&kind) {
+                let target = self.applets.attached(&kind).unwrap_or_else(|| kind.clone());
+                if self.applets.is_applet(&target) {
                     self.shell.close_popup();
-                    if let Err(e) = self.applets.toggle(&self.config, r, &kind, x) {
-                        tracing::warn!(applet = %kind, %e, "applet view unavailable");
+                    if let Err(e) = self.applets.toggle(&self.config, r, &target, x) {
+                        tracing::warn!(applet = %target, %e, "applet view unavailable");
                         let lines = e.lines().take(8).map(str::to_owned).collect();
-                        let title = format!("APPLET {kind}");
+                        let title = format!("APPLET {target}");
                         self.shell
                             .open_popup(&self.config, r, kind, x, title, lines);
                     }
@@ -544,6 +554,10 @@ impl Manager {
                     self.shell.close_popup();
                     self.applets.close();
                 }
+            }
+            Event::Escape => {
+                self.shell.close_popup();
+                self.applets.close();
             }
             Event::AppletData(name, result) => {
                 self.applets.apply(&name, result);

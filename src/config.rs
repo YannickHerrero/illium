@@ -204,10 +204,6 @@ const DEFAULTS: &[(&str, &str)] = &[
         include_str!("../config/applets/calendar/view.slint"),
     ),
     (
-        "applets/calendar/icon.svg",
-        include_str!("../config/applets/calendar/icon.svg"),
-    ),
-    (
         "applets/_template/applet.toml",
         include_str!("../config/applets/_template/applet.toml"),
     ),

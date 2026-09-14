@@ -1,5 +1,5 @@
-# Month view fed by the daemon's clock, no script involved.
-icon = "icon.svg"
+# Month view fed by the daemon's clock, opened by clicking the clock module.
+attach = "clock"
 provider = "builtin:clock"
 interval = "1m"
 popup = { width = 300, height = 280 }
