@@ -37,7 +37,8 @@ This does **not** stop Explorer. Defaults are installed without overwriting exis
 - Named-pipe commands with owner-only permissions and readable errors
 - Catppuccin Mocha/Latte; modular TOML configuration and directory-change reloads
 - Start Menu shortcut discovery, fuzzy search, native process launching
-- Theme background, workspace/title/battery/volume/clock bar
+- Theme background, bar with workspaces, clock, battery, CPU and memory modules and detail popups
+- Applets: icon + Slint popup fed by a PowerShell script or a built-in provider, examples included (weather, wifi, calendar)
 - Monitor enumeration, display-change handling and physical-pixel layout
 - Opt-in Explorer stop/restore session, with no permanent registry changes
 
@@ -62,7 +63,7 @@ All bindings come from `keybindings.toml`, not hard-coded actions in the keyboar
 
 ## Documentation
 
-[Installation](docs/installation.md) · [Usage](docs/usage.md) · [Configuration](docs/configuration.md) · [Themes](docs/themes.md) · [Architecture](docs/architecture.md) · [Recovery](docs/recovery.md) · [Testing](docs/testing.md)
+[Installation](docs/installation.md) · [Usage](docs/usage.md) · [Configuration](docs/configuration.md) · [Applets](docs/applets.md) · [Themes](docs/themes.md) · [Architecture](docs/architecture.md) · [Recovery](docs/recovery.md) · [Testing](docs/testing.md)
 
 ## Screenshots
 
