@@ -1,4 +1,5 @@
 mod applet;
+mod apps;
 mod dpi;
 use winarchy_ipc::identity;
 mod input;
@@ -48,13 +49,6 @@ pub enum Event {
     Escape,
     /// Backspace on an empty launcher query: leave a submenu.
     Back,
-}
-/// Command line running application `name` of the `winarchy-apps.exe` next to the daemon.
-pub fn app_command(name: &str) -> Result<String, String> {
-    let tool = std::env::current_exe()
-        .map_err(|e| e.to_string())?
-        .with_file_name("winarchy-apps.exe");
-    Ok(format!("\"{}\" {name}", tool.display()))
 }
 struct Manager {
     config: Config,
@@ -497,7 +491,7 @@ impl Manager {
             Command::Meta => {
                 self.shell.toggle_meta(&self.config, self.area())?;
             }
-            Command::App(name) => native::spawn(&app_command(&name)?)?,
+            Command::App(name) => apps::open(name),
             Command::Reload => self.reload()?,
             Command::WallpaperNext => self.shell.next_wallpaper()?,
             Command::Wallpaper(name) => self.shell.set_wallpaper(name)?,
@@ -512,6 +506,7 @@ impl Manager {
             }
             Command::Explorer(start) => session::explorer(start)?,
             Command::Quit => {
+                apps::stop_resident();
                 slint::quit_event_loop().map_err(|e| e.to_string())?;
             }
         }
@@ -606,10 +601,14 @@ impl Manager {
             Event::Launch(n) => {
                 if let Some(app) = self.shell.results.get(n.max(0) as usize).cloned() {
                     self.shell.dismiss();
-                    let result = self.execute(Command::LaunchTarget {
-                        target: app.target,
-                        shortcut: app.shortcut,
-                    });
+                    let command = match app.app {
+                        Some(name) => Command::App(name),
+                        None => Command::LaunchTarget {
+                            target: app.target,
+                            shortcut: app.shortcut,
+                        },
+                    };
+                    let result = self.execute(command);
                     if let Err(e) = result {
                         tracing::error!(%e,"launch failed");
                     }
@@ -903,7 +902,10 @@ pub fn run(replace: bool) -> Result<(), String> {
                     Ok(())
                 };
                 match result {
-                    Ok(()) => tracing::info!("Winarchy ready"),
+                    Ok(()) => {
+                        tracing::info!("Winarchy ready");
+                        apps::start_resident();
+                    }
                     Err(e) => {
                         tracing::error!(%e,"session initialization failed");
                         *error.borrow_mut() = Some(e);

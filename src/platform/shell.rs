@@ -108,6 +108,8 @@ pub struct App {
     pub name: String,
     pub target: String,
     pub shortcut: bool,
+    /// Companion application name: launched with `Command::App` instead of the target.
+    pub app: Option<String>,
 }
 /// Persistent bar models. Replacing a model recreates every module element,
 /// which loses a click whose press and release straddle a refresh; rows are
@@ -185,6 +187,7 @@ fn scan(path: &std::path::Path, out: &mut Vec<App>) {
                 .into(),
             target: path.to_string_lossy().into(),
             shortcut: true,
+            app: None,
         });
     }
 }
@@ -356,16 +359,16 @@ impl Shell {
                 name: name.clone(),
                 target: target.clone(),
                 shortcut: false,
+                app: None,
             })
             .collect();
         for (label, name) in Self::APPS {
-            if let Ok(target) = super::app_command(name) {
-                self.apps.push(App {
-                    name: label.into(),
-                    target,
-                    shortcut: false,
-                });
-            }
+            self.apps.push(App {
+                name: label.into(),
+                target: String::new(),
+                shortcut: false,
+                app: Some(name.into()),
+            });
         }
         for env in ["APPDATA", "PROGRAMDATA"] {
             if let Some(root) = std::env::var_os(env) {
@@ -380,6 +383,7 @@ impl Shell {
                 name,
                 target,
                 shortcut: true,
+                app: None,
             });
         }
         self.apps.sort_by_key(|a| a.name.to_lowercase());
@@ -589,8 +593,11 @@ impl Shell {
         ]
     }
     /// Companion applications, also indexed by the launcher.
-    pub const APPS: [(&'static str, &'static str); 2] =
-        [("Tasks", "tasks"), ("Screenshot", "shot")];
+    pub const APPS: [(&'static str, &'static str); 3] = [
+        ("Files", "files"),
+        ("Tasks", "tasks"),
+        ("Screenshot", "shot"),
+    ];
     fn meta_apps() -> Vec<(String, MetaEntry)> {
         Self::APPS
             .iter()
