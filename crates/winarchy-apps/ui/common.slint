@@ -11,8 +11,10 @@ export global Palette {
     in-out property <color> red: #f38ba8;
 }
 // Scrolling list body that keeps the cursor row in view. Rows are supplied
-// by the caller, `row-height` tall each.
-export component Column inherits Flickable {
+// by the caller, `row-height` tall each. A Flickable bounds its maximum
+// size to its content, which would make an empty list a fixed-size window
+// at creation; the Rectangle keeps the constraints unbounded.
+export component Column inherits Rectangle {
     in property <int> cursor;
     in property <length> row-height: 24px;
     /// Rows that fit; the applications use it for PageUp/PageDown.
@@ -20,15 +22,19 @@ export component Column inherits Flickable {
     changed cursor => { keep-visible(); }
     changed height => { keep-visible(); }
     function keep-visible() {
-        if (cursor * row-height < -self.viewport-y) {
-            self.viewport-y = -cursor * row-height;
-        } else if ((cursor + 1) * row-height > -self.viewport-y + self.height) {
-            self.viewport-y = self.height - (cursor + 1) * row-height;
+        if (cursor * row-height < -flick.viewport-y) {
+            flick.viewport-y = -cursor * row-height;
+        } else if ((cursor + 1) * row-height > -flick.viewport-y + self.height) {
+            flick.viewport-y = self.height - (cursor + 1) * row-height;
         }
     }
-    VerticalLayout {
-        alignment: start;
-        @children
+    flick := Flickable {
+        width: 100%;
+        height: 100%;
+        VerticalLayout {
+            alignment: start;
+            @children
+        }
     }
 }
 export component StatusLine inherits Rectangle {
