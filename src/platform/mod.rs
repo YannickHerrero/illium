@@ -48,6 +48,13 @@ pub enum Event {
     /// Backspace on an empty launcher query: leave a submenu.
     Back,
 }
+/// Command line running application `name` of the `winarchy-apps.exe` next to the daemon.
+pub fn app_command(name: &str) -> Result<String, String> {
+    let tool = std::env::current_exe()
+        .map_err(|e| e.to_string())?
+        .with_file_name("winarchy-apps.exe");
+    Ok(format!("\"{}\" {name}", tool.display()))
+}
 struct Manager {
     config: Config,
     model: Model,
@@ -451,12 +458,7 @@ impl Manager {
             Command::Meta => {
                 self.shell.toggle_meta(&self.config, self.area())?;
             }
-            Command::App(name) => {
-                let tool = std::env::current_exe()
-                    .map_err(|e| e.to_string())?
-                    .with_file_name("winarchy-apps.exe");
-                native::spawn(&format!("\"{}\" {name}", tool.display()))?;
-            }
+            Command::App(name) => native::spawn(&app_command(&name)?)?,
             Command::Reload => self.reload()?,
             Command::Theme(name) => {
                 let path = self.config.home.join("winarchy.toml");

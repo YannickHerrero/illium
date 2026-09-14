@@ -132,6 +132,7 @@ fn sync<T: Clone + PartialEq + 'static>(model: &Rc<VecModel<T>>, rows: &[T]) {
 }
 #[derive(Clone, Copy, PartialEq)]
 pub enum MetaMenu {
+    Apps,
     System,
     Theme,
 }
@@ -303,6 +304,15 @@ impl Shell {
                 shortcut: false,
             })
             .collect();
+        for (label, name) in Self::APPS {
+            if let Ok(target) = super::app_command(name) {
+                self.apps.push(App {
+                    name: label.into(),
+                    target,
+                    shortcut: false,
+                });
+            }
+        }
         for env in ["APPDATA", "PROGRAMDATA"] {
             if let Some(root) = std::env::var_os(env) {
                 scan(
@@ -518,9 +528,24 @@ impl Shell {
     }
     fn meta_root() -> Vec<(String, MetaEntry)> {
         vec![
+            ("Apps ›".into(), MetaEntry::Menu(MetaMenu::Apps)),
             ("System ›".into(), MetaEntry::Menu(MetaMenu::System)),
             ("Theme ›".into(), MetaEntry::Menu(MetaMenu::Theme)),
         ]
+    }
+    /// Companion applications, also indexed by the launcher.
+    pub const APPS: [(&'static str, &'static str); 2] =
+        [("Tasks", "tasks"), ("Screenshot", "shot")];
+    fn meta_apps() -> Vec<(String, MetaEntry)> {
+        Self::APPS
+            .iter()
+            .map(|(label, name)| {
+                (
+                    (*label).into(),
+                    MetaEntry::Run(crate::command::Command::App((*name).into())),
+                )
+            })
+            .collect()
     }
     fn meta_system() -> Result<Vec<(String, MetaEntry)>, String> {
         use crate::command::Command;
@@ -591,6 +616,7 @@ impl Shell {
             MetaEntry::Run(command) => Some(command),
             MetaEntry::Menu(menu) => {
                 self.meta_items = match menu {
+                    MetaMenu::Apps => Self::meta_apps(),
                     MetaMenu::System => Self::meta_system().unwrap_or_default(),
                     MetaMenu::Theme => self.meta_themes(),
                 };
