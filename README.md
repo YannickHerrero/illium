@@ -48,7 +48,7 @@ This does **not** stop Explorer. Defaults are installed without overwriting exis
 |---|---|
 | Alt+Enter | WezTerm |
 | Alt+Space | Launcher |
-| Alt+Shift+Space | Session menu: hibernate, lock, restart, shut down, quit |
+| Alt+Shift+Space | Menu: System (hibernate, lock, restart, shut down, quit) and Theme |
 | Alt+H/J/K/L or arrows | Focus left/down/up/right |
 | Alt+Shift+H/J/K/L or arrows | Swap tiled windows directionally |
 | Alt+1…9 | Workspace |

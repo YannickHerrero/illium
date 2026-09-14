@@ -45,6 +45,8 @@ pub enum Event {
     AppletAction(String, Option<String>),
     /// Escape pressed while a bar popup was open.
     Escape,
+    /// Backspace on an empty launcher query: leave a submenu.
+    Back,
 }
 struct Manager {
     config: Config,
@@ -546,13 +548,15 @@ impl Manager {
             },
             Event::Search(q) => self.shell.search(&q, self.config.launcher.max_results),
             Event::Launch(n) if self.shell.meta => {
-                if let Some(command) = self.shell.meta_results.get(n.max(0) as usize).cloned() {
+                let max = self.config.launcher.max_results;
+                if let Some(command) = self.shell.meta_activate(n.max(0) as usize, max) {
                     self.shell.dismiss();
                     if let Err(e) = self.execute(command) {
                         tracing::error!(%e,"session action failed");
                     }
                 }
             }
+            Event::Back => self.shell.meta_back(self.config.launcher.max_results),
             Event::Launch(n) => {
                 if let Some(app) = self.shell.results.get(n.max(0) as usize).cloned() {
                     self.shell.dismiss();

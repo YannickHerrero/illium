@@ -115,6 +115,16 @@ fn sync<T: Clone + PartialEq + 'static>(model: &Rc<VecModel<T>>, rows: &[T]) {
         model.remove(model.row_count() - 1);
     }
 }
+#[derive(Clone, Copy, PartialEq)]
+pub enum MetaMenu {
+    System,
+    Theme,
+}
+#[derive(Clone)]
+pub enum MetaEntry {
+    Menu(MetaMenu),
+    Run(crate::command::Command),
+}
 pub struct Shell {
     pub backgrounds: Vec<Background>,
     pub bars: Vec<Bar>,
@@ -133,8 +143,12 @@ pub struct Shell {
     descriptions: bool,
     /// The launcher surface shows the session menu instead of applications.
     pub meta: bool,
-    meta_items: Vec<(String, crate::command::Command)>,
-    pub meta_results: Vec<crate::command::Command>,
+    /// Submenu shown, or None at the menu root.
+    meta_menu: Option<MetaMenu>,
+    meta_items: Vec<(String, MetaEntry)>,
+    meta_results: Vec<MetaEntry>,
+    home: std::path::PathBuf,
+    theme: String,
 }
 fn scan(path: &std::path::Path, out: &mut Vec<App>) {
     for path in crate::files::shortcuts(path, 8192, 16) {
@@ -174,6 +188,10 @@ impl Shell {
         launcher.on_dismiss(move || {
             let _ = t.send(Event::Dismiss);
         });
+        let t = tx.clone();
+        launcher.on_back(move || {
+            let _ = t.send(Event::Back);
+        });
         let popup = Popup::new().map_err(|e| e.to_string())?;
         Ok(Self {
             backgrounds: vec![],
@@ -190,14 +208,19 @@ impl Shell {
             launcher_pending: None,
             descriptions: false,
             meta: false,
+            meta_menu: None,
             meta_items: vec![],
             meta_results: vec![],
+            home: std::path::PathBuf::new(),
+            theme: String::new(),
             tx,
         })
     }
     pub fn configure(&mut self, c: &Config, monitors: &[Rect]) -> Result<(), String> {
         self.pending = true;
         self.descriptions = c.launcher.show_descriptions;
+        self.home = c.home.clone();
+        self.theme = c.global.theme.clone();
         for b in self.bars.drain(..) {
             let _ = b.hide();
         }
@@ -465,14 +488,28 @@ impl Shell {
             self.dismiss();
             return Ok(());
         }
+        self.meta = true;
+        self.meta_menu = None;
+        self.meta_items = Self::meta_root();
+        self.open(c, r)
+    }
+    fn meta_root() -> Vec<(String, MetaEntry)> {
+        vec![
+            ("System ›".into(), MetaEntry::Menu(MetaMenu::System)),
+            ("Theme ›".into(), MetaEntry::Menu(MetaMenu::Theme)),
+        ]
+    }
+    fn meta_system() -> Result<Vec<(String, MetaEntry)>, String> {
         use crate::command::Command;
         let shutdown = super::security::os_executable("shutdown.exe", true)?;
         let rundll = super::security::os_executable("rundll32.exe", true)?;
-        let run = |line: String| Command::LaunchTarget {
-            target: line,
-            shortcut: false,
+        let run = |line: String| {
+            MetaEntry::Run(Command::LaunchTarget {
+                target: line,
+                shortcut: false,
+            })
         };
-        self.meta_items = vec![
+        Ok(vec![
             (
                 "Hibernate".into(),
                 run(format!("\"{}\" /h", shutdown.display())),
@@ -492,10 +529,63 @@ impl Shell {
                 "Shut down".into(),
                 run(format!("\"{}\" /s /t 0", shutdown.display())),
             ),
-            ("Quit Winarchy".into(), Command::Quit),
-        ];
-        self.meta = true;
-        self.open(c, r)
+            ("Quit Winarchy".into(), MetaEntry::Run(Command::Quit)),
+        ])
+    }
+    /// Theme files under `themes/`, the current one marked.
+    fn meta_themes(&self) -> Vec<(String, MetaEntry)> {
+        let mut names: Vec<String> = std::fs::read_dir(self.home.join("themes"))
+            .map(|entries| {
+                entries
+                    .flatten()
+                    .take(256)
+                    .filter_map(|e| {
+                        let path = e.path();
+                        (path.extension().is_some_and(|x| x == "toml"))
+                            .then(|| path.file_stem()?.to_str().map(str::to_owned))
+                            .flatten()
+                    })
+                    .filter(|n| !n.contains(['/', '\\', '.']))
+                    .collect()
+            })
+            .unwrap_or_default();
+        names.sort();
+        names
+            .into_iter()
+            .map(|name| {
+                let label = if name == self.theme {
+                    format!("● {name}")
+                } else {
+                    format!("  {name}")
+                };
+                (label, MetaEntry::Run(crate::command::Command::Theme(name)))
+            })
+            .collect()
+    }
+    /// Enters a submenu or returns the command to run for result `n`.
+    pub fn meta_activate(&mut self, n: usize, max: usize) -> Option<crate::command::Command> {
+        match self.meta_results.get(n).cloned()? {
+            MetaEntry::Run(command) => Some(command),
+            MetaEntry::Menu(menu) => {
+                self.meta_items = match menu {
+                    MetaMenu::System => Self::meta_system().unwrap_or_default(),
+                    MetaMenu::Theme => self.meta_themes(),
+                };
+                self.meta_menu = Some(menu);
+                self.launcher.set_query("".into());
+                self.launcher.set_selected(0);
+                self.search("", max);
+                None
+            }
+        }
+    }
+    /// Backspace on an empty query: back to the menu root.
+    pub fn meta_back(&mut self, max: usize) {
+        if self.meta && self.meta_menu.take().is_some() {
+            self.meta_items = Self::meta_root();
+            self.launcher.set_selected(0);
+            self.search("", max);
+        }
     }
     fn open(&mut self, c: &Config, r: Rect) -> Result<(), String> {
         self.launcher.set_query("".into());

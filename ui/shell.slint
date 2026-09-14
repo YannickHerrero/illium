@@ -116,6 +116,8 @@ export component Launcher inherits Window {
     callback search(string);
     callback activate(int);
     callback dismiss();
+    /// Backspace pressed while the query is empty.
+    callback back();
     background: bg;
     forward-focus: keys;
     keys := FocusScope {
@@ -148,6 +150,7 @@ export component Launcher inherits Window {
                     key-pressed(event) => {
                         if (event.text == Key.DownArrow) { root.selected = min(root.selected + 1, root.results.length - 1); return accept; }
                         if (event.text == Key.UpArrow) { root.selected = max(0, root.selected - 1); return accept; }
+                        if (event.text == Key.Backspace && self.text == "") { root.back(); return accept; }
                         return reject;
                     }
                 }
