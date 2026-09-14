@@ -9,7 +9,29 @@ fn main() -> Result<(), String> {
         if !reply.ok {
             return Err(reply.message);
         }
-        println!("{command}: {} ms", start.elapsed().as_millis());
+        let acknowledged = start.elapsed().as_millis();
+        let mut max_status_ms = 0;
+        loop {
+            let query = Instant::now();
+            let reply = client("status")?;
+            max_status_ms = max_status_ms.max(query.elapsed().as_millis());
+            if !reply.ok {
+                return Err(reply.message);
+            }
+            let status: serde_json::Value =
+                serde_json::from_str(&reply.message).map_err(|e| e.to_string())?;
+            if status["wallpaper_pending"].is_null() {
+                break;
+            }
+            if start.elapsed().as_secs() >= 15 {
+                return Err("wallpaper did not complete".into());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        println!(
+            "{command}: ack={acknowledged} ms, ready={} ms, max_status={max_status_ms} ms",
+            start.elapsed().as_millis()
+        );
         Ok(())
     }
     let home = winarchy_theme::config_home();
@@ -21,6 +43,8 @@ fn main() -> Result<(), String> {
                 return Err("invalid theme name".into());
             }
             run(&format!("theme set {name}"))?;
+            // Let the next image finish preloading, then measure the warm cycle.
+            std::thread::sleep(std::time::Duration::from_secs(2));
             run("wallpaper next")?;
             run("wallpaper next")?;
             run("config reload")?;

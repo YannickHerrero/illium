@@ -33,7 +33,9 @@ cargo test --test desktop -- --ignored --exact crash_restores_hidden_windows --n
 cargo test --test desktop -- --ignored --exact replacement_crash_restores_explorer --nocapture
 ```
 
-`wallpapers_follow_selection_and_directory_changes` temporarily installs a tiny fixture theme and checks image discovery, cycling, solid backgrounds, remembered choices, and corrupt/deleted image fallback through IPC. It restores the original theme and wallpaper-selection files. Run it only with an upgraded daemon and matching `WINARCHY_CONFIG_HOME`.
+`wallpapers_follow_selection_and_directory_changes` temporarily installs a tiny fixture theme and checks image discovery, cycling, solid backgrounds, remembered choices, corrupt/deleted image fallback, rapid requests, cancellation and asynchronous errors through IPC. It restores the original theme and wallpaper-selection files. Run it only with an upgraded daemon and matching `WINARCHY_CONFIG_HOME`.
+
+Performance probes (release builds): `cargo run -p winarchy-theme --release --example profile_wallpaper -- <wallpaper-directory> 2560 1600` measures decoding and fitting without changing files or the desktop. On Windows, `cargo run --release --example profile_theme -- pissarro akane dracula` deliberately changes the live theme/wallpapers, measures acknowledgement, preparation completion and status latency, then restores the original selection files. The daemon log also records worker preparation time, cache-hit application latency and in-place theme changes.
 
 Do not run the ignored tests concurrently: they share the current user's daemon and desktop. From WSL, compile with `cargo xwin test --target x86_64-pc-windows-msvc --no-run`, copy the reported executables to Windows and run them there.
 

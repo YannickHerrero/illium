@@ -142,7 +142,7 @@ pub enum MetaEntry {
     Menu(MetaMenu),
     Run(crate::command::Command),
 }
-type WallpaperStamp = (std::path::PathBuf, u64, u128);
+mod wallpaper;
 pub struct Shell {
     pub backgrounds: Vec<Background>,
     pub bars: Vec<Bar>,
@@ -170,7 +170,10 @@ pub struct Shell {
     pub wallpaper: Option<String>,
     wallpaper_images: Vec<slint::Image>,
     wallpaper_sizes: Vec<(u32, u32)>,
-    wallpaper_stamp: Option<WallpaperStamp>,
+    wallpaper_key: Option<crate::wallpaper::loader::Key>,
+    wallpaper_loader: crate::wallpaper::loader::Loader,
+    wallpaper_pending: Option<wallpaper::Pending>,
+    pub wallpaper_error: Option<String>,
 }
 fn scan(path: &std::path::Path, out: &mut Vec<App>) {
     for path in crate::files::shortcuts(path, 8192, 16) {
@@ -238,7 +241,10 @@ impl Shell {
             wallpaper: None,
             wallpaper_images: vec![],
             wallpaper_sizes: vec![],
-            wallpaper_stamp: None,
+            wallpaper_key: None,
+            wallpaper_loader: crate::wallpaper::loader::Loader::default(),
+            wallpaper_pending: None,
+            wallpaper_error: None,
             tx,
         })
     }
@@ -276,7 +282,7 @@ impl Shell {
             .collect();
         if sizes != self.wallpaper_sizes {
             self.wallpaper_sizes = sizes;
-            self.wallpaper_stamp = None;
+            self.wallpaper_key = None;
         }
         self.refresh_wallpaper(c.launcher.max_results);
         for b in self.bars.drain(..) {
@@ -683,125 +689,6 @@ impl Shell {
             ));
         }
         items
-    }
-    fn load_wallpaper(&self, name: &str) -> Result<(Vec<slint::Image>, WallpaperStamp), String> {
-        let (name, size, modified) = winarchy_theme::pack::fingerprint(&self.home, &self.theme)?
-            .into_iter()
-            .find(|(file, _, _)| file == name)
-            .ok_or("wallpaper not found in active theme")?;
-        let path = winarchy_theme::pack::wallpaper_dir(&self.home, &self.theme)?.join(name);
-        let stamp = (path, size, modified);
-        if self.wallpaper_stamp.as_ref() == Some(&stamp) {
-            return Ok((self.wallpaper_images.clone(), stamp));
-        }
-        let start = std::time::Instant::now();
-        let pixels = winarchy_theme::pack::decode(&stamp.0)?;
-        let decode_ms = start.elapsed().as_millis();
-        let mut images: Vec<slint::Image> = Vec::new();
-        for (index, &(width, height)) in self.wallpaper_sizes.iter().enumerate() {
-            if let Some(previous) = self.wallpaper_sizes[..index]
-                .iter()
-                .position(|s| *s == (width, height))
-            {
-                images.push(images[previous].clone());
-                continue;
-            }
-            let fitted = winarchy_theme::pack::cover(&pixels, width, height)?;
-            let buffer = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
-                fitted.as_raw(),
-                width,
-                height,
-            );
-            images.push(slint::Image::from_rgba8(buffer));
-        }
-        tracing::info!(
-            decode_ms,
-            total_ms = start.elapsed().as_millis(),
-            "wallpaper prepared"
-        );
-        Ok((images, stamp))
-    }
-    fn show_wallpaper(
-        &mut self,
-        name: Option<String>,
-        images: Vec<slint::Image>,
-        stamp: Option<WallpaperStamp>,
-    ) {
-        self.wallpaper = name;
-        self.wallpaper_images = images;
-        self.wallpaper_stamp = stamp;
-        for (index, background) in self.backgrounds.iter().enumerate() {
-            background.set_wallpaper(
-                self.wallpaper_images
-                    .get(index)
-                    .cloned()
-                    .unwrap_or_default(),
-            );
-        }
-    }
-    /// Only updates background images: no shell recreation, applet restart or
-    /// palette changes. Reuse the decoded image on unrelated config reloads.
-    pub fn refresh_wallpaper(&mut self, max: usize) {
-        let names = self.wallpaper_names().unwrap_or_else(|e| {
-            tracing::warn!(%e, "wallpapers unavailable");
-            vec![]
-        });
-        let selections = crate::wallpaper::Selections::load(&self.home);
-        let mut loaded = None;
-        for name in selections.candidates(&self.theme, &names) {
-            match self.load_wallpaper(&name) {
-                Ok((image, stamp)) => {
-                    loaded = Some((name, image, stamp));
-                    break;
-                }
-                Err(e) => tracing::warn!(%e, "skipping unreadable wallpaper"),
-            }
-        }
-        if let Some((name, image, stamp)) = loaded {
-            self.show_wallpaper(Some(name), image, Some(stamp));
-        } else {
-            self.show_wallpaper(None, vec![], None);
-        }
-        if self.meta && self.meta_menu == Some(MetaMenu::Wallpaper) {
-            self.meta_items = self.meta_wallpapers();
-            let query = self.launcher.get_query();
-            self.search(&query, max);
-        }
-    }
-    pub fn set_wallpaper(&mut self, name: Option<String>) -> Result<(), String> {
-        let (image, stamp) = match name.as_deref() {
-            Some(name) => {
-                let (image, stamp) = self.load_wallpaper(name)?;
-                (image, Some(stamp))
-            }
-            None => (vec![], None),
-        };
-        crate::wallpaper::Selections::load(&self.home).save_choice(
-            &self.home,
-            &self.theme,
-            name.clone(),
-        )?;
-        self.show_wallpaper(name, image, stamp);
-        Ok(())
-    }
-    pub fn next_wallpaper(&mut self) -> Result<(), String> {
-        let names = self.wallpaper_names()?;
-        for name in crate::wallpaper::next_candidates(&names, self.wallpaper.as_deref()) {
-            // Skip unreadable images, but do not hide persistence errors.
-            match self.load_wallpaper(&name) {
-                Ok((image, stamp)) => {
-                    crate::wallpaper::Selections::load(&self.home).save_choice(
-                        &self.home,
-                        &self.theme,
-                        Some(name.clone()),
-                    )?;
-                    self.show_wallpaper(Some(name), image, Some(stamp));
-                    return Ok(());
-                }
-                Err(e) => tracing::warn!(%e, "skipping unreadable wallpaper"),
-            }
-        }
-        Ok(())
     }
     /// Enters a submenu or returns the command to run for result `n`.
     pub fn meta_activate(&mut self, n: usize, max: usize) -> Option<crate::command::Command> {

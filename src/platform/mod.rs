@@ -382,6 +382,8 @@ impl Manager {
                 "workspace": self.model.active, "recent": self.model.recent,
                 "focused": self.model.focused, "theme": self.config.global.theme,
                 "wallpaper": self.shell.wallpaper,
+                "wallpaper_pending": self.shell.pending_wallpaper(),
+                "wallpaper_error": self.shell.wallpaper_error,
                 "gap": self.config.wm.gap, "launcher": self.shell.visible,
                 "monitors": self.monitors, "bar_count": self.shell.bars.len(),
                 "clients": self.model.clients.iter().map(|c| serde_json::json!({"id":c.id,"workspace":c.workspace,"floating":c.floating,"fullscreen":c.fullscreen,"title":native::title(c.id),"rect":native::rect(c.id)})).collect::<Vec<_>>()
@@ -880,6 +882,7 @@ pub fn run(replace: bool) -> Result<(), String> {
                 monitors,
                 ..
             } = &mut *m;
+            shell.poll_wallpaper(config.launcher.max_results);
             let pending = shell.pending;
             let ready = shell.arrange(config, monitors);
             m.applets.arrange();

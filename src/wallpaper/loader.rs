@@ -330,6 +330,35 @@ mod tests {
         assert!(loader.take_result().is_none());
     }
     #[test]
+    fn cancellation_drops_inflight_completion_without_losing_useful_cache() {
+        let (started, receive) = mpsc::channel();
+        let (release, gate) = mpsc::channel();
+        let loader = Loader::start(64, move |_, _| {
+            started.send(()).unwrap();
+            gate.recv().unwrap();
+            Ok(pixels())
+        });
+        loader.request(key("a"));
+        receive.recv_timeout(Duration::from_secs(3)).unwrap();
+        loader.cancel();
+        release.send(()).unwrap();
+        let end = Instant::now() + Duration::from_secs(3);
+        while loader
+            .shared
+            .state
+            .lock()
+            .unwrap()
+            .cache
+            .get(&key("a"))
+            .is_none()
+        {
+            assert!(Instant::now() < end);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(loader.take_result().is_none());
+        assert!(loader.request(key("a")).is_some());
+    }
+    #[test]
     fn prefetched_pixels_are_reused_by_foreground_request() {
         let (started, receive) = mpsc::channel();
         let (release, gate) = mpsc::channel();
