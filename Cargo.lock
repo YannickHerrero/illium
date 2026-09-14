@@ -4912,6 +4912,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "winarchy-apps"
+version = "0.1.0"
+dependencies = [
+ "windows",
+ "winresource",
+]
+
+[[package]]
 name = "winarchy-ipc"
 version = "0.1.0"
 dependencies = [
