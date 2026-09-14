@@ -19,6 +19,8 @@ const ORIGINAL_PROC: &str = "WinarchyOriginalProc";
 /// Windows paints a classic caption over the top of a winit window each time
 /// it is activated, even without WS_CAPTION, and leaves it there until the
 /// next redraw. Answering the non-client messages ourselves prevents that.
+/// Marks the background surfaces, which must stay at the bottom of the Z order.
+const BOTTOM: &str = "WinarchyBottom";
 unsafe extern "system" fn surface_proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     if m == WM_NCACTIVATE {
         return LRESULT(1);
@@ -26,7 +28,20 @@ unsafe extern "system" fn surface_proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) ->
     if m == WM_NCPAINT {
         return LRESULT(0);
     }
+    // Clicking a surface must not activate it: activation raises the window,
+    // which put the background above the clients.
+    if m == WM_MOUSEACTIVATE {
+        return LRESULT(MA_NOACTIVATE as isize);
+    }
     unsafe {
+        if m == WM_WINDOWPOSCHANGING {
+            let bottom = native::wide(BOTTOM);
+            if !GetPropW(h, windows::core::PCWSTR(bottom.as_ptr())).is_invalid() {
+                let pos = &mut *(l.0 as *mut WINDOWPOS);
+                pos.hwndInsertAfter = HWND_BOTTOM;
+                pos.flags &= !SWP_NOZORDER;
+            }
+        }
         let key = native::wide(ORIGINAL_PROC);
         let original = GetPropW(h, windows::core::PCWSTR(key.as_ptr())).0 as isize;
         if original == 0 {
@@ -318,6 +333,14 @@ impl Shell {
             }
             for (b, r) in self.backgrounds.iter().zip(monitors) {
                 tool(b.window(), true);
+                let bottom = native::wide(BOTTOM);
+                unsafe {
+                    let _ = SetPropW(
+                        native::hwnd(id(b.window())),
+                        windows::core::PCWSTR(bottom.as_ptr()),
+                        Some(HANDLE(std::ptr::dangling_mut())),
+                    );
+                }
                 native::position(id(b.window()), *r, Some(HWND_BOTTOM));
             }
             for (b, r) in self.bars.iter().zip(monitors) {
