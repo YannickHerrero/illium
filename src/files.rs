@@ -55,6 +55,30 @@ pub fn snapshot(home: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, String> {
             }
         }
     }
+    // Applet folders: any file counts (manifest, view, script, icon), by
+    // fingerprint rather than content, so edits reload without rereading.
+    if let Ok(applets) = std::fs::read_dir(home.join("applets")) {
+        for applet in applets.flatten().take(64) {
+            let Ok(files) = std::fs::read_dir(applet.path()) else {
+                continue;
+            };
+            for file in files.flatten().take(32) {
+                let Ok(meta) = file.metadata() else { continue };
+                if !meta.is_file() {
+                    continue;
+                }
+                let modified = meta
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map_or(0, |d| d.as_nanos());
+                result.push((
+                    file.path(),
+                    format!("{}:{modified}", meta.len()).into_bytes(),
+                ));
+            }
+        }
+    }
     result.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(result)
 }

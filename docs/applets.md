@@ -94,8 +94,9 @@ the daemon log.
    `<name>.ps1` (or set `script`).
 2. Print the JSON you need from the script; declare the matching `Data` struct
    in `view.slint` and lay it out.
-3. Add `<name>` to a section of `bar.toml`. The daemon reloads on save; the
-   view is compiled when you first open it, so markup errors show in the popup.
+3. Add `<name>` to a section of `bar.toml`. The daemon reloads when a file
+   under the configuration home or an applet folder changes; the view is
+   compiled when you first open it, so markup errors show in the popup.
 
 The first provider run happens right after loading; the bar shows the icon
 alone until data arrives.
