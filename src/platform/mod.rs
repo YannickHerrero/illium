@@ -201,13 +201,21 @@ impl Manager {
             };
             native::dwm_border(c.id, Some(color));
             let frame = native::frame(c.id);
+            // The DWM edge pixel is the innermost pixel of the visible border.
+            let ring = dpi::scale(frame, width) - 1;
+            if ring <= 0 {
+                if let Some(b) = self.borders.get(&c.id) {
+                    b.hide();
+                }
+                continue;
+            }
             if let Some(b) = match self.borders.entry(c.id) {
                 std::collections::hash_map::Entry::Occupied(e) => Some(e.into_mut()),
                 std::collections::hash_map::Entry::Vacant(e) => {
                     native::Border::new().map(|b| e.insert(b))
                 }
             } {
-                b.place(c.id, frame, dpi::scale(frame, width), color);
+                b.place(c.id, frame, ring, color);
             }
         }
     }
