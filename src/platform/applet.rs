@@ -107,7 +107,7 @@ impl Runtime {
         let e = &mut self.entries[index];
         e.due = Instant::now() + e.interval;
         if let Some(provider) = &e.applet.manifest.provider {
-            let result = builtin(provider).map_err(|e| e.to_string());
+            let result = builtin(provider, action.as_deref());
             let name = e.applet.name.clone();
             self.apply(&name, result);
             return;
@@ -384,10 +384,19 @@ fn run(
     String::from_utf8(out).map_err(|e| e.to_string())
 }
 /// Data for `builtin:clock` and `builtin:system`, without a child process.
-fn builtin(provider: &str) -> Result<String, String> {
+/// Built-in providers answer on the UI thread; only `builtin:volume` acts on
+/// an action, the others return their reading whatever the view asked.
+fn builtin(provider: &str, action: Option<&str>) -> Result<String, String> {
     match provider {
         "builtin:clock" => Ok(clock().to_string()),
         "builtin:system" => Ok(system().to_string()),
+        "builtin:volume" => {
+            if let Some(action) = action {
+                super::status::volume_apply(action)?;
+            }
+            let (volume, muted) = super::status::volume_state().ok_or("no audio output device")?;
+            Ok(serde_json::json!({ "volume": volume, "muted": muted }).to_string())
+        }
         other => Err(format!("unknown provider {other}")),
     }
 }

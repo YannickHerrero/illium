@@ -21,7 +21,7 @@ pub struct Manifest {
     pub command: Option<Vec<String>>,
     /// PowerShell script relative to the applet folder; defaults to `<name>.ps1`.
     pub script: Option<String>,
-    /// `builtin:clock` or `builtin:system` instead of a command.
+    /// `builtin:clock`, `builtin:system` or `builtin:volume` instead of a command.
     pub provider: Option<String>,
     #[serde(default = "default_interval")]
     pub interval: String,
