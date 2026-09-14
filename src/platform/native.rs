@@ -67,6 +67,136 @@ pub fn framed(id: isize, r: Rect) -> Rect {
         }
     }
 }
+/// Visible frame of a window in physical pixels, without the invisible
+/// resize borders.
+pub fn frame(id: isize) -> Rect {
+    unsafe {
+        let mut r = RECT::default();
+        if DwmGetWindowAttribute(
+            hwnd(id),
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            (&mut r as *mut RECT).cast(),
+            std::mem::size_of::<RECT>() as u32,
+        )
+        .is_err()
+        {
+            return rect(id);
+        }
+        Rect {
+            x: r.left,
+            y: r.top,
+            w: r.right - r.left,
+            h: r.bottom - r.top,
+        }
+    }
+}
+const BORDER_CLASS: &str = "WinarchyBorder";
+const BORDER_COLOR: &str = "WinarchyBorderColor";
+fn colorref(color: &str) -> COLORREF {
+    let rgb = u32::from_str_radix(color.trim_start_matches('#'), 16).unwrap_or(0);
+    COLORREF((rgb >> 16) | (rgb & 0xff00) | ((rgb & 0xff) << 16))
+}
+/// Click-through frame window drawn just outside a client's visible frame.
+/// It sits right above its client in the Z order: below it, the client's DWM
+/// shadow would darken it; any higher, it would cover unrelated windows.
+pub struct Border(isize);
+impl Border {
+    pub fn new() -> Option<Self> {
+        unsafe extern "system" fn procedure(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+            unsafe {
+                if m == WM_ERASEBKGND {
+                    return LRESULT(1);
+                }
+                if m == WM_PAINT {
+                    let key = wide(BORDER_COLOR);
+                    let color = COLORREF(GetPropW(h, PCWSTR(key.as_ptr())).0 as u32);
+                    let mut ps = PAINTSTRUCT::default();
+                    let dc = BeginPaint(h, &mut ps);
+                    let brush = CreateSolidBrush(color);
+                    FillRect(dc, &ps.rcPaint, brush);
+                    let _ = DeleteObject(brush.into());
+                    let _ = EndPaint(h, &ps);
+                    return LRESULT(0);
+                }
+                DefWindowProcW(h, m, w, l)
+            }
+        }
+        unsafe {
+            let class = wide(BORDER_CLASS);
+            let instance = windows::Win32::System::LibraryLoader::GetModuleHandleW(None).ok()?;
+            RegisterClassW(&WNDCLASSW {
+                lpfnWndProc: Some(procedure),
+                hInstance: instance.into(),
+                lpszClassName: PCWSTR(class.as_ptr()),
+                ..Default::default()
+            });
+            let h = CreateWindowExW(
+                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
+                PCWSTR(class.as_ptr()),
+                PCWSTR(class.as_ptr()),
+                WS_POPUP,
+                0,
+                0,
+                0,
+                0,
+                None,
+                None,
+                Some(instance.into()),
+                None,
+            )
+            .ok()?;
+            corners(h.0 as isize, true);
+            Some(Self(h.0 as isize))
+        }
+    }
+    /// Surrounds `frame` with a `width`-pixel ring of `color`, just above `client`.
+    pub fn place(&self, client: isize, frame: Rect, width: i32, color: &str) {
+        let h = hwnd(self.0);
+        let (w, hgt) = (frame.w + 2 * width, frame.h + 2 * width);
+        unsafe {
+            let above = GetWindow(hwnd(client), GW_HWNDPREV).unwrap_or_default();
+            let (insert, order) = if above == h {
+                (None, SWP_NOZORDER)
+            } else if above.is_invalid() {
+                (Some(HWND_TOP), SET_WINDOW_POS_FLAGS(0))
+            } else {
+                (Some(above), SET_WINDOW_POS_FLAGS(0))
+            };
+            let key = wide(BORDER_COLOR);
+            let _ = SetPropW(
+                h,
+                PCWSTR(key.as_ptr()),
+                Some(HANDLE(colorref(color).0 as usize as *mut _)),
+            );
+            let outer = CreateRectRgn(0, 0, w, hgt);
+            let inner = CreateRectRgn(width, width, w - width, hgt - width);
+            let _ = CombineRgn(Some(outer), Some(outer), Some(inner), RGN_DIFF);
+            let _ = DeleteObject(inner.into());
+            // The system owns the region after SetWindowRgn.
+            SetWindowRgn(h, Some(outer), true);
+            let _ = SetWindowPos(
+                h,
+                insert,
+                frame.x - width,
+                frame.y - width,
+                w,
+                hgt,
+                SWP_NOACTIVATE | SWP_SHOWWINDOW | order,
+            );
+            let _ = InvalidateRect(Some(h), None, true);
+        }
+    }
+    pub fn hide(&self) {
+        show(self.0, false);
+    }
+}
+impl Drop for Border {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = DestroyWindow(hwnd(self.0));
+        }
+    }
+}
 pub fn minimized(id: isize) -> bool {
     unsafe { IsIconic(hwnd(id)).as_bool() }
 }

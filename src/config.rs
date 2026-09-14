@@ -18,9 +18,16 @@ pub struct Wm {
     pub focus_follows_mouse: bool,
     #[serde(default = "enabled")]
     pub square_corners: bool,
+    /// Logical width of the frame drawn around clients: accent when focused,
+    /// overlay otherwise. 0 disables it.
+    #[serde(default = "default_border")]
+    pub border_width: i32,
 }
 fn enabled() -> bool {
     true
+}
+fn default_border() -> i32 {
+    2
 }
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]

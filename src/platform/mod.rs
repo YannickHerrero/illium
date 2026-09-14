@@ -39,6 +39,7 @@ struct Manager {
     model: Model,
     monitors: Vec<Rect>,
     shell: shell::Shell,
+    borders: std::collections::HashMap<isize, native::Border>,
 }
 impl Manager {
     fn prune(&mut self) -> bool {
@@ -172,6 +173,42 @@ impl Manager {
             }
         }
         self.shell.refresh(&self.model, &self.config);
+        self.borders();
+    }
+    fn borders(&mut self) {
+        let width = self.config.wm.border_width.clamp(0, 32);
+        if width == 0 {
+            self.borders.clear();
+            return;
+        }
+        self.borders
+            .retain(|id, _| self.model.clients.iter().any(|c| c.id == *id));
+        for c in &self.model.clients {
+            let shown = c.workspace == self.model.active
+                && !c.fullscreen
+                && !native::minimized(c.id)
+                && native::visible(c.id);
+            if !shown {
+                if let Some(b) = self.borders.get(&c.id) {
+                    b.hide();
+                }
+                continue;
+            }
+            let color = if Some(c.id) == self.model.focused {
+                &self.config.theme.accent
+            } else {
+                &self.config.theme.overlay
+            };
+            let frame = native::frame(c.id);
+            if let Some(b) = match self.borders.entry(c.id) {
+                std::collections::hash_map::Entry::Occupied(e) => Some(e.into_mut()),
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    native::Border::new().map(|b| e.insert(b))
+                }
+            } {
+                b.place(c.id, frame, dpi::scale(frame, width), color);
+            }
+        }
     }
     fn focus_visible(&mut self) {
         if self.prune() {
@@ -417,6 +454,7 @@ impl Manager {
                         }
                     }
                     self.shell.refresh(&self.model, &self.config);
+                    self.borders();
                 }
                 EVENT_OBJECT_CREATE | EVENT_OBJECT_SHOW => {
                     if self.add(id) {
@@ -557,6 +595,7 @@ pub fn run(replace: bool) -> Result<(), String> {
         model: Model::new(),
         monitors: native::monitors(),
         shell: shell::Shell::new(tx.clone())?,
+        borders: std::collections::HashMap::new(),
     };
     let manager = Rc::new(RefCell::new(manager));
     let startup_error = Rc::new(RefCell::new(None));
@@ -679,6 +718,7 @@ pub fn run(replace: bool) -> Result<(), String> {
                 }
             }
             m.shell.refresh(&m.model, &m.config);
+            m.borders();
         },
     );
     slint::run_event_loop_until_quit().map_err(|e| e.to_string())?;

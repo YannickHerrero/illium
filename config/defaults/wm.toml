@@ -4,3 +4,4 @@ gap = 16
 outer_gap = 16
 focus_follows_mouse = true
 square_corners = true
+border_width = 2
