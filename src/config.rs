@@ -112,6 +112,16 @@ pub struct Config {
     pub rules: Rules,
     pub theme: Theme,
 }
+/// Bar module names handled by the daemon itself; anything else is an applet.
+pub const BUILTIN_MODULES: [&str; 7] = [
+    "workspaces",
+    "window-title",
+    "volume",
+    "battery",
+    "clock",
+    "cpu",
+    "memory",
+];
 const DEFAULTS: &[(&str, &str)] = &[
     (
         "winarchy.toml",
@@ -137,6 +147,82 @@ const DEFAULTS: &[(&str, &str)] = &[
         "themes/catppuccin-latte.toml",
         include_str!("../config/themes/catppuccin-latte.toml"),
     ),
+    (
+        "applets/weather/applet.toml",
+        include_str!("../config/applets/weather/applet.toml"),
+    ),
+    (
+        "applets/weather/weather.ps1",
+        include_str!("../config/applets/weather/weather.ps1"),
+    ),
+    (
+        "applets/weather/view.slint",
+        include_str!("../config/applets/weather/view.slint"),
+    ),
+    (
+        "applets/weather/icon.svg",
+        include_str!("../config/applets/weather/icon.svg"),
+    ),
+    (
+        "applets/weather/sun.svg",
+        include_str!("../config/applets/weather/sun.svg"),
+    ),
+    (
+        "applets/weather/cloud.svg",
+        include_str!("../config/applets/weather/cloud.svg"),
+    ),
+    (
+        "applets/weather/rain.svg",
+        include_str!("../config/applets/weather/rain.svg"),
+    ),
+    (
+        "applets/weather/snow.svg",
+        include_str!("../config/applets/weather/snow.svg"),
+    ),
+    (
+        "applets/wifi/applet.toml",
+        include_str!("../config/applets/wifi/applet.toml"),
+    ),
+    (
+        "applets/wifi/wifi.ps1",
+        include_str!("../config/applets/wifi/wifi.ps1"),
+    ),
+    (
+        "applets/wifi/view.slint",
+        include_str!("../config/applets/wifi/view.slint"),
+    ),
+    (
+        "applets/wifi/icon.svg",
+        include_str!("../config/applets/wifi/icon.svg"),
+    ),
+    (
+        "applets/calendar/applet.toml",
+        include_str!("../config/applets/calendar/applet.toml"),
+    ),
+    (
+        "applets/calendar/view.slint",
+        include_str!("../config/applets/calendar/view.slint"),
+    ),
+    (
+        "applets/calendar/icon.svg",
+        include_str!("../config/applets/calendar/icon.svg"),
+    ),
+    (
+        "applets/_template/applet.toml",
+        include_str!("../config/applets/_template/applet.toml"),
+    ),
+    (
+        "applets/_template/_template.ps1",
+        include_str!("../config/applets/_template/_template.ps1"),
+    ),
+    (
+        "applets/_template/view.slint",
+        include_str!("../config/applets/_template/view.slint"),
+    ),
+    (
+        "applets/_template/icon.svg",
+        include_str!("../config/applets/_template/icon.svg"),
+    ),
 ];
 fn parse<T: serde::de::DeserializeOwned>(home: &Path, name: &str) -> Result<T, String> {
     let bytes = crate::files::read_config(&home.join(name))?;
@@ -160,6 +246,9 @@ impl Config {
         use std::io::Write;
         std::fs::create_dir_all(home.join("themes")).map_err(|e| e.to_string())?;
         for (name, content) in DEFAULTS {
+            if let Some(parent) = home.join(name).parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
             match std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -212,19 +301,15 @@ impl Config {
             .enumerate()
         {
             for module in *modules {
-                if ![
-                    "workspaces",
-                    "window-title",
-                    "volume",
-                    "battery",
-                    "clock",
-                    "cpu",
-                    "memory",
-                ]
-                .contains(&module.as_str())
-                    || (module == "workspaces" && index != 0)
-                {
+                if module == "workspaces" && index != 0 {
                     return Err(format!("bar: unsupported module or placement: {module}"));
+                }
+                if !BUILTIN_MODULES.contains(&module.as_str())
+                    && !crate::applets::exists(home, module)
+                {
+                    return Err(format!(
+                        "bar: unknown module {module}: no built-in module and no applets/{module}/applet.toml"
+                    ));
                 }
             }
         }

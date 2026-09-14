@@ -7,14 +7,14 @@ export component Background inherits Window {
     in property <color> bg;
     background: bg;
 }
-export struct StatusItem { kind: string, value: string }
+export struct StatusItem { kind: string, value: string, icon: image, has-icon: bool }
 component StatusModule inherits Rectangle {
     in property <StatusItem> item;
     in property <color> fg;
     in property <color> muted;
     /// Horizontal center of the module in window coordinates, for anchoring a popup.
     callback clicked(length);
-    property <bool> has-icon: item.kind == "battery" || item.kind == "cpu" || item.kind == "memory";
+    property <bool> has-icon: item.has-icon || item.kind == "battery" || item.kind == "cpu" || item.kind == "memory";
     width: layout.preferred-width;
     layout := HorizontalLayout {
         spacing: 6px;
@@ -25,7 +25,8 @@ component StatusModule inherits Rectangle {
             y: (parent.height - self.height) / 2;
             source: item.kind == "battery" ? @image-url("icons/battery.svg")
                 : item.kind == "cpu" ? @image-url("icons/cpu.svg")
-                : @image-url("icons/memory.svg");
+                : item.kind == "memory" ? @image-url("icons/memory.svg")
+                : item.icon;
             colorize: muted;
         }
         Text { text: item.value; color: fg; vertical-alignment: center; }

@@ -1,0 +1,21 @@
+# Template applet: copy this folder, rename it, and reference the new name in
+# a bar section of bar.toml. Every key except the ones you need can be removed.
+
+# Monochrome SVG shown in the bar, tinted with the theme's subtext color.
+icon = "icon.svg"
+# How often the provider runs: s, m or h.
+interval = "1m"
+# Optional text next to the icon; {field} and {a.b} come from the JSON.
+label = "{count}"
+# Popup size in logical pixels.
+popup = { width = 320, height = 160 }
+# Let the popup take keyboard focus (global Alt chords stop while it does).
+focusable = false
+# Provider: by default PowerShell runs `<applet name>.ps1` in this folder.
+# script = "other.ps1"
+# command = ["python", "provider.py"]
+# provider = "builtin:clock"   # or "builtin:system", instead of a script
+
+# Passed to the provider as WINARCHY_APPLET_<KEY> environment variables.
+[settings]
+greeting = "Hello"

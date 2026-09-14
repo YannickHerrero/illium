@@ -5,11 +5,11 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use std::rc::Rc;
 use windows::Win32::{Foundation::*, UI::WindowsAndMessaging::*};
 slint::include_modules!();
-fn color(s: &str) -> slint::Color {
+pub(super) fn color(s: &str) -> slint::Color {
     let c = u32::from_str_radix(&s[1..], 16).unwrap_or_default();
     slint::Color::from_rgb_u8((c >> 16) as u8, (c >> 8) as u8, c as u8)
 }
-fn id(w: &slint::Window) -> isize {
+pub(super) fn id(w: &slint::Window) -> isize {
     match w.window_handle().window_handle().map(|h| h.as_raw()) {
         Ok(RawWindowHandle::Win32(h)) => h.hwnd.get(),
         _ => 0,
@@ -36,7 +36,7 @@ unsafe extern "system" fn surface_proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) ->
         CallWindowProcW(original, h, m, w, l)
     }
 }
-fn tool(w: &slint::Window, no_activate: bool) {
+pub(super) fn tool(w: &slint::Window, no_activate: bool) {
     unsafe {
         if id(w) == 0 {
             return;
@@ -478,7 +478,7 @@ impl Shell {
         self.visible = true;
         Ok(())
     }
-    pub fn refresh(&self, m: &Model, c: &Config) {
+    pub fn refresh(&self, m: &Model, c: &Config, applets: &super::applet::Runtime) {
         let workspaces: Vec<i32> = if c.bar.left.iter().any(|s| s == "workspaces") {
             (1..=9u8)
                 .filter(|n| *n == m.active || m.clients.iter().any(|w| w.workspace == *n))
@@ -489,13 +489,28 @@ impl Shell {
         };
         let title = m.focused.map(native::title).unwrap_or_default();
         let items = |modules: &[String]| {
-            super::status::items(c, &title, modules)
-                .into_iter()
-                .map(|(kind, value)| StatusItem {
+            let mut out = Vec::new();
+            for name in modules {
+                if let Some((label, icon)) = applets.item(name) {
+                    out.push(StatusItem {
+                        kind: name.clone().into(),
+                        value: label.into(),
+                        has_icon: icon.is_some(),
+                        icon: icon.unwrap_or_default(),
+                    });
+                }
+            }
+            for (kind, value) in super::status::items(c, &title, modules) {
+                out.push(StatusItem {
                     kind: kind.into(),
                     value: value.into(),
-                })
-                .collect::<Vec<_>>()
+                    has_icon: false,
+                    icon: slint::Image::default(),
+                });
+            }
+            // Keep the configured order across built-ins and applets.
+            out.sort_by_key(|i| modules.iter().position(|m| *m == i.kind.as_str()));
+            out
         };
         let left = items(&c.bar.left);
         let center = items(&c.bar.center);

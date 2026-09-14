@@ -1,0 +1,83 @@
+// Weather applet view. Winarchy sets `data` from the script's JSON, the theme
+// colors, and the popup size from applet.toml.
+struct Day { name: string, condition: string, max: int, min: int }
+struct Data { place: string, temperature: int, feels: int, wind: int, humidity: int, condition: string, days: [Day] }
+component ConditionIcon inherits Image {
+    in property <string> condition;
+    source: condition == "sun" ? @image-url("sun.svg")
+        : condition == "rain" ? @image-url("rain.svg")
+        : condition == "snow" ? @image-url("snow.svg")
+        : @image-url("cloud.svg");
+}
+component Stat inherits VerticalLayout {
+    in property <string> name;
+    in property <string> value;
+    in property <color> fg;
+    in property <color> muted;
+    spacing: 8px;
+    Text { text: name; color: muted; font-size: 13px; letter-spacing: 2px; }
+    Text { text: value; color: fg; font-size: 20px; }
+}
+export component View inherits Window {
+    no-frame: true;
+    in property <length> popup-width: 640px;
+    in property <length> popup-height: 300px;
+    width: popup-width;
+    height: popup-height;
+    in property <color> bg: #1e1e2e;
+    in property <color> surface: #313244;
+    in property <color> overlay: #45475a;
+    in property <color> fg: #cdd6f4;
+    in property <color> muted: #a6adc8;
+    in property <color> accent: #cba6f7;
+    in property <Data> data;
+    callback action(string);
+    background: bg;
+    Rectangle {
+        border-width: 1px;
+        border-color: root.overlay;
+        VerticalLayout {
+            padding: 28px; spacing: 20px;
+            HorizontalLayout {
+                spacing: 32px;
+                HorizontalLayout {
+                    spacing: 20px;
+                    ConditionIcon { condition: root.data.condition; width: 72px; height: 72px; colorize: root.fg; y: (parent.height - self.height) / 2; }
+                    HorizontalLayout {
+                        alignment: start; spacing: 4px;
+                        Text { text: "\{root.data.temperature}"; color: root.fg; font-size: 64px; font-weight: 700; vertical-alignment: center; }
+                        Text { text: "°C"; color: root.fg; font-size: 22px; vertical-alignment: top; }
+                    }
+                }
+                VerticalLayout {
+                    spacing: 16px; horizontal-stretch: 1;
+                    Text { text: "  \{root.data.place}"; color: root.fg; font-size: 16px; letter-spacing: 2px; }
+                    HorizontalLayout {
+                        spacing: 40px;
+                        Stat { name: "FEELS"; value: "\{root.data.feels}°C"; fg: root.fg; muted: root.muted; }
+                        Stat { name: "WIND"; value: "\{root.data.wind} km/h"; fg: root.fg; muted: root.muted; }
+                        Stat { name: "HUMID"; value: "\{root.data.humidity}%"; fg: root.fg; muted: root.muted; }
+                    }
+                }
+            }
+            Rectangle { height: 1px; background: root.overlay; }
+            HorizontalLayout {
+                spacing: 24px;
+                for day in root.data.days: HorizontalLayout {
+                    spacing: 12px;
+                    ConditionIcon { condition: day.condition; width: 28px; height: 28px; colorize: root.fg; y: (parent.height - self.height) / 2; }
+                    VerticalLayout {
+                        spacing: 4px;
+                        Text { text: day.name; color: root.muted; font-size: 12px; letter-spacing: 2px; }
+                        HorizontalLayout {
+                            spacing: 8px; alignment: start;
+                            Text { text: "\{day.max}°"; color: root.fg; font-size: 16px; }
+                            Text { text: "\{day.min}°"; color: root.muted; font-size: 16px; }
+                        }
+                    }
+                }
+            }
+        }
+        TouchArea { clicked => { root.action("refresh"); } }
+    }
+}

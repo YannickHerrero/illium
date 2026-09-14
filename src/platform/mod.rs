@@ -1,3 +1,4 @@
+mod applet;
 mod dpi;
 use winarchy_ipc::{identity, pipe_io};
 mod input;
@@ -37,6 +38,10 @@ pub enum Event {
     Module(String, i32, usize),
     /// Left button pressed on the root window `isize`, anywhere on the desktop.
     Click(isize),
+    /// An applet provider finished: applet name and its stdout or error.
+    AppletData(String, Result<String, String>),
+    /// An applet view asked for an action to be run by its provider.
+    AppletAction(String, Option<String>),
 }
 struct Manager {
     config: Config,
@@ -44,6 +49,7 @@ struct Manager {
     monitors: Vec<Rect>,
     shell: shell::Shell,
     borders: std::collections::HashMap<isize, native::Border>,
+    applets: applet::Runtime,
 }
 impl Manager {
     fn prune(&mut self) -> bool {
@@ -176,7 +182,7 @@ impl Manager {
                 native::position(c.id, native::framed(c.id, area), Some(HWND_TOP));
             }
         }
-        self.shell.refresh(&self.model, &self.config);
+        self.shell.refresh(&self.model, &self.config, &self.applets);
         self.borders();
     }
     fn borders(&mut self) {
@@ -251,6 +257,7 @@ impl Manager {
         self.shell.configure(&config, &self.monitors)?;
         input::update(bindings);
         self.config = config;
+        self.applets.load(&self.config);
         for c in &self.model.clients {
             native::corners(c.id, self.config.wm.square_corners);
             if self.config.wm.border_width <= 0 {
@@ -469,7 +476,7 @@ impl Manager {
                             self.model.monitors[(self.model.active - 1) as usize] = index;
                         }
                     }
-                    self.shell.refresh(&self.model, &self.config);
+                    self.shell.refresh(&self.model, &self.config, &self.applets);
                     self.borders();
                 }
                 EVENT_OBJECT_CREATE | EVENT_OBJECT_SHOW | EVENT_OBJECT_UNCLOAKED => {
@@ -510,23 +517,39 @@ impl Manager {
                 self.focus_visible();
             }
             Event::Module(kind, x, monitor) => {
-                if self.shell.popup_open.as_deref() == Some(kind.as_str()) {
+                let r = self
+                    .monitors
+                    .get(monitor)
+                    .copied()
+                    .unwrap_or_else(|| self.area());
+                if self.applets.is_applet(&kind) {
+                    self.shell.close_popup();
+                    if let Err(e) = self.applets.toggle(&self.config, r, &kind, x) {
+                        tracing::warn!(applet = %kind, %e, "applet view unavailable");
+                        let lines = e.lines().take(8).map(str::to_owned).collect();
+                        let title = format!("APPLET {kind}");
+                        self.shell
+                            .open_popup(&self.config, r, kind, x, title, lines);
+                    }
+                } else if self.shell.popup_open.as_deref() == Some(kind.as_str()) {
                     self.shell.close_popup();
                 } else if let Some((title, lines)) = status::details(&self.config, &kind) {
-                    let r = self
-                        .monitors
-                        .get(monitor)
-                        .copied()
-                        .unwrap_or_else(|| self.area());
+                    self.applets.close();
                     self.shell
                         .open_popup(&self.config, r, kind, x, title, lines);
                 }
             }
             Event::Click(id) => {
-                if self.shell.popup_open.is_some() && !self.shell.owns(id) {
+                if !self.shell.owns(id) && !self.applets.owns(id) {
                     self.shell.close_popup();
+                    self.applets.close();
                 }
             }
+            Event::AppletData(name, result) => {
+                self.applets.apply(&name, result);
+                self.shell.refresh(&self.model, &self.config, &self.applets);
+            }
+            Event::AppletAction(name, action) => self.applets.action(&name, action),
             Event::Mouse(id) => {
                 if self.config.wm.focus_follows_mouse
                     && !self.shell.visible
@@ -631,6 +654,7 @@ pub fn run(replace: bool) -> Result<(), String> {
         monitors: native::monitors(),
         shell: shell::Shell::new(tx.clone())?,
         borders: std::collections::HashMap::new(),
+        applets: applet::Runtime::new(tx.clone()),
     };
     let manager = Rc::new(RefCell::new(manager));
     let startup_error = Rc::new(RefCell::new(None));
@@ -650,6 +674,7 @@ pub fn run(replace: bool) -> Result<(), String> {
             input::start(tx.clone(), bindings)?;
             let foreground = unsafe { GetForegroundWindow().0 as isize };
             m.shell.configure(&config, &monitors)?;
+            m.applets.load(&config);
             for id in native::enumerate() {
                 m.add(id);
             }
@@ -695,6 +720,7 @@ pub fn run(replace: bool) -> Result<(), String> {
             } = &mut *m;
             let pending = shell.pending;
             let ready = shell.arrange(config, monitors);
+            m.applets.arrange();
             if ready && pending && !m.shell.visible {
                 m.focus_visible();
             }
@@ -752,7 +778,8 @@ pub fn run(replace: bool) -> Result<(), String> {
                     m.layout();
                 }
             }
-            m.shell.refresh(&m.model, &m.config);
+            m.applets.tick();
+            m.shell.refresh(&m.model, &m.config, &m.applets);
             m.borders();
         },
     );

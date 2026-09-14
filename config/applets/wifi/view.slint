@@ -1,0 +1,40 @@
+struct Data { connected: bool, ssid: string, signal: int, rate: float, band: string }
+component Row inherits HorizontalLayout {
+    in property <string> name;
+    in property <string> value;
+    in property <color> fg;
+    in property <color> muted;
+    Text { text: name; color: muted; font-size: 13px; letter-spacing: 1px; horizontal-stretch: 1; }
+    Text { text: value; color: fg; font-size: 14px; }
+}
+export component View inherits Window {
+    no-frame: true;
+    in property <length> popup-width: 320px;
+    in property <length> popup-height: 190px;
+    width: popup-width;
+    height: popup-height;
+    in property <color> bg: #1e1e2e;
+    in property <color> overlay: #45475a;
+    in property <color> fg: #cdd6f4;
+    in property <color> muted: #a6adc8;
+    in property <color> accent: #cba6f7;
+    in property <Data> data;
+    callback action(string);
+    background: bg;
+    Rectangle {
+        border-width: 1px;
+        border-color: root.overlay;
+        VerticalLayout {
+            padding: 18px; spacing: 12px;
+            Text { text: root.data.connected ? root.data.ssid : "Not connected"; color: root.fg; font-size: 18px; font-weight: 600; }
+            Rectangle {
+                height: 6px; background: root.overlay;
+                Rectangle { x: 0; width: parent.width * max(0, min(100, root.data.signal)) / 100; height: parent.height; background: root.accent; }
+            }
+            Row { name: "SIGNAL"; value: "\{root.data.signal}%"; fg: root.fg; muted: root.muted; }
+            Row { name: "RATE"; value: "\{round(root.data.rate)} Mbps"; fg: root.fg; muted: root.muted; }
+            Row { name: "BAND"; value: root.data.band == "" ? "—" : root.data.band; fg: root.fg; muted: root.muted; }
+        }
+        TouchArea { clicked => { root.action("refresh"); } }
+    }
+}

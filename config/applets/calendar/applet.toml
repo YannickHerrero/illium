@@ -1,0 +1,5 @@
+# Month view fed by the daemon's clock, no script involved.
+icon = "icon.svg"
+provider = "builtin:clock"
+interval = "1m"
+popup = { width = 300, height = 280 }

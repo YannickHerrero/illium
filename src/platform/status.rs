@@ -12,36 +12,68 @@ use windows::Win32::{
 fn ticks(t: FILETIME) -> u64 {
     (u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime)
 }
-/// Overall CPU load since the previous call, from kernel/user/idle time deltas.
-fn cpu() -> Option<String> {
-    static LAST: std::sync::Mutex<Option<(u64, u64)>> = std::sync::Mutex::new(None);
+/// Overall CPU load in percent. Sampled at most twice a second from
+/// kernel/user/idle deltas, so several callers per refresh share one reading.
+pub fn cpu_percent() -> Option<u64> {
+    struct Sample {
+        at: std::time::Instant,
+        busy: u64,
+        idle: u64,
+        percent: Option<u64>,
+    }
+    static LAST: std::sync::Mutex<Option<Sample>> = std::sync::Mutex::new(None);
+    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+    let now = std::time::Instant::now();
+    if let Some(s) = &*last
+        && now.duration_since(s.at) < std::time::Duration::from_millis(500)
+    {
+        return s.percent;
+    }
     let (mut idle, mut kernel, mut user) = (
         FILETIME::default(),
         FILETIME::default(),
         FILETIME::default(),
     );
     unsafe { GetSystemTimes(Some(&mut idle), Some(&mut kernel), Some(&mut user)) }.ok()?;
-    let busy_total = ticks(kernel) + ticks(user);
+    let busy = ticks(kernel) + ticks(user);
     let idle = ticks(idle);
-    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
-    let previous = last.replace((busy_total, idle))?;
-    let total = busy_total.saturating_sub(previous.0);
-    if total == 0 {
-        return None;
-    }
-    let idle = idle.saturating_sub(previous.1).min(total);
-    Some(format!("{}%", (total - idle) * 100 / total))
+    let percent = last.as_ref().and_then(|s| {
+        let total = busy.saturating_sub(s.busy);
+        (total > 0).then(|| (total - idle.saturating_sub(s.idle).min(total)) * 100 / total)
+    });
+    *last = Some(Sample {
+        at: now,
+        busy,
+        idle,
+        percent,
+    });
+    percent
 }
-fn memory() -> Option<String> {
+fn cpu() -> Option<String> {
+    cpu_percent().map(|p| format!("{p}%"))
+}
+/// Available and total physical memory in GB, and the load percentage.
+pub fn memory_status() -> Option<(f64, f64, u32)> {
     let mut status = MEMORYSTATUSEX {
         dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
         ..Default::default()
     };
     unsafe { GlobalMemoryStatusEx(&mut status) }.ok()?;
-    Some(format!(
-        "{:.1} GB",
-        status.ullAvailPhys as f64 / (1024.0 * 1024.0 * 1024.0)
+    let gb = |b: u64| b as f64 / (1024.0 * 1024.0 * 1024.0);
+    Some((
+        gb(status.ullAvailPhys),
+        gb(status.ullTotalPhys),
+        status.dwMemoryLoad,
     ))
+}
+fn memory() -> Option<String> {
+    memory_status().map(|(available, _, _)| format!("{available:.1} GB"))
+}
+/// Battery percentage and whether AC power is connected; None without a battery.
+pub fn battery_status() -> Option<(u8, bool)> {
+    let mut p = SYSTEM_POWER_STATUS::default();
+    unsafe { GetSystemPowerStatus(&mut p) }.ok()?;
+    (p.BatteryLifePercent <= 100).then_some((p.BatteryLifePercent, p.ACLineStatus == 1))
 }
 fn volume() -> Option<String> {
     unsafe {
@@ -80,14 +112,7 @@ pub fn items(c: &Config, title: &str, modules: &[String]) -> Vec<(String, String
                     },
                 ))
             },
-            "battery" => unsafe {
-                let mut p = SYSTEM_POWER_STATUS::default();
-                if GetSystemPowerStatus(&mut p).is_ok() && p.BatteryLifePercent <= 100 {
-                    Some(format!("{}%", p.BatteryLifePercent))
-                } else {
-                    None
-                }
-            },
+            "battery" => battery_status().map(|(p, _)| format!("{p}%")),
             "cpu" => cpu(),
             "memory" => memory(),
             _ => None,
@@ -153,22 +178,13 @@ pub fn details(c: &Config, kind: &str) -> Option<(String, Vec<String>)> {
             ))
         }
         "memory" => {
-            let mut status = MEMORYSTATUSEX {
-                dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
-                ..Default::default()
-            };
-            unsafe { GlobalMemoryStatusEx(&mut status) }.ok()?;
-            let gb = |b: u64| b as f64 / (1024.0 * 1024.0 * 1024.0);
+            let (available, total, load) = memory_status()?;
             Some((
                 "MEMORY".into(),
                 vec![
-                    format!("Available: {:.1} GB", gb(status.ullAvailPhys)),
-                    format!(
-                        "In use: {:.1} GB ({}%)",
-                        gb(status.ullTotalPhys - status.ullAvailPhys),
-                        status.dwMemoryLoad
-                    ),
-                    format!("Total: {:.1} GB", gb(status.ullTotalPhys)),
+                    format!("Available: {available:.1} GB"),
+                    format!("In use: {:.1} GB ({load}%)", total - available),
+                    format!("Total: {total:.1} GB"),
                 ],
             ))
         }

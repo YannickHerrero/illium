@@ -1,0 +1,35 @@
+struct Cell { day: int, current: bool, today: bool }
+struct Data { year: int, month: int, day: int, month-name: string, weekday-name: string, weeks: [[Cell]] }
+export component View inherits Window {
+    no-frame: true;
+    in property <length> popup-width: 300px;
+    in property <length> popup-height: 280px;
+    width: popup-width;
+    height: popup-height;
+    in property <color> bg: #1e1e2e;
+    in property <color> overlay: #45475a;
+    in property <color> fg: #cdd6f4;
+    in property <color> muted: #a6adc8;
+    in property <color> accent: #cba6f7;
+    in property <Data> data;
+    callback action(string);
+    background: bg;
+    Rectangle {
+        border-width: 1px;
+        border-color: root.overlay;
+        VerticalLayout {
+            padding: 16px; spacing: 10px;
+            Text { text: "\{root.data.month-name} \{root.data.year}"; color: root.fg; font-size: 16px; font-weight: 600; horizontal-alignment: center; }
+            HorizontalLayout {
+                for name in ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]: Text { text: name; color: root.muted; font-size: 11px; horizontal-alignment: center; }
+            }
+            for week in root.data.weeks: HorizontalLayout {
+                for cell in week: Rectangle {
+                    height: 28px;
+                    Rectangle { width: 26px; height: 26px; border-radius: 0px; background: cell.today ? root.accent : transparent; }
+                    Text { text: cell.day > 0 ? "\{cell.day}" : ""; color: cell.today ? root.bg : (cell.current ? root.fg : root.muted); horizontal-alignment: center; vertical-alignment: center; }
+                }
+            }
+        }
+    }
+}

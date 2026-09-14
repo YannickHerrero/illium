@@ -23,6 +23,14 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 [target.'cfg(windows)'.dependencies]
 slint = { version = "=1.12.1", default-features = false, features = ["std", "backend-winit", "renderer-software", "compat-1-2", "raw-window-handle-06"] }
 raw-window-handle = "0.6"
+# Applet views are compiled at run time; `internal`/`internal-json` expose the
+# typed JSON conversion. i-slint-core's `svg` feature enables run-time SVG
+# decoding for applet icons and views (the shell's own icons are pre-rendered).
+slint-interpreter = { version = "=1.12.1", default-features = false, features = ["std", "compat-1-2", "internal", "internal-json"] }
+i-slint-core = { version = "=1.12.1", default-features = false, features = ["std", "svg"] }
+# Only to walk the declared type of an applet view's `data` property.
+i-slint-compiler = { version = "=1.12.1", default-features = false }
+spin_on = "0.1"
 windows = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Accessibility", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_HiDpi", "Win32_UI_Shell", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_System_Threading", "Win32_System_RemoteDesktop", "Win32_System_Pipes", "Win32_System_IO", "Win32_Storage_FileSystem", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Power", "Win32_System_SystemInformation", "Win32_System_LibraryLoader", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_Media_Audio", "Win32_Media_Audio_Endpoints"] }
 
 [build-dependencies]

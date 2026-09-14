@@ -1,0 +1,31 @@
+// View template. Winarchy sets `data` from the provider's JSON, the theme
+// colors, and popup-width/popup-height from applet.toml. `action` re-runs the
+// provider with its argument.
+struct Data { message: string, count: int, action: string }
+export component View inherits Window {
+    no-frame: true;
+    in property <length> popup-width: 320px;
+    in property <length> popup-height: 160px;
+    width: popup-width;
+    height: popup-height;
+    in property <color> bg: #1e1e2e;
+    in property <color> surface: #313244;
+    in property <color> overlay: #45475a;
+    in property <color> fg: #cdd6f4;
+    in property <color> muted: #a6adc8;
+    in property <color> accent: #cba6f7;
+    in property <Data> data;
+    callback action(string);
+    background: bg;
+    Rectangle {
+        border-width: 1px;
+        border-color: root.overlay;
+        VerticalLayout {
+            padding: 18px; spacing: 10px;
+            Text { text: root.data.message; color: root.fg; font-size: 16px; }
+            Text { text: "\{root.data.count} processes"; color: root.muted; }
+            Text { text: root.data.action == "" ? "Click to refresh" : "Last action: \{root.data.action}"; color: root.accent; font-size: 12px; }
+        }
+        TouchArea { clicked => { root.action("refresh"); } }
+    }
+}

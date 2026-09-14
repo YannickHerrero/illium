@@ -1357,6 +1357,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "generativity"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2c81fb5260e37854d09d5c87183309fd8c555b75289427884b25660bc87a85e"
+
+[[package]]
 name = "gethostname"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1592,6 +1598,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "i-slint-backend-qt"
+version = "1.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a430b595f9a33f819a7b2a0c75b65c8c0a6cfdf469e40247f570c0ad50cc052"
+dependencies = [
+ "const-field-offset",
+ "i-slint-common",
+ "i-slint-core",
+ "i-slint-core-macros",
+ "vtable",
+]
+
+[[package]]
 name = "i-slint-backend-selector"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1599,6 +1618,7 @@ checksum = "50166eb0f0f63ffa514069cdad5465d1d4c711c57dbd495f16f0a4ee14b82e46"
 dependencies = [
  "cfg-if",
  "i-slint-backend-linuxkms",
+ "i-slint-backend-qt",
  "i-slint-backend-winit",
  "i-slint-common",
  "i-slint-core",
@@ -3835,6 +3855,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "slint-interpreter"
+version = "1.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f58c70b9b5d0f0b403dc30f96543929a0f5f388dca6ba77127de697399d4ffd1"
+dependencies = [
+ "derive_more",
+ "generativity",
+ "i-slint-backend-selector",
+ "i-slint-backend-winit",
+ "i-slint-common",
+ "i-slint-compiler",
+ "i-slint-core",
+ "i-slint-core-macros",
+ "itertools 0.14.0",
+ "lyon_path",
+ "once_cell",
+ "serde_json",
+ "smol_str 0.3.6",
+ "unicode-segmentation",
+ "vtable",
+ "web-sys",
+]
+
+[[package]]
 name = "slint-macros"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4849,11 +4893,15 @@ dependencies = [
 name = "winarchy"
 version = "0.1.0"
 dependencies = [
+ "i-slint-compiler",
+ "i-slint-core",
  "raw-window-handle",
  "serde",
  "serde_json",
  "slint",
  "slint-build",
+ "slint-interpreter",
+ "spin_on",
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",

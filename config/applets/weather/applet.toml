@@ -1,0 +1,10 @@
+# Current conditions and a three-day outlook from Open-Meteo (no API key).
+icon = "icon.svg"
+interval = "10m"
+label = "{temperature}°"
+popup = { width = 640, height = 300 }
+
+[settings]
+latitude = 48.8566
+longitude = 2.3522
+place = "Paris"

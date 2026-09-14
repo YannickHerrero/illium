@@ -1,0 +1,5 @@
+# Wireless connection from `netsh wlan show interfaces`.
+icon = "icon.svg"
+interval = "30s"
+label = "{ssid}"
+popup = { width = 320, height = 190 }
