@@ -1,0 +1,78 @@
+import { Palette, Column, StatusLine, KeyHelp } from "common.slint";
+export struct FileRow { name: string, dir: bool, hidden: bool, selected: bool, cut: bool, size: string }
+component FileList inherits Column {
+    in property <[FileRow]> rows;
+    in property <bool> active;
+    in property <bool> show-size;
+    for row[i] in root.rows: Rectangle {
+        height: root.row-height;
+        background: i == root.cursor ? (root.active ? Palette.surface : Palette.overlay.with-alpha(0.5)) : transparent;
+        HorizontalLayout {
+            padding-left: 8px; padding-right: 8px; spacing: 8px;
+            Rectangle { width: 3px; background: row.selected ? Palette.accent : transparent; }
+            Text {
+                text: row.name;
+                color: row.cut ? Palette.muted : (row.dir ? Palette.accent : (row.hidden ? Palette.muted : Palette.fg));
+                font-weight: row.dir ? 600 : 400;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            if root.show-size: Text { text: row.size; color: Palette.muted; font-size: 12px; vertical-alignment: center; }
+        }
+    }
+}
+export component FilesWindow inherits Window {
+    title: "Files";
+    preferred-width: 1000px;
+    preferred-height: 600px;
+    in property <string> path;
+    in property <[FileRow]> parent-rows;
+    in property <int> parent-cursor: -1;
+    in property <[FileRow]> rows;
+    in property <int> cursor;
+    in property <[FileRow]> preview-rows;
+    in property <[string]> preview-lines;
+    in property <string> status-left;
+    in property <string> status-right;
+    in property <bool> help;
+    in property <[string]> help-lines;
+    callback key(string, bool, bool);
+    out property <int> page: current.page;
+    background: Palette.bg;
+    forward-focus: keys;
+    keys := FocusScope {
+        key-pressed(event) => {
+            root.key(event.text, event.modifiers.control, event.modifiers.shift);
+            return accept;
+        }
+        VerticalLayout {
+            Rectangle {
+                height: 30px;
+                Text { x: 10px; text: root.path; color: Palette.accent; font-weight: 600; vertical-alignment: center; width: parent.width - 20px; overflow: elide; }
+            }
+            HorizontalLayout {
+                vertical-stretch: 1;
+                spacing: 1px;
+                FileList { width: 22%; rows: root.parent-rows; cursor: root.parent-cursor; }
+                Rectangle { width: 1px; background: Palette.overlay; }
+                current := FileList { horizontal-stretch: 1; rows: root.rows; cursor: root.cursor; active: true; show-size: true; }
+                Rectangle { width: 1px; background: Palette.overlay; }
+                Rectangle {
+                    width: 36%;
+                    if root.preview-rows.length > 0: FileList { width: 100%; height: 100%; rows: root.preview-rows; cursor: -1; }
+                    if root.preview-rows.length == 0: Flickable {
+                        width: 100%; height: 100%;
+                        VerticalLayout {
+                            alignment: start;
+                            padding: 8px; spacing: 2px;
+                            for line in root.preview-lines: Text { text: line; color: Palette.fg; font-family: "Consolas"; font-size: 12px; overflow: elide; }
+                        }
+                    }
+                }
+            }
+            StatusLine { left: root.status-left; right: root.status-right; }
+        }
+    }
+    if root.help: KeyHelp { lines: root.help-lines; }
+}
