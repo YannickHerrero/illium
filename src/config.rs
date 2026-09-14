@@ -212,8 +212,16 @@ impl Config {
             .enumerate()
         {
             for module in *modules {
-                if !["workspaces", "window-title", "volume", "battery", "clock"]
-                    .contains(&module.as_str())
+                if ![
+                    "workspaces",
+                    "window-title",
+                    "volume",
+                    "battery",
+                    "clock",
+                    "cpu",
+                    "memory",
+                ]
+                .contains(&module.as_str())
                     || (module == "workspaces" && index != 0)
                 {
                     return Err(format!("bar: unsupported module or placement: {module}"));

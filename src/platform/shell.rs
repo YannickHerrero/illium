@@ -410,15 +410,28 @@ impl Shell {
             vec![]
         };
         let title = m.focused.map(native::title).unwrap_or_default();
-        let left = super::status::text(c, &title, &c.bar.left);
-        let center = super::status::text(c, &title, &c.bar.center);
-        let status = super::status::text(c, &title, &c.bar.right);
+        let items = |modules: &[String]| {
+            super::status::items(c, &title, modules)
+                .into_iter()
+                .map(|(kind, value)| StatusItem {
+                    kind: kind.into(),
+                    value: value.into(),
+                })
+                .collect::<Vec<_>>()
+        };
+        let left = items(&c.bar.left);
+        let center = items(&c.bar.center)
+            .iter()
+            .map(|i| i.value.to_string())
+            .collect::<Vec<_>>()
+            .join("  ");
+        let right = items(&c.bar.right);
         for b in &self.bars {
             b.set_active(m.active as i32);
             b.set_workspaces(ModelRc::from(Rc::new(VecModel::from(workspaces.clone()))));
-            b.set_left_text(left.clone().into());
-            b.set_title_text(center.clone().into());
-            b.set_status(status.clone().into());
+            b.set_left_items(ModelRc::from(Rc::new(VecModel::from(left.clone()))));
+            b.set_center_text(center.clone().into());
+            b.set_right_items(ModelRc::from(Rc::new(VecModel::from(right.clone()))));
         }
     }
 }

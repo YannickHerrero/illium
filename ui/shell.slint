@@ -7,6 +7,25 @@ export component Background inherits Window {
     in property <color> bg;
     background: bg;
 }
+export struct StatusItem { kind: string, value: string }
+component StatusModule inherits HorizontalLayout {
+    in property <StatusItem> item;
+    in property <color> fg;
+    in property <color> muted;
+    property <bool> has-icon: item.kind == "battery" || item.kind == "cpu" || item.kind == "memory";
+    spacing: 6px;
+    Image {
+        visible: has-icon;
+        width: has-icon ? 14px : 0px;
+        height: 14px;
+        y: (parent.height - self.height) / 2;
+        source: item.kind == "battery" ? @image-url("icons/battery.svg")
+            : item.kind == "cpu" ? @image-url("icons/cpu.svg")
+            : @image-url("icons/memory.svg");
+        colorize: muted;
+    }
+    Text { text: item.value; color: fg; vertical-alignment: center; }
+}
 export component Bar inherits Window {
     no-frame: true;
     in property <length> surface-width;
@@ -17,25 +36,36 @@ export component Bar inherits Window {
     in property <color> fg;
     in property <color> accent;
     in property <color> muted;
-    in property <string> left-text;
     in property <int> active;
     /// Workspace numbers to show: the occupied ones and the active one.
     in property <[int]> workspaces;
-    in property <string> title-text;
-    in property <string> status;
+    in property <[StatusItem]> left-items;
+    in property <string> center-text;
+    in property <[StatusItem]> right-items;
     callback workspace(int);
     background: bg;
+    // The center is positioned against the whole bar, never against the
+    // width of the side groups, so the clock stays centered on the screen.
+    Text {
+        x: 0; width: root.width; height: root.height;
+        text: root.center-text; color: root.fg;
+        horizontal-alignment: center; vertical-alignment: center;
+    }
     HorizontalLayout {
-        padding: 4px; spacing: 8px;
+        x: 0; height: root.height; width: self.preferred-width;
+        padding-left: 4px; padding-top: 4px; padding-bottom: 4px; spacing: 8px;
         for n in root.workspaces: Rectangle {
             width: 25px;
             background: root.active == n ? root.accent : root.bg;
             Text { text: "\{n}"; color: root.active == n ? root.bg : root.fg; horizontal-alignment: center; vertical-alignment: center; }
             TouchArea { clicked => { root.workspace(n); } }
         }
-        Text { text: root.left-text; color: root.fg; vertical-alignment: center; }
-        Text { text: root.title-text; color: root.fg; overflow: elide; horizontal-alignment: center; vertical-alignment: center; horizontal-stretch: 1; }
-        Text { text: root.status; color: root.fg; vertical-alignment: center; }
+        for item in root.left-items: StatusModule { item: item; fg: root.fg; muted: root.muted; }
+    }
+    HorizontalLayout {
+        x: root.width - self.width; height: root.height; width: self.preferred-width;
+        padding-right: 12px; padding-top: 4px; padding-bottom: 4px; spacing: 16px;
+        for item in root.right-items: StatusModule { item: item; fg: root.fg; muted: root.muted; }
     }
 }
 export component Launcher inherits Window {

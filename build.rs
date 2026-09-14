@@ -2,7 +2,14 @@ fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }
-    slint_build::compile("ui/shell.slint").expect("compile shell UI");
+    // Icons are pre-rendered at build time: the software renderer has no
+    // runtime SVG decoder in this feature set.
+    slint_build::compile_with_config(
+        "ui/shell.slint",
+        slint_build::CompilerConfiguration::new()
+            .embed_resources(slint_build::EmbedResourcesKind::EmbedForSoftwareRenderer),
+    )
+    .expect("compile shell UI");
     winresource::WindowsResource::new()
         .set("ProductName", "Winarchy")
         .set("FileDescription", "Winarchy tiling window manager")
