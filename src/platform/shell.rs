@@ -1,7 +1,7 @@
 use super::{Event, EventSender, native};
 use crate::{config::Config, layout::Rect, model::Model};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use slint::{ComponentHandle, ModelRc, VecModel};
+use slint::{ComponentHandle, Model as _, ModelRc, VecModel};
 use std::rc::Rc;
 use windows::Win32::{Foundation::*, UI::WindowsAndMessaging::*};
 slint::include_modules!();
@@ -94,9 +94,31 @@ pub struct App {
     pub target: String,
     pub shortcut: bool,
 }
+/// Persistent bar models. Replacing a model recreates every module element,
+/// which loses a click whose press and release straddle a refresh; rows are
+/// updated in place instead.
+struct BarModels {
+    workspaces: Rc<VecModel<i32>>,
+    left: Rc<VecModel<StatusItem>>,
+    center: Rc<VecModel<StatusItem>>,
+    right: Rc<VecModel<StatusItem>>,
+}
+fn sync<T: Clone + PartialEq + 'static>(model: &Rc<VecModel<T>>, rows: &[T]) {
+    for (i, row) in rows.iter().enumerate() {
+        match model.row_data(i) {
+            Some(current) if current == *row => {}
+            Some(_) => model.set_row_data(i, row.clone()),
+            None => model.push(row.clone()),
+        }
+    }
+    while model.row_count() > rows.len() {
+        model.remove(model.row_count() - 1);
+    }
+}
 pub struct Shell {
     pub backgrounds: Vec<Background>,
     pub bars: Vec<Bar>,
+    models: Vec<BarModels>,
     pub launcher: Launcher,
     popup: Popup,
     /// Kind of the module whose popup is open.
@@ -156,6 +178,7 @@ impl Shell {
         Ok(Self {
             backgrounds: vec![],
             bars: vec![],
+            models: vec![],
             launcher,
             popup,
             popup_open: None,
@@ -178,6 +201,7 @@ impl Shell {
         for b in self.bars.drain(..) {
             let _ = b.hide();
         }
+        self.models.clear();
         for b in self.backgrounds.drain(..) {
             let _ = b.hide();
         }
@@ -213,6 +237,17 @@ impl Shell {
                 b.set_surface_width(super::dpi::logical(*r, r.w));
                 b.set_surface_height(c.bar.height as f32);
                 b.show().map_err(|e| e.to_string())?;
+                let models = BarModels {
+                    workspaces: Rc::new(VecModel::default()),
+                    left: Rc::new(VecModel::default()),
+                    center: Rc::new(VecModel::default()),
+                    right: Rc::new(VecModel::default()),
+                };
+                b.set_workspaces(ModelRc::from(models.workspaces.clone()));
+                b.set_left_items(ModelRc::from(models.left.clone()));
+                b.set_center_items(ModelRc::from(models.center.clone()));
+                b.set_right_items(ModelRc::from(models.right.clone()));
+                self.models.push(models);
                 self.bars.push(b);
             }
         }
@@ -515,12 +550,12 @@ impl Shell {
         let left = items(&c.bar.left);
         let center = items(&c.bar.center);
         let right = items(&c.bar.right);
-        for b in &self.bars {
+        for (b, models) in self.bars.iter().zip(&self.models) {
             b.set_active(m.active as i32);
-            b.set_workspaces(ModelRc::from(Rc::new(VecModel::from(workspaces.clone()))));
-            b.set_left_items(ModelRc::from(Rc::new(VecModel::from(left.clone()))));
-            b.set_center_items(ModelRc::from(Rc::new(VecModel::from(center.clone()))));
-            b.set_right_items(ModelRc::from(Rc::new(VecModel::from(right.clone()))));
+            sync(&models.workspaces, &workspaces);
+            sync(&models.left, &left);
+            sync(&models.center, &center);
+            sync(&models.right, &right);
         }
         if let Some(kind) = &self.popup_open
             && let Some((title, lines)) = super::status::details(c, kind)
