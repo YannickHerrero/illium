@@ -10,7 +10,13 @@ fn log(message: &str) {
     // Bounded diagnostics only, never terminal output or typed input.
     let path = home.join("terminal.log");
     if std::fs::metadata(&path).is_ok_and(|m| m.len() > 1024 * 1024) {
-        let _ = std::fs::rename(&path, home.join("terminal.log.1"));
+        let backup = home.join("terminal.log.1");
+        let _ = std::fs::remove_file(&backup);
+        // A competing launcher may be writing/rotating too. Never grow the
+        // original without bound when Windows refuses a rename.
+        if std::fs::rename(&path, backup).is_err() {
+            return;
+        }
     }
     if let Ok(mut file) = std::fs::OpenOptions::new()
         .create(true)
