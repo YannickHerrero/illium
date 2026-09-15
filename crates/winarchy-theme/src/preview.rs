@@ -43,6 +43,21 @@ pub fn files(dir: &Path) -> Result<Vec<String>, String> {
     Ok(names.into_iter().map(|(_, name)| name).collect())
 }
 
+/// Wallpaper cards retain exact filenames as identifiers for confirmation.
+/// Uses the same bounded, link-safe discovery as wallpaper application.
+pub fn wallpapers(home: &Path, theme: &str) -> Result<Vec<Entry>, String> {
+    let dir = pack::wallpaper_dir(home, theme)?;
+    Ok(pack::fingerprint(home, theme)?
+        .into_iter()
+        .map(|(id, size, modified)| Entry {
+            path: dir.join(&id),
+            id,
+            size,
+            modified,
+        })
+        .collect())
+}
+
 fn entry(home: &Path, id: String) -> Result<Option<Entry>, String> {
     let themes = home.join("themes");
     let palette = pack::read(&themes.join(format!("{id}.toml")), 65536)?;
@@ -140,6 +155,30 @@ mod tests {
     }
     fn png(path: &Path) {
         image::RgbaImage::new(2, 2).save(path).unwrap();
+    }
+    #[test]
+    fn wallpaper_catalog_preserves_filenames_and_tracks_only_its_theme() {
+        let t = Temp::new();
+        png(&t.source().join("preview.png"));
+        png(&t.source().join("wallpapers/Été - 2.png"));
+        png(&t.source().join("wallpapers/A painting.png"));
+        pack::install(&t.home(), &t.source()).unwrap();
+        let before = wallpapers(&t.home(), "mine").unwrap();
+        assert_eq!(
+            before.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(),
+            ["A painting.png", "Été - 2.png"]
+        );
+        assert!(
+            before
+                .iter()
+                .all(|e| e.path.parent().unwrap().ends_with("mine/wallpapers"))
+        );
+        fs::write(&before[0].path, "changed").unwrap();
+        assert_ne!(before, wallpapers(&t.home(), "mine").unwrap());
+        fs::remove_file(&before[1].path).unwrap();
+        assert_eq!(wallpapers(&t.home(), "mine").unwrap().len(), 1);
+        assert!(wallpapers(&t.home(), "missing").unwrap().is_empty());
+        assert!(wallpapers(&t.home(), "../mine").is_err());
     }
     #[test]
     fn install_preview_with_priority_and_fallback() {
