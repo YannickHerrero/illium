@@ -35,6 +35,10 @@ pub enum Event {
     Dismiss,
     Reload,
     Wallpapers,
+    /// Preview assets changed independently of configuration and the active wallpaper.
+    ThemePreviews,
+    /// Input is tagged with the picker opening generation to reject stale events.
+    Picker(u64, shell::theme_picker::Input),
     Display,
     Mouse(isize),
     /// Bar module clicked: kind, horizontal center in logical bar pixels, monitor index.
@@ -184,15 +188,18 @@ impl Manager {
                 .collect(),
         }
     }
-    fn area(&self) -> Rect {
+    fn full_area(&self) -> Rect {
         let index = self.model.monitors[(self.model.active - 1) as usize]
             .min(self.monitors.len().saturating_sub(1));
-        let mut r = self.monitors.get(index).copied().unwrap_or(Rect {
+        self.monitors.get(index).copied().unwrap_or(Rect {
             x: 0,
             y: 0,
             w: 1280,
             h: 720,
-        });
+        })
+    }
+    fn area(&self) -> Rect {
+        let mut r = self.full_area();
         if self.config.bar.enabled {
             let height = dpi::scale(r, self.config.bar.height);
             r.h -= height;
@@ -290,6 +297,9 @@ impl Manager {
         }
     }
     fn focus_visible(&mut self) {
+        if self.shell.picker.opened {
+            return;
+        }
         if self.prune() {
             self.layout();
         }
@@ -389,6 +399,11 @@ impl Manager {
                 "wallpaper_pending": self.shell.pending_wallpaper(),
                 "wallpaper_error": self.shell.wallpaper_error,
                 "gap": self.config.wm.gap, "launcher": self.shell.visible,
+                "theme_picker": self.shell.picker.opened,
+                "theme_picker_selected": self.shell.picker.selected_id(),
+                "theme_picker_filter": self.shell.picker.filter(),
+                "theme_picker_loading": self.shell.picker.loading(),
+                "theme_picker_error": self.shell.picker.error,
                 "monitors": self.monitors, "bar_count": self.shell.bars.len(),
                 "clients": self.model.clients.iter().map(|c| serde_json::json!({"id":c.id,"workspace":c.workspace,"floating":c.floating,"fullscreen":c.fullscreen,"title":native::title(c.id),"rect":native::rect(c.id)})).collect::<Vec<_>>()
             }).to_string()),
@@ -496,13 +511,26 @@ impl Manager {
                 if shortcut { native::shortcut(&target)?; } else { native::spawn(&target)?; }
             }
             Command::Launcher => {
+                self.shell.picker.close();
                 self.shell.toggle(&self.config, self.area())?;
             }
             Command::Meta => {
+                self.shell.picker.close();
                 self.shell.toggle_meta(&self.config, self.area())?;
             }
             Command::App(name) => apps::open(name),
             Command::Reload => self.reload()?,
+            Command::ThemePicker => {
+                if !self.shell.picker.opened {
+                    let mut pid = 0;
+                    unsafe { GetWindowThreadProcessId(native::hwnd(foreground), Some(&mut pid)); }
+                    let restore = if pid != std::process::id() && foreground != 0 { Some(foreground) } else { self.model.focused };
+                    self.shell.dismiss();
+                    self.shell.close_popup();
+                    self.applets.close();
+                    self.shell.picker.open(&self.config, self.full_area(), restore)?;
+                }
+            }
             Command::WallpaperNext => self.shell.next_wallpaper()?,
             Command::Wallpaper(name) => self.shell.set_wallpaper(name)?,
             Command::Theme(name) => {
@@ -521,6 +549,24 @@ impl Manager {
             }
         }
         Ok("ok".into())
+    }
+    fn finish_picker(&mut self, outcome: crate::theme_picker::Outcome) {
+        use crate::theme_picker::Outcome;
+        if outcome == Outcome::None {
+            return;
+        }
+        let restore = self.shell.picker.close();
+        if let Outcome::Apply(name) = outcome
+            && let Err(error) = self.execute(Command::Theme(name))
+        {
+            tracing::warn!(%error, "selected theme could not be applied");
+            self.shell.picker.error = Some(error);
+        }
+        if let Some(id) = restore.filter(|id| native::visible(*id) && !native::minimized(*id)) {
+            native::focus(id, false);
+        } else {
+            self.focus_visible();
+        }
     }
     fn event(&mut self, event: Event) {
         self.dispatch(event);
@@ -597,6 +643,11 @@ impl Manager {
                 EVENT_SYSTEM_MINIMIZESTART | EVENT_SYSTEM_MOVESIZEEND => self.layout(),
                 _ => {}
             },
+            Event::Picker(epoch, input) => {
+                let outcome = self.shell.picker.input(epoch, input);
+                self.finish_picker(outcome);
+            }
+            Event::ThemePreviews => self.shell.picker.rescan(),
             Event::Search(q) => self.shell.search(&q, self.config.launcher.max_results),
             Event::Launch(n) if self.shell.meta => {
                 let max = self.config.launcher.max_results;
@@ -692,7 +743,7 @@ impl Manager {
             Event::AppletAction(name, action) => self.applets.action(&name, action),
             Event::Mouse(id) => {
                 if self.config.wm.focus_follows_mouse
-                    && !self.shell.visible
+                    && !self.shell.interactive()
                     && self
                         .model
                         .clients
@@ -714,6 +765,9 @@ impl Manager {
                     let _ = self.shell.configure(&self.config, &self.monitors);
                     self.layout();
                 }
+                // WM_SETTINGCHANGE can change DPI without changing physical bounds.
+                let monitor = self.full_area();
+                self.shell.picker.display_changed(monitor);
             }
             Event::Wallpapers => self
                 .shell
@@ -901,10 +955,12 @@ pub fn run(replace: bool) -> Result<(), String> {
                 ..
             } = &mut *m;
             shell.poll_wallpaper(config.launcher.max_results);
+            let outcome = shell.picker.poll();
             let pending = shell.pending;
             let ready = shell.arrange(config, monitors);
+            m.finish_picker(outcome);
             m.applets.arrange();
-            if ready && pending && !m.shell.visible {
+            if ready && pending && !m.shell.interactive() {
                 m.focus_visible();
             }
             if ready

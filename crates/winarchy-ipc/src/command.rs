@@ -33,6 +33,8 @@ pub enum Command {
     App(String),
     Reload,
     Theme(String),
+    /// Open the visual theme picker; browsing does not change the active theme.
+    ThemePicker,
     WallpaperNext,
     /// None selects the solid theme background.
     Wallpaper(Option<String>),
@@ -94,6 +96,7 @@ impl FromStr for Command {
             ["config", "reload"] => Self::Reload,
             ["wallpaper", "next"] => Self::WallpaperNext,
             ["wallpaper", "clear"] => Self::Wallpaper(None),
+            ["theme", "picker"] => Self::ThemePicker,
             ["theme", "set", name] if !name.contains(['/', '\\', '.']) => {
                 Self::Theme((*name).into())
             }
@@ -124,6 +127,8 @@ mod tests {
             Ok(Command::Focus(Direction::Left))
         );
         assert_eq!("app shot".parse(), Ok(Command::App("shot".into())));
+        assert_eq!("theme picker".parse(), Ok(Command::ThemePicker));
+        assert!("theme picker extra".parse::<Command>().is_err());
         for s in [
             "workspace 0",
             "workspace 10",

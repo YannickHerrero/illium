@@ -136,7 +136,6 @@ fn sync<T: Clone + PartialEq + 'static>(model: &Rc<VecModel<T>>, rows: &[T]) {
 pub enum MetaMenu {
     Apps,
     System,
-    Theme,
     Wallpaper,
 }
 #[derive(Clone)]
@@ -144,8 +143,10 @@ pub enum MetaEntry {
     Menu(MetaMenu),
     Run(crate::command::Command),
 }
+pub(super) mod theme_picker;
 mod wallpaper;
 pub struct Shell {
+    pub picker: theme_picker::Picker,
     pub backgrounds: Vec<Background>,
     pub bars: Vec<Bar>,
     models: Vec<BarModels>,
@@ -222,6 +223,7 @@ impl Shell {
         });
         let popup = Popup::new().map_err(|e| e.to_string())?;
         Ok(Self {
+            picker: theme_picker::Picker::new(tx.clone())?,
             backgrounds: vec![],
             bars: vec![],
             models: vec![],
@@ -253,6 +255,7 @@ impl Shell {
     }
     /// Update existing surfaces in place; application index, geometry and UI state stay intact.
     pub fn apply_theme(&mut self, c: &Config) {
+        self.picker.apply_theme(c);
         self.home = c.home.clone();
         self.theme = c.global.theme.clone();
         self.popup.set_bg(color(&c.theme.background));
@@ -276,6 +279,7 @@ impl Shell {
     }
     pub fn configure(&mut self, c: &Config, monitors: &[Rect]) -> Result<(), String> {
         self.pending = true;
+        self.picker.apply_theme(c);
         self.descriptions = c.launcher.show_descriptions;
         self.home = c.home.clone();
         self.theme = c.global.theme.clone();
@@ -458,6 +462,7 @@ impl Shell {
             native::position(id(self.popup.window()), r, Some(HWND_TOPMOST));
             self.popup_pending = None;
         }
+        self.picker.arrange();
         true
     }
     pub fn popup_hwnd(&self) -> isize {
@@ -558,6 +563,9 @@ impl Shell {
                     .collect::<Vec<_>>(),
             ))));
     }
+    pub fn interactive(&self) -> bool {
+        self.visible || self.picker.opened
+    }
     pub fn dismiss(&mut self) {
         let _ = self.launcher.hide();
         self.visible = false;
@@ -588,7 +596,10 @@ impl Shell {
         vec![
             ("Apps ›".into(), MetaEntry::Menu(MetaMenu::Apps)),
             ("System ›".into(), MetaEntry::Menu(MetaMenu::System)),
-            ("Theme ›".into(), MetaEntry::Menu(MetaMenu::Theme)),
+            (
+                "Theme ›".into(),
+                MetaEntry::Run(crate::command::Command::ThemePicker),
+            ),
             ("Wallpaper ›".into(), MetaEntry::Menu(MetaMenu::Wallpaper)),
         ]
     }
@@ -642,36 +653,6 @@ impl Shell {
             ("Quit Winarchy".into(), MetaEntry::Run(Command::Quit)),
         ])
     }
-    /// Theme files under `themes/`, the current one marked.
-    fn meta_themes(&self) -> Vec<(String, MetaEntry)> {
-        let mut names: Vec<String> = std::fs::read_dir(self.home.join("themes"))
-            .map(|entries| {
-                entries
-                    .flatten()
-                    .take(256)
-                    .filter_map(|e| {
-                        let path = e.path();
-                        (path.extension().is_some_and(|x| x == "toml"))
-                            .then(|| path.file_stem()?.to_str().map(str::to_owned))
-                            .flatten()
-                    })
-                    .filter(|n| !n.contains(['/', '\\', '.']))
-                    .collect()
-            })
-            .unwrap_or_default();
-        names.sort();
-        names
-            .into_iter()
-            .map(|name| {
-                let label = if name == self.theme {
-                    format!("● {name}")
-                } else {
-                    format!("  {name}")
-                };
-                (label, MetaEntry::Run(crate::command::Command::Theme(name)))
-            })
-            .collect()
-    }
     fn wallpaper_names(&self) -> Result<Vec<String>, String> {
         let dir = winarchy_theme::pack::wallpaper_dir(&self.home, &self.theme)?;
         winarchy_theme::pack::images(&dir)
@@ -705,7 +686,6 @@ impl Shell {
                 self.meta_items = match menu {
                     MetaMenu::Apps => Self::meta_apps(),
                     MetaMenu::System => Self::meta_system().unwrap_or_default(),
-                    MetaMenu::Theme => self.meta_themes(),
                     MetaMenu::Wallpaper => self.meta_wallpapers(),
                 };
                 self.meta_menu = Some(menu);
