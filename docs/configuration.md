@@ -51,6 +51,14 @@ editor = '"C:\Program Files\Editor\editor.exe" --new-window'
 
 Values are native Windows command lines passed to CreateProcessW, not shell scripts. Quote paths with spaces. TOML single-quoted literal strings avoid backslash escaping. For shell syntax explicitly configure `cmd.exe /c ...` or a PowerShell invocation. PATH is inherited when Winarchy starts.
 
+## terminal.toml
+
+Preferences for the optional bundled `winarchy-terminal.exe`: font family/size,
+padding, bounded scrollback and WSL distribution. Colors and background opacity
+belong to the selected theme, not this file. See [native terminal](terminal.md)
+for settings, activation and the resident fast path. Editing terminal preferences
+does not restart shell applets.
+
 ## bar.toml
 
 ```toml

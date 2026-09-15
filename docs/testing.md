@@ -14,6 +14,18 @@ python3 scripts/check-cli-dependencies.py
 
 The Linux test suite covers the command grammar, configuration loading and invalid reloads, palettes, rule matching, keyboard chords and modifier tracking, Fibonacci geometry and non-overlap, directional navigation, workspace ordering, IPC framing and timeouts, and the models of the companion applications (process sorting and filtering, file listing, selection, clipboard and prompts against a temporary tree). The dependency check keeps `winarchyctl` free of the daemon and UI toolkit. CI runs the same checks on `windows-latest` and packages the release binaries.
 
+## Native terminal
+
+See [terminal validation and performance probes](terminal.md#reproduce-validation).
+Regular tests cover settings, palette fallbacks, VT/Unicode/alternate-screen
+behavior, selection, CSI-u Ctrl+digits, AltGr routing, bracketed paste, mouse
+encoding and synchronized-update timeout. Windows adds the ConPTY error path.
+Opt-in hidden GPU tests verify resize/DPI/font changes and read back actual
+background/glyph alpha. A separate WSL roundtrip test validates CSI-u through
+ConPTY. A visible desktop probe uses a temporary theme and asserts that live
+reload retains both the native HWND and WSL PID. Do not run visible probes
+while interacting with their test windows.
+
 ## Desktop tests
 
 Desktop tests are `#[ignore]`d and never run in CI. **Save your work first: they rearrange, hide and close windows.** Use a disposable configuration directory:

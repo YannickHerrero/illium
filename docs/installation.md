@@ -15,7 +15,12 @@ cargo build --release
 
 Copy `target\release\winarchy.exe`, `winarchyctl.exe` and `winarchy-apps.exe` to a directory on PATH; the daemon launches the companion applications from its own directory. Defaults are embedded; the configuration directory is created on first launch. No installer, service, administrator privilege or registry change is required. The corrected daemon explicitly refuses an elevated token before opening configuration or log paths.
 
-Install WezTerm separately, for example `winget install wez.wezterm`. Restart the terminal after changing PATH, or configure an absolute executable path in `apps.toml`. Winarchy does not silently download or install applications.
+The default alias uses WezTerm. Alternatively, opt into the bundled
+[native WSL terminal](terminal.md) by setting `terminal = "winarchy-terminal.exe"`
+in `apps.toml`; keep all Winarchy executables together. No separate terminal
+installation is needed for that option.
+
+For the default alias, install WezTerm separately, for example `winget install wez.wezterm`. Restart the terminal after changing PATH, or configure an absolute executable path in `apps.toml`. Winarchy does not silently download or install applications.
 
 ## Developing from WSL
 

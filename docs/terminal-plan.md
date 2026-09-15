@@ -1,5 +1,9 @@
 # Native terminal implementation plan
 
+Initial milestones below are implemented as an opt-in candidate. See
+[terminal usage, measured results and remaining validation](terminal.md).
+The user's WezTerm alias/configuration has not been replaced.
+
 Primary metric: request to visible window, independently of WSL readiness.
 A separate `winarchy-terminal.exe` in this workspace opens **WSL only**, never
 Herdr. A resident process retains graphics/font resources but no idle WSL

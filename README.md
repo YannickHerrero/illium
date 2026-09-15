@@ -12,7 +12,9 @@ A minimal, keyboard-first Windows 11 x64 tiling window manager and experimental 
 
 ## Quick start
 
-Install [WezTerm](https://wezterm.org/) and put `wezterm.exe` on PATH. Build on Windows with Rust and Visual Studio's **Desktop development with C++** tools:
+The default terminal alias uses [WezTerm](https://wezterm.org/) (`wezterm.exe` on PATH).
+An experimental, bundled [native WSL terminal](docs/terminal.md) is also available:
+`winarchy-terminal.exe`, with resident fast opening and live Winarchy themes. Build on Windows with Rust and Visual Studio's **Desktop development with C++** tools:
 
 ```powershell
 cargo build --release
@@ -47,7 +49,7 @@ This does **not** stop Explorer. Defaults are installed without overwriting exis
 
 | Keys | Action |
 |---|---|
-| Alt+Enter | WezTerm |
+| Alt+Enter | Configured terminal (WezTerm by default) |
 | Alt+Space | Launcher |
 | Alt+Shift+Space | Menu: Apps, System (hibernate, lock, restart, shut down, quit), Theme and Wallpaper |
 | Ctrl+Alt+Shift+Space | Visual theme picker (requires previews or wallpapers; see [Themes](docs/themes.md)) |
