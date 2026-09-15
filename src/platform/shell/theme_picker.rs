@@ -86,7 +86,7 @@ pub struct Picker {
     serial: u64,
     scanning: bool,
     pending_cards: Option<Vec<Card>>,
-    confirm_pending: bool,
+    confirm_target: Option<String>,
     pub error: Option<String>,
 }
 impl Picker {
@@ -146,7 +146,7 @@ impl Picker {
             serial: 0,
             scanning: false,
             pending_cards: None,
-            confirm_pending: false,
+            confirm_target: None,
             error: None,
         })
     }
@@ -176,7 +176,7 @@ impl Picker {
         self.model = Model::default();
         self.shown = Model::default();
         self.pending_cards = None;
-        self.confirm_pending = false;
+        self.confirm_target = None;
         self.error = None;
         self.ui.show().map_err(|e| e.to_string())?;
         self.opened = true;
@@ -194,7 +194,7 @@ impl Picker {
         self.loader.cancel();
         self.pending_cards = None;
         self.scanning = false;
-        self.confirm_pending = false;
+        self.confirm_target = None;
         let _ = self.ui.hide();
         self.rows.set_vec(vec![]);
         self.hit_cards.borrow_mut().clear();
@@ -237,7 +237,7 @@ impl Picker {
             return;
         }
         self.scanning = true;
-        self.confirm_pending = false;
+        self.confirm_target = None;
         self.pending_cards = None;
         self.serial = self.loader.request(Job::Scan(self.home.clone()));
     }
@@ -264,6 +264,9 @@ impl Picker {
         if !self.opened || epoch != self.epoch.get() {
             return Outcome::None;
         }
+        if !matches!(input, Input::Action(Action::Confirm)) {
+            self.confirm_target = None;
+        }
         let result = match input {
             Input::Cancel => Outcome::Cancel,
             Input::Click(x, y) => {
@@ -277,15 +280,15 @@ impl Picker {
                 result
             }
             Input::Action(Action::Confirm)
-                if self.pending_cards.is_some() && self.model.selected().is_some() =>
+                if (self.scanning || self.pending_cards.is_some())
+                    && self.model.selected().is_some() =>
             {
-                self.confirm_pending = true;
+                self.confirm_target = self.model.selected_id().map(str::to_owned);
                 return Outcome::None;
             }
             Input::Action(action) => self.model.action(action),
         };
         if result == Outcome::None && !self.scanning {
-            self.confirm_pending = false;
             self.render();
         }
         result
@@ -367,16 +370,17 @@ impl Picker {
                 self.ui.set_content_ready(!self.model.ids.is_empty());
                 *self.hit_cards.borrow_mut() = cards;
                 self.shown = self.model.clone();
-                if self.confirm_pending {
-                    self.confirm_pending = false;
-                    return self.model.action(Action::Confirm);
+                if let Some(target) = self.confirm_target.take()
+                    && self.model.selected_id() == Some(target.as_str())
+                {
+                    return Outcome::Apply(target);
                 }
             }
             Ok(Output::Unreadable(entry, error)) => {
                 tracing::warn!(theme=%entry.id,%error,"theme preview unavailable");
                 self.error = Some(error);
                 // Never confirm the replacement of an unreadable selected theme.
-                self.confirm_pending = false;
+                self.confirm_target = None;
                 self.entries.retain(|e| *e != entry);
                 self.model
                     .replace(self.entries.iter().map(|e| e.id.clone()).collect());

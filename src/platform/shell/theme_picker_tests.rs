@@ -134,7 +134,11 @@ fn headless_picker_renders_filters_and_never_applies_while_browsing() {
     let uploaded = picker.rows.row_data(2).unwrap().image;
     picker.render();
     assert_eq!(settle(&mut picker), Outcome::None);
-    assert_eq!(picker.rows.row_data(2).unwrap().image, uploaded, "warm redraw reuses the Slint image");
+    assert_eq!(
+        picker.rows.row_data(2).unwrap().image,
+        uploaded,
+        "warm redraw reuses the Slint image"
+    );
     let epoch = picker.epoch.get();
     picker.input(epoch, Input::Action(Action::Text("o".into())));
     assert_eq!(settle(&mut picker), Outcome::None);
@@ -205,7 +209,15 @@ fn headless_picker_renders_filters_and_never_applies_while_browsing() {
     }
     fs::write(temp.0.join("themes/tokyo-night/preview.png"), "broken").unwrap();
     picker.rescan();
-    assert_eq!(settle(&mut picker), Outcome::None);
+    assert_eq!(
+        picker.input(epoch, Input::Action(Action::Confirm)),
+        Outcome::None
+    );
+    assert_eq!(
+        settle(&mut picker),
+        Outcome::None,
+        "a failed target must not confirm its replacement"
+    );
     assert!(!picker.model.ids.contains(&"tokyo-night".into()));
     assert!(picker.error.is_some());
     let mut light = config.clone();
