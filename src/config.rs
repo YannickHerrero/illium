@@ -219,6 +219,57 @@ const DEFAULTS: &[(&str, &str)] = &[
         include_str!("../config/applets/_template/icon.svg"),
     ),
 ];
+// Bundled data, not runtime downloads. Keep existing installed files intact.
+const DEFAULT_ASSETS: &[(&str, &[u8])] = &[
+    (
+        "themes/catppuccin-mocha/preview.png",
+        include_bytes!("../config/themes/catppuccin-mocha/preview.png"),
+    ),
+    (
+        "themes/catppuccin-mocha/wallpapers/1-totoro.png",
+        include_bytes!("../config/themes/catppuccin-mocha/wallpapers/1-totoro.png"),
+    ),
+    (
+        "themes/catppuccin-mocha/wallpapers/2-waves.png",
+        include_bytes!("../config/themes/catppuccin-mocha/wallpapers/2-waves.png"),
+    ),
+    (
+        "themes/catppuccin-mocha/wallpapers/3-blue-eye.png",
+        include_bytes!("../config/themes/catppuccin-mocha/wallpapers/3-blue-eye.png"),
+    ),
+    (
+        "themes/catppuccin-mocha/wallpapers/omarchy.png",
+        include_bytes!("../config/themes/catppuccin-mocha/wallpapers/omarchy.png"),
+    ),
+    (
+        "themes/catppuccin-mocha/SOURCES.md",
+        include_bytes!("../config/themes/catppuccin-mocha/SOURCES.md"),
+    ),
+    (
+        "themes/catppuccin-mocha/LICENSE",
+        include_bytes!("../config/themes/catppuccin-mocha/LICENSE"),
+    ),
+    (
+        "themes/catppuccin-latte/preview.png",
+        include_bytes!("../config/themes/catppuccin-latte/preview.png"),
+    ),
+    (
+        "themes/catppuccin-latte/wallpapers/1-color-fade.png",
+        include_bytes!("../config/themes/catppuccin-latte/wallpapers/1-color-fade.png"),
+    ),
+    (
+        "themes/catppuccin-latte/wallpapers/omarchy.png",
+        include_bytes!("../config/themes/catppuccin-latte/wallpapers/omarchy.png"),
+    ),
+    (
+        "themes/catppuccin-latte/SOURCES.md",
+        include_bytes!("../config/themes/catppuccin-latte/SOURCES.md"),
+    ),
+    (
+        "themes/catppuccin-latte/LICENSE",
+        include_bytes!("../config/themes/catppuccin-latte/LICENSE"),
+    ),
+];
 fn parse<T: serde::de::DeserializeOwned>(home: &Path, name: &str) -> Result<T, String> {
     let bytes = crate::files::read_config(&home.join(name))?;
     let s = std::str::from_utf8(&bytes).map_err(|e| format!("{name}: {e}"))?;
@@ -230,17 +281,23 @@ impl Config {
     }
     pub fn install(home: &Path) -> Result<(), String> {
         use std::io::Write;
-        std::fs::create_dir_all(home.join("themes")).map_err(|e| e.to_string())?;
-        for (name, content) in DEFAULTS {
-            if let Some(parent) = home.join(name).parent() {
-                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(home).map_err(|e| e.to_string())?;
+        for (name, bytes) in DEFAULTS
+            .iter()
+            .map(|(name, text)| (*name, text.as_bytes()))
+            .chain(DEFAULT_ASSETS.iter().copied())
+        {
+            let mut directory = home.to_path_buf();
+            for component in Path::new(name).parent().unwrap().components() {
+                directory.push(component);
+                crate::files::create_directory(&directory)?;
             }
             match std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
                 .open(home.join(name))
             {
-                Ok(mut f) => f.write_all(content.as_bytes()).map_err(|e| e.to_string())?,
+                Ok(mut f) => f.write_all(bytes).map_err(|e| e.to_string())?,
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
                 Err(e) => return Err(e.to_string()),
             }
@@ -344,6 +401,56 @@ mod tests {
         assert!(Config::load(&p).is_err());
         assert_eq!(c.wm.gap, 16);
         std::fs::remove_dir_all(p).unwrap();
+    }
+    #[test]
+    fn bundled_images_install_without_overwriting_user_assets() {
+        let home =
+            std::env::temp_dir().join(format!("winarchy-default-assets-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        Config::install(&home).unwrap();
+        for (name, bytes) in DEFAULT_ASSETS {
+            let path = home.join(name);
+            assert_eq!(&std::fs::read(&path).unwrap(), bytes);
+            if winarchy_theme::pack::is_image(&path) {
+                winarchy_theme::pack::decode(&path).unwrap();
+            }
+        }
+        let catalog = winarchy_theme::preview::catalog(&home).unwrap();
+        assert_eq!(catalog.len(), 2);
+        for (id, count) in [("catppuccin-mocha", 4), ("catppuccin-latte", 2)] {
+            let dir = winarchy_theme::pack::wallpaper_dir(&home, id).unwrap();
+            assert_eq!(winarchy_theme::pack::images(&dir).unwrap().len(), count);
+        }
+        let preview = home.join("themes/catppuccin-mocha/preview.png");
+        let wallpaper = home.join("themes/catppuccin-latte/wallpapers/1-color-fade.png");
+        std::fs::write(&preview, "user preview").unwrap();
+        std::fs::write(&wallpaper, "user wallpaper").unwrap();
+        std::fs::write(home.join("wallpapers.json"), "user choices").unwrap();
+        Config::install(&home).unwrap();
+        assert_eq!(std::fs::read_to_string(preview).unwrap(), "user preview");
+        assert_eq!(
+            std::fs::read_to_string(wallpaper).unwrap(),
+            "user wallpaper"
+        );
+        assert_eq!(
+            std::fs::read_to_string(home.join("wallpapers.json")).unwrap(),
+            "user choices"
+        );
+        std::fs::remove_dir_all(home).unwrap();
+    }
+    #[cfg(unix)]
+    #[test]
+    fn defaults_do_not_follow_asset_directory_links() {
+        let home =
+            std::env::temp_dir().join(format!("winarchy-default-links-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("themes")).unwrap();
+        std::fs::create_dir(home.join("outside")).unwrap();
+        std::os::unix::fs::symlink(home.join("outside"), home.join("themes/catppuccin-mocha"))
+            .unwrap();
+        assert!(Config::install(&home).is_err());
+        assert_eq!(std::fs::read_dir(home.join("outside")).unwrap().count(), 0);
+        std::fs::remove_dir_all(home).unwrap();
     }
     #[test]
     fn rules() {

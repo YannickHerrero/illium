@@ -51,7 +51,9 @@ Same-process dedicated Slint surface, tool window, full active monitor (not work
 area), foreground keyboard focus with restoration. Logical coordinates map to
 physical DPI; no responsive redesign. PNG/JPEG `themes/<id>/preview.*` takes
 priority over the first alphabetically sorted wallpaper. No asset means no
-card; no previews are shipped in this change (the owner supplies them later).
+card. At the owner's subsequent request, the two built-in themes include the
+corresponding Omarchy previews and wallpapers with pinned provenance; other
+packs can supply their own images without rebuilding Winarchy.
 
 Decode/resize/masking happen outside the UI thread. No downloads, shell
 scripts, videos, configuration schema extension or new UI dependencies in CLI.

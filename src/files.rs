@@ -16,6 +16,23 @@ fn reparse(metadata: &std::fs::Metadata) -> bool {
         metadata.file_type().is_symlink()
     }
 }
+/// Create one component beneath an already checked directory. Existing links
+/// and junctions are not valid asset/default directories.
+pub(crate) fn create_directory(path: &Path) -> Result<(), String> {
+    match std::fs::create_dir(path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    }
+    let meta = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+    if !meta.is_dir() || reparse(&meta) {
+        return Err(format!(
+            "{}: expected a regular non-reparse directory",
+            path.display()
+        ));
+    }
+    Ok(())
+}
 pub fn read_config(path: &Path) -> Result<Vec<u8>, String> {
     read_bounded(path, MAX_CONFIG_BYTES)
 }

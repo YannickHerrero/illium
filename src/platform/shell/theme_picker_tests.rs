@@ -73,6 +73,10 @@ fn headless_picker_renders_filters_and_never_applies_while_browsing() {
         Temp(std::env::temp_dir().join(format!("winarchy-picker-ui-{}", std::process::id())));
     let _ = fs::remove_dir_all(&temp.0);
     Config::install(&temp.0).unwrap();
+    // Test legacy palette-only themes alongside our deterministic fixtures.
+    for id in ["catppuccin-mocha", "catppuccin-latte"] {
+        fs::remove_dir_all(temp.0.join("themes").join(id)).unwrap();
+    }
     for (id, color) in [
         ("amber", [210, 140, 40, 255]),
         ("ocean", [30, 110, 180, 255]),

@@ -60,9 +60,20 @@ themes/
     wallpapers/           # existing wallpapers, unchanged
 ```
 
-No preview images are bundled with this feature, including for the built-in
-Catppuccin themes. Add them to the installed configuration directory; no rebuild
-is needed. Names are matched case-insensitively, with PNG → JPG → JPEG priority.
+The built-in Catppuccin Mocha and Latte themes include Omarchy's preview images
+and respectively four and two wallpapers. Their PNG previews are unchanged;
+WebP wallpapers are converted to PNG without resizing or additional pixel loss.
+Sources, hashes, conversion details and the upstream license are installed in
+each theme's `SOURCES.md` and `LICENSE`. These are Omarchy screenshots, not
+representations of Winarchy-specific applications. Asset and branding rights
+remain with their respective owners; see the source notes before redistribution.
+
+Missing built-in assets are added when the upgraded daemon starts; existing
+files, palettes, keybindings and wallpaper choices are never overwritten. An
+explicit solid-background choice remains solid. Without a saved choice, the
+usual first-wallpaper behavior applies. Other themes can add previews directly
+to their installed configuration directory; no rebuild is needed.
+Names are matched case-insensitively, with PNG → JPG → JPEG priority.
 Without a dedicated preview, the first alphabetically sorted wallpaper is used
 (regardless of the remembered wallpaper choice). Themes without any image, with
 an invalid palette, or with an unreadable preview are omitted. If none have an
