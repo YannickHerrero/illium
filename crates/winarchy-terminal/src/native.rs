@@ -404,6 +404,7 @@ impl Window {
         if unsafe { !IsWindowVisible(self.hwnd).as_bool() || IsIconic(self.hwnd).as_bool() } {
             return;
         }
+        let sync_pending = self.session.as_ref().is_some_and(Session::expire_sync);
         let frame = if let Some(session) = &self.session {
             let m = session.model.lock().unwrap();
             if let Some(e) = &m.error {
@@ -418,6 +419,9 @@ impl Window {
         } else {
             Frame::new(None, palette)
         };
+        if sync_pending {
+            self.schedule();
+        }
         if let Err(e) = self.surface.draw(&frame) {
             crate::log(&format!("render: {e}"));
             title(

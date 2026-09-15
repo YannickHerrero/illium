@@ -167,6 +167,30 @@ impl Session {
         });
         result
     }
+    pub fn expire_sync(&self) -> bool {
+        let mut model = self.model.lock().unwrap();
+        let events = model.expire_sync();
+        let pending = model.sync_pending();
+        drop(model);
+        for event in events {
+            let response = match event {
+                Event::PtyWrite(s) => Some(s),
+                Event::ColorRequest(i, format) => self
+                    .palette
+                    .lock()
+                    .unwrap()
+                    .colors
+                    .get(i)
+                    .copied()
+                    .map(|rgb| format(rgb)),
+                _ => None,
+            };
+            if let Some(s) = response {
+                let _ = self.send(s.into_bytes());
+            }
+        }
+        pending
+    }
     pub fn send(&self, bytes: Vec<u8>) -> Result<(), &'static str> {
         if bytes.len() > 65536 {
             return Err("Input exceeds 64 KiB; paste smaller chunks");

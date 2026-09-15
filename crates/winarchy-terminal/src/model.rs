@@ -70,6 +70,22 @@ impl Model {
         self.parser.advance(&mut self.term, bytes);
         self.events.0.lock().unwrap().drain(..).collect()
     }
+    /// A broken application must not freeze the screen by forgetting ESU.
+    /// The UI arms a timer only while a synchronized update is pending.
+    pub fn expire_sync(&mut self) -> Vec<Event> {
+        if self
+            .parser
+            .sync_timeout()
+            .sync_timeout()
+            .is_some_and(|at| at <= std::time::Instant::now())
+        {
+            self.parser.stop_sync(&mut self.term);
+        }
+        self.events.0.lock().unwrap().drain(..).collect()
+    }
+    pub fn sync_pending(&self) -> bool {
+        self.parser.sync_timeout().sync_timeout().is_some()
+    }
     pub fn point(&self, col: usize, row: usize) -> Point {
         Point::new(
             Line(
@@ -110,6 +126,19 @@ mod tests {
         assert_eq!(m.term.grid()[Line(0)][Column(0)].c, 'é');
         m.term.resize(Size::new(100, 30));
         assert_eq!(m.term.columns(), 100);
+    }
+    #[test]
+    fn synchronized_output_has_a_bounded_timeout() {
+        let mut m = Model::new(Size::new(10, 2), 0);
+        m.feed(b"\x1b[?2026hhello");
+        assert!(m.sync_pending());
+        assert_eq!(m.term.grid()[Line(0)][Column(0)].c, ' ');
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        m.expire_sync();
+        assert!(!m.sync_pending());
+        assert_eq!(m.term.grid()[Line(0)][Column(0)].c, 'h');
+        m.feed(b"\x1b[?2026h!\x1b[?2026l");
+        assert!(!m.sync_pending());
     }
     #[test]
     fn chunked_utf8_and_selection() {
