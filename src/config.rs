@@ -183,6 +183,10 @@ const DEFAULTS: &[(&str, &str)] = &[
         include_str!("../config/applets/wifi/icon.svg"),
     ),
     (
+        "applets/wifi/lock.svg",
+        include_str!("../config/applets/wifi/lock.svg"),
+    ),
+    (
         "applets/calendar/applet.toml",
         include_str!("../config/applets/calendar/applet.toml"),
     ),
@@ -316,6 +320,24 @@ mod tests {
         let c = Config::load(&p).unwrap();
         assert_eq!(c.global.theme, "catppuccin-mocha");
         assert_eq!(c.keys.keybindings.len(), 48);
+        for file in [
+            "applet.toml",
+            "wifi.ps1",
+            "view.slint",
+            "icon.svg",
+            "lock.svg",
+        ] {
+            assert!(
+                p.join("applets/wifi").join(file).is_file(),
+                "missing Wi-Fi asset: {file}"
+            );
+        }
+        assert!(
+            crate::applets::load(&p, "wifi")
+                .unwrap()
+                .manifest
+                .wifi_traffic
+        );
         std::fs::write(p.join("wm.toml"), "invalid").unwrap();
         assert!(Config::load(&p).is_err());
         Config::install(&p).unwrap();
