@@ -21,8 +21,6 @@ mod app {
         window: FilesWindow,
         files: Rc<RefCell<Files>>,
         render: Rc<dyn Fn(&Files)>,
-        /// The native window exists after the first show; later shows reuse it.
-        shown: std::cell::Cell<bool>,
     }
     fn render(window: &FilesWindow, f: &Files) {
         let row = |e: &model::Entry| FileRow {
@@ -92,7 +90,7 @@ mod app {
                         Action::None => Ok(()),
                         Action::Quit => {
                             if resident {
-                                ui::set_visible(&window, false);
+                                let _ = window.hide();
                             } else {
                                 let _ = slint::quit_event_loop();
                             }
@@ -138,7 +136,6 @@ mod app {
                 window,
                 files,
                 render,
-                shown: std::cell::Cell::new(false),
             })
         }
         /// Shows the window, in `dir` when given, with the theme read again so
@@ -156,11 +153,10 @@ mod app {
                 }
                 (self.render)(&f);
             }
-            if self.shown.replace(true) {
-                ui::set_visible(&self.window, true);
-            } else {
-                self.window.show().map_err(|e| e.to_string())?;
-            }
+            self.window.show().map_err(|e| e.to_string())?;
+            // A window shown again after hide() keeps its last frame; ask for a
+            // fresh one so a stale or empty surface never stays on screen.
+            self.window.window().request_redraw();
             ui::raise(&self.window);
             Ok(())
         }

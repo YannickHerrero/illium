@@ -27,8 +27,6 @@ mod app {
         window: TasksWindow,
         /// The sampler only works while the window is shown.
         visible: Arc<AtomicBool>,
-        /// The native window exists after the first show; later shows reuse it.
-        shown: std::cell::Cell<bool>,
         _timer: slint::Timer,
     }
     fn render(window: &TasksWindow, rows: &VecModel<TaskRow>, t: &Tasks) {
@@ -82,7 +80,7 @@ mod app {
                         Action::Quit => {
                             if resident {
                                 visible.store(false, Ordering::Relaxed);
-                                ui::set_visible(&window, false);
+                                let _ = window.hide();
                             } else {
                                 let _ = slint::quit_event_loop();
                             }
@@ -138,7 +136,6 @@ mod app {
             Ok(Self {
                 window,
                 visible,
-                shown: std::cell::Cell::new(false),
                 _timer: timer,
             })
         }
@@ -148,11 +145,10 @@ mod app {
                 &winarchy_theme::Theme::current(&ui::config_home()),
             );
             self.visible.store(true, Ordering::Relaxed);
-            if self.shown.replace(true) {
-                ui::set_visible(&self.window, true);
-            } else {
-                self.window.show().map_err(|e| e.to_string())?;
-            }
+            self.window.show().map_err(|e| e.to_string())?;
+            // A window shown again after hide() keeps its last frame; ask for a
+            // fresh one so a stale or empty surface never stays on screen.
+            self.window.window().request_redraw();
             ui::raise(&self.window);
             Ok(())
         }
