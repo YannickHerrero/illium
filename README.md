@@ -53,6 +53,7 @@ This does **not** stop Explorer. Defaults are installed without overwriting exis
 | Alt+Space | Launcher |
 | Alt+Shift+Space | Menu: Apps, System (hibernate, lock, restart, shut down, quit), Theme and Wallpaper |
 | Ctrl+Alt+Shift+Space | Visual theme picker (requires previews or wallpapers; see [Themes](docs/themes.md)) |
+| Ctrl+Alt+Shift+W | Visual wallpaper picker for the active theme |
 | Alt+E | File manager |
 | Alt+Shift+Escape | Task manager |
 | Alt+H/J/K/L or arrows | Focus left/down/up/right |

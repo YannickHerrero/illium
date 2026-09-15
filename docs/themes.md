@@ -131,7 +131,7 @@ The installer validates the palette and decodes the images, installs assets unde
 
 ## Wallpapers
 
-For an installed `my-theme.toml`, place images in `themes/my-theme/wallpapers/`. No manifest entries are needed. The first readable JPEG/PNG in alphabetical order is used on first activation. The menu **Alt+Shift+Space → Wallpaper** opens the same visual carousel as the theme picker, starting on the current (or pending) image. Left/Right or Tab/Shift+Tab browse, typing filters filenames, and Enter or clicking the selected card applies that exact image through the existing wallpaper loader. Escape clears the filter, then cancels; clicking outside cancels. Browsing never changes the desktop or saved choices. **Alt+Shift+Space → Solid background** retains the explicit solid-color choice without adding an artificial image card. Without readable wallpapers, the carousel stays empty and can be cancelled. If the active theme changes while browsing wallpapers, the picker cancels rather than applying an old filename to the new theme. **Ctrl+Alt+Shift+W** cycles through the same theme's images, wrapping around and skipping unreadable files. From a solid background it starts with the first image; without images it does nothing.
+For an installed `my-theme.toml`, place images in `themes/my-theme/wallpapers/`. No manifest entries are needed. The first readable JPEG/PNG in alphabetical order is used on first activation. The menu **Alt+Shift+Space → Wallpaper** opens the same visual carousel as the theme picker, starting on the current (or pending) image. Left/Right or Tab/Shift+Tab browse, typing filters filenames, and Enter or clicking the selected card applies that exact image through the existing wallpaper loader. Escape clears the filter, then cancels; clicking outside cancels. Browsing never changes the desktop or saved choices. **Alt+Shift+Space → Solid background** retains the explicit solid-color choice without adding an artificial image card. Without readable wallpapers, the carousel stays empty and can be cancelled. If the active theme changes while browsing wallpapers, the picker cancels rather than applying an old filename to the new theme. **Ctrl+Alt+Shift+W** opens the wallpaper picker directly. The `winarchyctl wallpaper next` command still cycles through the same theme's images, wrapping around and skipping unreadable files. From a solid background it starts with the first image; without images it does nothing.
 
 ```powershell
 winarchyctl wallpaper picker
@@ -148,10 +148,10 @@ Images fill Winarchy's own desktop surfaces on every monitor with centered, aspe
 
 Theme-only changes recolor existing shell and applet views without reindexing applications or restarting providers. The subsequent file-watcher notification is ignored when that exact configuration has already been applied. Windows light/dark registry broadcasts are serialized in a separate latest-value worker, since other applications may respond slowly. `winarchyctl config reload` remains an explicit full reload.
 
-Existing keybinding files are not overwritten by an upgrade. Add this entry under `[keybindings]` if needed:
+Existing keybinding files are not overwritten by an upgrade. Add or replace this entry under `[keybindings]` (older defaults used `wallpaper next`), then reload with **Alt+Shift+R** or `winarchyctl config reload`:
 
 ```toml
-"Ctrl+Alt+Shift+W" = "wallpaper next"
+"Ctrl+Alt+Shift+W" = "wallpaper picker"
 ```
 
 Limits: 64 wallpapers per theme, 32 MiB and 64 megapixels per image (maximum dimension 16384), 512 MiB of images per pack (including previews), 256 entries per wallpaper directory. Preview scans allow at most 1,024 directory entries and 256 theme identifiers; the existing configuration snapshot limits still apply. Only regular files/directories are used, not symlinks or Windows reparse points. Atomic palette publication requires hard-link support on the configuration volume (NTFS on Windows). Failed installations remove their own staged files, not existing themes. Source folders are never modified.
