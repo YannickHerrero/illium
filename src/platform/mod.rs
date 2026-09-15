@@ -823,6 +823,7 @@ fn watch(home: std::path::PathBuf, tx: EventSender) {
         };
         let mut previous = crate::files::snapshot(&home);
         let mut previous_wallpapers = wallpaper_snapshot();
+        let mut previous_previews = winarchy_theme::preview::catalog(&home);
         loop {
             if WaitForSingleObject(h, INFINITE) != WAIT_OBJECT_0 {
                 break;
@@ -833,6 +834,9 @@ fn watch(home: std::path::PathBuf, tx: EventSender) {
             std::thread::sleep(std::time::Duration::from_millis(150));
             let next = crate::files::snapshot(&home);
             let next_wallpapers = wallpaper_snapshot();
+            // The picker covers inactive themes too. This bounded scan lives on
+            // the notification thread and never decodes pixels or reloads applets.
+            let next_previews = winarchy_theme::preview::catalog(&home);
             if next != previous {
                 previous = next;
                 let _ = tx.send(Event::Reload);
@@ -843,6 +847,10 @@ fn watch(home: std::path::PathBuf, tx: EventSender) {
                 let _ = tx.send(Event::Wallpapers);
             }
             previous_wallpapers = next_wallpapers;
+            if next_previews != previous_previews {
+                let _ = tx.send(Event::ThemePreviews);
+            }
+            previous_previews = next_previews;
         }
         let _ = FindCloseChangeNotification(h);
     });
