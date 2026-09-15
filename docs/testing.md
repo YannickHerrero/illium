@@ -41,6 +41,54 @@ Do not run the ignored tests concurrently: they share the current user's daemon 
 
 `ipc_desktop_smoke` creates disposable native windows and checks discovery, directional moves, floating and fullscreen geometry, workspace membership and visibility, launcher toggling, theme changes and reload behaviour through IPC. `crash_restores_hidden_windows` and `replacement_crash_restores_explorer` kill a daemon and check that the watchdog restores hidden windows and Explorer. `desktop_smoke` asserts real foreground changes and application launches and needs an unlocked, interactive desktop.
 
+## Theme picker checks
+
+Linux tests cover preview installation/discovery, filtering and labels, circular
+navigation, rectangular hit areas, geometry, antialiased raster masks, DPI,
+bounded caches and cancellation of superseded worker results.
+
+On Windows, the regular (non-ignored) library test
+`headless_picker_renders_filters_and_never_applies_while_browsing` uses the actual
+picker and Slint software renderer with **no native window**. It creates its own
+temporary themes, drives the FocusScope callbacks, checks scrim alpha, cached
+image reuse, filtering, confirmation, unreadable assets and stale input, and
+asserts that browsing never writes the selected theme or wallpaper preferences.
+It is safe while your normal Winarchy session is running.
+
+Optional PNG snapshots of that test (not theme assets):
+
+```powershell
+$env:WINARCHY_PICKER_RENDER_DIR = "$env:TEMP\winarchy-picker-renders"
+cargo test -p winarchy --lib headless_picker -- --test-threads=1
+Remove-Item Env:WINARCHY_PICKER_RENDER_DIR
+```
+
+Snapshots cover the center/previous card, one/multiple/no matches, long labels,
+light/dark palettes and 100/125/150/200% DPI. The pinned visual contract and
+comparison procedure are in [theme-picker-reference.md](theme-picker-reference.md).
+The intermediate image crop is 1536×864 like Omarchy; the memory cache retains
+lossless pixels rather than recompressing JPEG thumbnails. Qt and Slint also
+have different font/edge rasterizers: do not infer pixel-identical output merely
+from passing logic or headless tests.
+
+The interactive test below is **not** safe to run casually: it types into the
+foreground window, changes focus and briefly applies a fixture theme. Use an
+unlocked desktop and a running upgraded daemon with a disposable configuration,
+as for the other desktop tests. It checks native focus/restoration, Escape's
+two stages, no application on browse, asset disappearance/reappearance through
+the watcher, and Enter confirmation; original files are restored on completion.
+
+```powershell
+cargo test --test theme_picker -- --ignored --exact picker_focus_filter_cancel_confirm_and_asset_refresh --nocapture
+```
+
+Still verify manually on Windows: DWM compositing over live windows (including
+transparent corners), no native frame/Alt+Tab entry, multiple monitors, monitor
+removal and DPI changes, no stray key/click delivery, and reference screenshots
+with identical assets and fonts. Headless alpha checks cannot establish native
+DWM composition or foreground behavior. These interactive checks are not run
+against an already-running personal desktop automatically.
+
 ## Known scope and implementation constraints
 
 - One globally active workspace; no independent per-monitor workspace switching UI.

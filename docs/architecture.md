@@ -13,6 +13,7 @@
 - `platform/input.rs`: keyboard/mouse hooks and WinEvent hooks on a dedicated Win32 message thread; hidden broadcast window receives display changes.
 - `platform/mod.rs`: serialized manager state, command execution and event dispatch.
 - `platform/shell.rs`, `ui/shell.slint`: same-process Slint surfaces and fuzzy launcher.
+- `theme_picker.rs`: pure Omarchy carousel state and geometry; `theme_picker/render.rs` prepares antialiased oblique RGBA cards with tiny-skia. `theme_picker/loader.rs` owns a bounded latest-request worker, separate from wallpaper loading. `platform/shell/theme_picker.rs` and `ui/theme-picker.slint` manage the full-monitor surface, foreground focus, cached Slint images and generation-tagged input. Only confirmation dispatches `Command::Theme`; the CLI has no picker rendering dependency.
 - `platform/ipc.rs`: owner-only local named-pipe server and UI-thread command dispatch; reexports the shared client for compatibility.
 - `platform/session.rs`: window recovery tags and opt-in Explorer lifecycle.
 - `platform/dpi.rs`, `status.rs`: physical-coordinate conversion and native status modules.

@@ -32,6 +32,63 @@ The built-in themes include the [official Catppuccin terminal palettes](https://
 
 Select with `winarchyctl theme set my-theme`. Names cannot contain slashes, backslashes or dots. Editing the active palette triggers the directory watcher.
 
+## Visual theme picker
+
+Open **Alt+Shift+Space → Theme**, **Ctrl+Alt+Shift+Space**, or:
+
+```powershell
+winarchyctl theme picker
+```
+
+The picker follows [Omarchy's carousel](theme-picker-reference.md): a large
+oblique preview, dimmed side slices, the selected name, and an initially hidden
+text filter over the current desktop. Left/Right or Tab/Shift+Tab cycle through
+themes; type to filter by a case-insensitive substring (not fuzzy search).
+Backspace deletes a character, Ctrl+Backspace a word, and Ctrl+U clears the
+filter. Escape clears a nonempty filter, then closes on the next press. Clicking
+a side card selects it; clicking the selected card or pressing Enter applies it.
+Clicking outside the carousel container cancels. Browsing never changes the
+active theme, wallpaper, Windows color mode or saved preferences.
+
+Add your own **static image** at:
+
+```text
+themes/
+  my-theme.toml
+  my-theme/
+    preview.png           # alternatively preview.jpg or preview.jpeg
+    wallpapers/           # existing wallpapers, unchanged
+```
+
+No preview images are bundled with this feature, including for the built-in
+Catppuccin themes. Add them to the installed configuration directory; no rebuild
+is needed. Names are matched case-insensitively, with PNG → JPG → JPEG priority.
+Without a dedicated preview, the first alphabetically sorted wallpaper is used
+(regardless of the remembered wallpaper choice). Themes without any image, with
+an invalid palette, or with an unreadable preview are omitted. If none have an
+image, the picker shows only the dimmed desktop: Escape or a click cancels;
+`theme set <name>` remains available. No placeholder cards are generated.
+
+Preview images are screenshots supplied by the theme author, **not live renders
+of your windows**. Asset additions/edits/removals are picked up automatically,
+including for inactive themes. PNG/JPEG decoding, cropping and masking run in a
+separate worker, with 64 MiB each for intermediate thumbnails and prepared cards,
+and a separate 64 MiB Slint image cache. A prepared view is limited to 256 MiB,
+in addition to temporary decode buffers and currently displayed images. Nothing
+is downloaded or written to a persistent image cache. Rapid navigation discards
+superseded work; an Enter during loading waits for the requested preview.
+
+`winarchyctl status` exposes `theme_picker`, `theme_picker_selected`,
+`theme_picker_filter`, `theme_picker_loading` and `theme_picker_error` for
+diagnostics. Opening through IPC acknowledges without waiting for image loading.
+An application failure is reported in diagnostics, not as extra picker UI.
+
+Existing keybinding files are not overwritten on upgrade. Add under `[keybindings]`:
+
+```toml
+"Ctrl+Alt+Shift+Space" = "theme picker"
+```
+
 ## External theme packs
 
 Themes do not need to be compiled into Winarchy. A local pack is a folder named with 1–64 lowercase ASCII letters, digits, hyphens or underscores:
@@ -39,6 +96,7 @@ Themes do not need to be compiled into Winarchy. A local pack is a folder named 
 ```text
 my-theme/
   theme.toml        # the palette format above
+  preview.png       # optional screenshot (PNG/JPG/JPEG), see picker above
   wallpapers/      # optional JPEG/PNG images, flat directory
   README.md        # optional description and attribution
   LICENSE          # optional upstream license
@@ -76,4 +134,4 @@ Existing keybinding files are not overwritten by an upgrade. Add this entry unde
 "Ctrl+Alt+Shift+W" = "wallpaper next"
 ```
 
-Limits: 64 wallpapers per theme, 32 MiB and 64 megapixels per image (maximum dimension 16384), 512 MiB of images per pack, 256 entries per wallpaper directory. Only regular files/directories are used, not symlinks or Windows reparse points. Atomic palette publication requires hard-link support on the configuration volume (NTFS on Windows). Failed installations remove their own staged files, not existing themes. Source folders are never modified.
+Limits: 64 wallpapers per theme, 32 MiB and 64 megapixels per image (maximum dimension 16384), 512 MiB of images per pack (including previews), 256 entries per wallpaper directory. Preview scans allow at most 1,024 directory entries and 256 theme identifiers; the existing configuration snapshot limits still apply. Only regular files/directories are used, not symlinks or Windows reparse points. Atomic palette publication requires hard-link support on the configuration volume (NTFS on Windows). Failed installations remove their own staged files, not existing themes. Source folders are never modified.
