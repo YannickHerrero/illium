@@ -105,7 +105,7 @@ pub const HELP: [&str; 15] = [
     "s                  cycle sort: name, size, modified",
     "o                  terminal here",
     "~                  home directory",
-    "w                  default WSL distribution (drives view lists them all)",
+    "w                  home in the default WSL distribution",
     "?                  this help",
     "q                  quit",
 ];
@@ -233,10 +233,10 @@ pub fn roots() -> Vec<(String, PathBuf)> {
 pub fn roots() -> Vec<(String, PathBuf)> {
     vec![("/".into(), PathBuf::from("/"))]
 }
-/// Root of the default WSL distribution, when one is registered.
+/// Home directory in the default WSL distribution, when one is registered.
 #[cfg(windows)]
 fn wsl_root() -> Option<PathBuf> {
-    super::win::default_wsl_root()
+    super::win::default_wsl_home()
 }
 #[cfg(not(windows))]
 fn wsl_root() -> Option<PathBuf> {

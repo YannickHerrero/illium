@@ -78,7 +78,7 @@ directory puts the cursor where it was.
 | `s` | Cycle the sort: name, size, modified |
 | `o` | Open the `terminal` alias of `apps.toml` in the current directory |
 | `~` | Home directory |
-| `w` | Root of the default WSL distribution |
+| `w` | Home of the default user in the default WSL distribution (`DefaultUid` and its `/etc/passwd`) |
 | `?` / `q` | Help / quit |
 
 Copy, move and delete run through the shell's file operation service, so

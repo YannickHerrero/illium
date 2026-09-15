@@ -85,6 +85,61 @@ fn wsl_distributions() -> Vec<(String, bool)> {
     }
     out
 }
+/// A REG_DWORD value under `key\\sub`, when present.
+fn reg_dword(key: HKEY, sub: &str, value: &str) -> Option<u32> {
+    let sub = wide(sub);
+    let value = wide(value);
+    let mut data = 0u32;
+    let mut size = 4u32;
+    unsafe {
+        RegGetValueW(
+            key,
+            PCWSTR(sub.as_ptr()),
+            PCWSTR(value.as_ptr()),
+            RRF_RT_REG_DWORD,
+            None,
+            Some((&mut data as *mut u32).cast()),
+            Some(&mut size),
+        )
+    }
+    .is_ok()
+    .then_some(data)
+}
+/// Home of the default distribution's default user: its uid comes from the
+/// registry and the directory from the distribution's own /etc/passwd.
+pub fn default_wsl_home() -> Option<PathBuf> {
+    let path = wide(LXSS);
+    let mut key = HKEY::default();
+    unsafe {
+        RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(path.as_ptr()),
+            None,
+            KEY_READ,
+            &mut key,
+        )
+    }
+    .ok()
+    .ok()?;
+    let default = reg_string(key, None, "DefaultDistribution");
+    let result = default.and_then(|guid| {
+        let name = reg_string(key, Some(&guid), "DistributionName")?;
+        let uid = reg_dword(key, &guid, "DefaultUid").unwrap_or(0);
+        let root = wsl_path(&name);
+        let passwd = std::fs::read_to_string(root.join("etc").join("passwd")).ok()?;
+        let home = passwd
+            .lines()
+            .map(|l| l.split(':').collect::<Vec<_>>())
+            .find(|f| f.len() >= 6 && f[2] == uid.to_string())
+            .map(|f| f[5].trim_start_matches('/').replace('/', "\\"))
+            .filter(|h| !h.is_empty())?;
+        Some(root.join(home))
+    });
+    unsafe {
+        let _ = RegCloseKey(key);
+    }
+    result.or_else(default_wsl_root)
+}
 fn wsl_path(distribution: &str) -> PathBuf {
     PathBuf::from(format!("\\\\wsl.localhost\\{distribution}\\"))
 }
