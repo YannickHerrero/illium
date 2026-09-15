@@ -223,6 +223,49 @@ fn pty_size(size: Size) -> PtySize {
 mod tests {
     use super::*;
     #[test]
+    #[ignore = "starts a disposable Debian shell; requires WSL"]
+    fn wsl_preserves_csi_u_ctrl_digits() {
+        let (tx, rx) = mpsc::channel();
+        let s = Session::start(
+            Config::default(),
+            Size::new(100, 24),
+            Palette::new(&winarchy_theme::Theme::default_theme()),
+            Arc::new(move || {
+                let _ = tx.send(());
+            }),
+        );
+        let command = "python3 -c 'import tty,sys,os; tty.setraw(0); print(\"READY\",flush=True); d=os.read(0,64); print(\"CSI:\"+d.hex(),flush=True)'\r";
+        s.send(command.as_bytes().to_vec()).unwrap();
+        let wait = |needle: &str, exact: bool| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+            loop {
+                let model = s.model.lock().unwrap();
+                use alacritty_terminal::{
+                    grid::Dimensions,
+                    index::{Column, Line, Point},
+                };
+                let text = model.term.bounds_to_string(
+                    Point::new(Line(0), Column(0)),
+                    Point::new(Line(23), Column(model.term.columns() - 1)),
+                );
+                if if exact {
+                    text.lines().any(|line| line.trim() == needle)
+                } else {
+                    text.contains(needle)
+                } {
+                    return;
+                }
+                assert!(model.error.is_none(), "{:?}", model.error);
+                drop(model);
+                rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+                    .expect("WSL roundtrip timed out");
+            }
+        };
+        wait("READY", true);
+        s.send(b"\x1b[49;5u".to_vec()).unwrap();
+        wait("CSI:1b5b34393b3575", false);
+    }
+    #[test]
     fn missing_distribution_reports_error_without_blocking_caller() {
         let (tx, rx) = mpsc::channel();
         let config = Config {
