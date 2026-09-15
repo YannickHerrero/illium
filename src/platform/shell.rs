@@ -28,9 +28,11 @@ unsafe extern "system" fn surface_proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) ->
     if m == WM_NCPAINT {
         return LRESULT(0);
     }
-    // Clicking a surface must not activate it: activation raises the window,
-    // which put the background above the clients.
-    if m == WM_MOUSEACTIVATE {
+    // Passive backgrounds/bars must not activate (and rise over clients), but
+    // interactive launcher/picker surfaces must be able to regain keyboard focus.
+    if m == WM_MOUSEACTIVATE
+        && unsafe { GetWindowLongPtrW(h, GWL_EXSTYLE) } & WS_EX_NOACTIVATE.0 as isize != 0
+    {
         return LRESULT(MA_NOACTIVATE as isize);
     }
     unsafe {
