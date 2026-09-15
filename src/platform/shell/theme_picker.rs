@@ -78,7 +78,9 @@ struct View {
     frames: Vec<Arc<crate::theme_picker::render::Frame>>,
 }
 impl View {
-    fn bytes(&self) -> usize { self.frames.iter().map(|f| f.bytes()).sum() }
+    fn bytes(&self) -> usize {
+        self.frames.iter().map(|f| f.bytes()).sum()
+    }
 }
 
 struct Warmup {
@@ -241,7 +243,11 @@ impl Picker {
             let view = self.views.remove(index).unwrap();
             self.entries = view.entries.clone();
             self.model = view.model.clone();
-            self.show_frames(&view.cards, view.frames.iter().cloned().map(Some).collect(), true);
+            self.show_frames(
+                &view.cards,
+                view.frames.iter().cloned().map(Some).collect(),
+                true,
+            );
             self.views.push_back(view);
         }
         self.ui.show().map_err(|e| e.to_string())?;
@@ -337,7 +343,9 @@ impl Picker {
     pub fn rescan(&mut self) {
         self.views.clear();
         self.warm_attempted.clear();
-        if self.warming.take().is_some() { self.loader.cancel(); }
+        if self.warming.take().is_some() {
+            self.loader.cancel();
+        }
         self.scan();
     }
     fn scan(&mut self) {
@@ -356,26 +364,43 @@ impl Picker {
     fn view_key(&self) -> ViewKey {
         let (width, height) = self.dimensions();
         ViewKey {
-            home: self.home.clone(), wallpaper_theme: self.wallpaper_theme.clone(),
-            active: self.active.clone(), width, height,
-            physical_width: self.monitor.w, colors: self.colors,
+            home: self.home.clone(),
+            wallpaper_theme: self.wallpaper_theme.clone(),
+            active: self.active.clone(),
+            width,
+            height,
+            physical_width: self.monitor.w,
+            colors: self.colors,
         }
     }
-    fn remember_view(&mut self, cards: &[Card], frames: &[Arc<crate::theme_picker::render::Frame>]) {
+    fn remember_view(
+        &mut self,
+        cards: &[Card],
+        frames: &[Arc<crate::theme_picker::render::Frame>],
+    ) {
         let initial = Model::new(self.model.ids.clone(), &self.active);
-        if self.model != initial { return; }
+        if self.model != initial {
+            return;
+        }
         let key = self.view_key();
         let view = View {
-            key: key.clone(), entries: self.entries.clone(), model: self.model.clone(),
-            cards: cards.to_vec(), frames: frames.to_vec(),
+            key: key.clone(),
+            entries: self.entries.clone(),
+            model: self.model.clone(),
+            cards: cards.to_vec(),
+            frames: frames.to_vec(),
         };
         self.store_view(view);
     }
     fn store_view(&mut self, view: View) {
         const LIMIT: usize = 64 * 1024 * 1024;
-        if view.bytes() > LIMIT { return; }
+        if view.bytes() > LIMIT {
+            return;
+        }
         self.views.retain(|v| v.key != view.key);
-        while self.views.len() >= 2 || self.views.iter().map(View::bytes).sum::<usize>() + view.bytes() > LIMIT {
+        while self.views.len() >= 2
+            || self.views.iter().map(View::bytes).sum::<usize>() + view.bytes() > LIMIT
+        {
             self.views.pop_front();
         }
         self.views.push_back(view);
@@ -383,51 +408,81 @@ impl Picker {
     /// Called only during shell idle time. Never creates/shows/focuses a window
     /// or changes preferences. Uses the same bounded worker and view caches.
     pub fn preload(&mut self, c: &Config, monitor: Rect, selected: Option<&str>) {
-        if self.opened { return; }
+        if self.opened {
+            return;
+        }
         let theme_key = ViewKey {
-            home: c.home.clone(), wallpaper_theme: None, active: c.global.theme.clone(),
-            width: dpi::logical(monitor, monitor.w), height: dpi::logical(monitor, monitor.h),
-            physical_width: monitor.w, colors: Colors::from_theme(&c.theme),
+            home: c.home.clone(),
+            wallpaper_theme: None,
+            active: c.global.theme.clone(),
+            width: dpi::logical(monitor, monitor.w),
+            height: dpi::logical(monitor, monitor.h),
+            physical_width: monitor.w,
+            colors: Colors::from_theme(&c.theme),
         };
         let wallpaper_key = ViewKey {
-            wallpaper_theme: Some(c.global.theme.clone()), active: selected.unwrap_or_default().into(),
+            wallpaper_theme: Some(c.global.theme.clone()),
+            active: selected.unwrap_or_default().into(),
             ..theme_key.clone()
         };
         let keys = [theme_key, wallpaper_key];
         if let Some(warm) = &self.warming {
-            if keys.contains(&warm.key) { return; }
+            if keys.contains(&warm.key) {
+                return;
+            }
             self.loader.cancel();
             self.warming = None;
         }
         let Some(key) = keys.into_iter().find(|key| {
             !self.views.iter().any(|v| &v.key == key) && !self.warm_attempted.contains(key)
-        }) else { return; };
+        }) else {
+            return;
+        };
         self.warm_attempted.push_back(key.clone());
-        while self.warm_attempted.len() > 2 { self.warm_attempted.pop_front(); }
+        while self.warm_attempted.len() > 2 {
+            self.warm_attempted.pop_front();
+        }
         let job = match &key.wallpaper_theme {
             Some(theme) => Job::Wallpapers(key.home.clone(), theme.clone()),
             None => Job::Scan(key.home.clone()),
         };
-        self.warming = Some(Warmup { key, entries: vec![], model: Model::default(), cards: vec![] });
+        self.warming = Some(Warmup {
+            key,
+            entries: vec![],
+            model: Model::default(),
+            cards: vec![],
+        });
         self.serial = self.loader.request(job);
     }
     fn poll_warmup(&mut self, result: Result<Output, String>) {
-        let Some(mut warm) = self.warming.take() else { return; };
+        let Some(mut warm) = self.warming.take() else {
+            return;
+        };
         match result {
             Ok(Output::Catalog(entries)) => {
-                warm.model = Model::new(entries.iter().map(|e| e.id.clone()).collect(), &warm.key.active);
+                warm.model = Model::new(
+                    entries.iter().map(|e| e.id.clone()).collect(),
+                    &warm.key.active,
+                );
                 warm.entries = entries;
             }
             Ok(Output::Unreadable(entry, _)) => {
                 warm.entries.retain(|e| *e != entry);
-                warm.model.replace(warm.entries.iter().map(|e| e.id.clone()).collect());
+                warm.model
+                    .replace(warm.entries.iter().map(|e| e.id.clone()).collect());
             }
             Ok(Output::Progress(_)) => {
                 self.warming = Some(warm);
                 return;
             }
             Ok(Output::Frames(frames)) => {
-                self.store_view(View { key: warm.key, entries: warm.entries, model: warm.model, cards: warm.cards, frames });
+                self.store_view(View {
+                    key: warm.key,
+                    entries: warm.entries,
+                    model: warm.model,
+                    cards: warm.cards,
+                    frames,
+                });
                 return;
             }
             Err(error) => {
@@ -437,9 +492,16 @@ impl Picker {
         }
         warm.cards = warm.model.cards(warm.key.width, warm.key.height);
         let dpi = (96.0 * warm.key.physical_width as f32 / warm.key.width).round() as u32;
-        let keys = warm.cards.iter().map(|card| Key {
-            entry: warm.entries[card.index].clone(), dpi, selected: card.selected, colors: warm.key.colors,
-        }).collect();
+        let keys = warm
+            .cards
+            .iter()
+            .map(|card| Key {
+                entry: warm.entries[card.index].clone(),
+                dpi,
+                selected: card.selected,
+                colors: warm.key.colors,
+            })
+            .collect();
         self.serial = self.loader.request(Job::Render(keys));
         self.warming = Some(warm);
     }
@@ -478,8 +540,13 @@ impl Picker {
                 let (w, h) = self.dimensions();
                 // Mouse actions refer to what is actually drawn, not a queued
                 // keyboard selection whose pixels have not arrived yet.
-                let hit = self.hit_cards.borrow().iter().rev()
-                    .find(|c| c.contains(x, y)).map(|c| c.index);
+                let hit = self
+                    .hit_cards
+                    .borrow()
+                    .iter()
+                    .rev()
+                    .find(|c| c.contains(x, y))
+                    .map(|c| c.index);
                 let result = if let Some(index) = hit {
                     self.shown.action(Action::Click(index))
                 } else if self.shown.cards(w, h).iter().any(|c| c.contains(x, y)) {
@@ -508,7 +575,9 @@ impl Picker {
             self.confirm_target = Some(target.clone());
             // A click can target the previous displayed selection while a
             // different keyboard selection is still rendering.
-            if !self.scanning { self.render(); }
+            if !self.scanning {
+                self.render();
+            }
             return Outcome::None;
         }
         if result == Outcome::None && !self.scanning {
@@ -550,22 +619,33 @@ impl Picker {
         }
         image
     }
-    fn show_frames(&mut self, cards: &[Card], frames: Vec<Option<Arc<crate::theme_picker::render::Frame>>>, complete: bool) {
+    fn show_frames(
+        &mut self,
+        cards: &[Card],
+        frames: Vec<Option<Arc<crate::theme_picker::render::Frame>>>,
+        complete: bool,
+    ) {
         let mut visible = Vec::new();
-        let rows: Vec<_> = cards.iter().zip(frames).filter_map(|(card, frame)| {
-            let frame = frame?;
-            visible.push(card.clone());
-            Some(PreviewCard {
-                image: self.image(&frame),
-                x: card.x - PAD,
-                y: card.y - PAD,
-                width: card.width + 2.0 * PAD,
-                height: card.height + 2.0 * PAD,
+        let rows: Vec<_> = cards
+            .iter()
+            .zip(frames)
+            .filter_map(|(card, frame)| {
+                let frame = frame?;
+                visible.push(card.clone());
+                Some(PreviewCard {
+                    image: self.image(&frame),
+                    x: card.x - PAD,
+                    y: card.y - PAD,
+                    width: card.width + 2.0 * PAD,
+                    height: card.height + 2.0 * PAD,
+                })
             })
-        }).collect();
+            .collect();
         super::sync(&self.rows, &rows);
         let label = if self.wallpaper_theme.is_some() {
-            self.model.selected_id().map(str::to_owned)
+            self.model
+                .selected_id()
+                .map(str::to_owned)
                 .unwrap_or_else(|| self.model.current_label())
         } else {
             self.model.current_label()
@@ -593,8 +673,10 @@ impl Picker {
         }
         match completion.result {
             Ok(Output::Catalog(entries)) => {
-                let unchanged = self.entries == entries && self.model == self.shown
-                    && self.ui.get_content_ready() && self.shown_key.as_ref() == Some(&self.view_key());
+                let unchanged = self.entries == entries
+                    && self.model == self.shown
+                    && self.ui.get_content_ready()
+                    && self.shown_key.as_ref() == Some(&self.view_key());
                 self.entries = entries;
                 let ids = self.entries.iter().map(|e| e.id.clone()).collect();
                 if self.scanning && self.model.ids.is_empty() {

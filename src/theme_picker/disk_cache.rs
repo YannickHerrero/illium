@@ -114,10 +114,10 @@ fn thumbnail_at(entry: &Entry, root: Option<&Path>) -> Result<image::RgbaImage, 
         return Ok(image);
     }
     let image = render::thumbnail(entry)?;
-    if let (Some(root), Some(path)) = (root, path) {
-        if save(root, &path, &key, &image).is_ok() {
-            prune(root);
-        }
+    if let (Some(root), Some(path)) = (root, path)
+        && save(root, &path, &key, &image).is_ok()
+    {
+        prune(root);
     }
     Ok(image)
 }

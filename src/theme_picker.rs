@@ -352,8 +352,11 @@ mod tests {
         let mut m = Model::new((0..100).map(|i| format!("theme-{i}")).collect(), "theme-50");
         let cards = m.cards(1920.0, 1080.0);
         assert_eq!(cards.len(), 17);
-        assert!(cards.iter().all(|c| c.x + c.width + render::PAD > 0.0
-            && c.x - render::PAD < 1920.0));
+        assert!(
+            cards
+                .iter()
+                .all(|c| c.x + c.width + render::PAD > 0.0 && c.x - render::PAD < 1920.0)
+        );
         assert_eq!(m.cards(5000.0, 1080.0).len(), 33);
         assert!(m.cards(800.0, 600.0).len() < cards.len());
         m.action(Action::Text("99".into()));

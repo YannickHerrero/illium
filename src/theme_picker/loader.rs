@@ -84,13 +84,19 @@ fn prepare_card(
     thumbnail: Option<Arc<image::RgbaImage>>,
     cancelled: &(dyn Fn() -> bool + Sync),
 ) -> Result<(Arc<image::RgbaImage>, Arc<Frame>), PrepareError> {
-    if cancelled() { return Err(PrepareError::Failed("preview superseded".into())); }
+    if cancelled() {
+        return Err(PrepareError::Failed("preview superseded".into()));
+    }
     let thumbnail = match thumbnail {
         Some(image) => image,
-        None => Arc::new(super::disk_cache::thumbnail(&key.entry)
-            .map_err(|e| PrepareError::Unreadable(key.entry.clone(), e))?),
+        None => Arc::new(
+            super::disk_cache::thumbnail(&key.entry)
+                .map_err(|e| PrepareError::Unreadable(key.entry.clone(), e))?,
+        ),
     };
-    if cancelled() { return Err(PrepareError::Failed("preview superseded".into())); }
+    if cancelled() {
+        return Err(PrepareError::Failed("preview superseded".into()));
+    }
     let frame = Arc::new(render::card(&thumbnail, key).map_err(PrepareError::Failed)?);
     Ok((thumbnail, frame))
 }
@@ -112,7 +118,9 @@ impl Default for Loader {
                 let mut work = keys.into_iter().enumerate().rev().peekable();
                 let mut first = true;
                 while work.peek().is_some() {
-                    if cancelled() { return Err("preview superseded".into()); }
+                    if cancelled() {
+                        return Err("preview superseded".into());
+                    }
                     let count = if first { 1 } else { 2 };
                     first = false;
                     let mut missing = Vec::new();
@@ -139,17 +147,26 @@ impl Default for Loader {
                                 (i, key, result)
                             }));
                         }
-                        threads.into_iter().map(|t| t.join().expect("preview worker panicked")).collect()
+                        threads
+                            .into_iter()
+                            .map(|t| t.join().expect("preview worker panicked"))
+                            .collect()
                     });
                     for (index, key, result) in results {
                         let (thumbnail, frame) = match result {
                             Ok(prepared) => prepared,
-                            Err(PrepareError::Unreadable(entry, error)) => return Ok(Output::Unreadable(entry, error)),
+                            Err(PrepareError::Unreadable(entry, error)) => {
+                                return Ok(Output::Unreadable(entry, error));
+                            }
                             Err(PrepareError::Failed(error)) => return Err(error),
                         };
                         // A RAM thumbnail hit already occupies its cache slot.
                         if thumbnails.get(&key.entry).is_none() {
-                            thumbnails.insert(key.entry.clone(), thumbnail.clone(), thumbnail.as_raw().len());
+                            thumbnails.insert(
+                                key.entry.clone(),
+                                thumbnail.clone(),
+                                thumbnail.as_raw().len(),
+                            );
                         }
                         frames.insert(key, frame.clone(), frame.bytes());
                         bytes += frame.bytes();
@@ -167,7 +184,13 @@ impl Default for Loader {
 }
 impl Loader {
     fn start(
-        mut prepare: impl FnMut(Job, &(dyn Fn() -> bool + Sync), &dyn Fn(Output)) -> Result<Output, String> + Send + 'static,
+        mut prepare: impl FnMut(
+            Job,
+            &(dyn Fn() -> bool + Sync),
+            &dyn Fn(Output),
+        ) -> Result<Output, String>
+        + Send
+        + 'static,
     ) -> Self {
         let shared = Arc::new(Shared {
             state: Mutex::new(State {
@@ -198,7 +221,10 @@ impl Loader {
                 let publish = |output| {
                     let mut state = worker.state.lock().unwrap();
                     if !state.closed && state.serial == serial {
-                        state.result = Some(Completion { serial, result: Ok(output) });
+                        state.result = Some(Completion {
+                            serial,
+                            result: Ok(output),
+                        });
                     }
                 };
                 let result = prepare(job, &cancelled, &publish);
@@ -313,19 +339,29 @@ mod tests {
     fn parallel_render_preserves_paint_order_and_reuses_frames() {
         let dir = std::env::temp_dir().join(format!("picker-parallel-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let keys: Vec<_> = (0..3).map(|i| {
-            let path = dir.join(format!("{i}.png"));
-            image::RgbaImage::from_pixel(16, 9, image::Rgba([i * 60, 20, 30, 255])).save(&path).unwrap();
-            Key {
-                entry: Entry { id: i.to_string(), path, size: 1, modified: 1 },
-                dpi: 96, selected: i == 2,
-                colors: render::Colors::from_theme(&winarchy_theme::Theme::default_theme()),
-            }
-        }).collect();
+        let keys: Vec<_> = (0..3)
+            .map(|i| {
+                let path = dir.join(format!("{i}.png"));
+                image::RgbaImage::from_pixel(16, 9, image::Rgba([i * 60, 20, 30, 255]))
+                    .save(&path)
+                    .unwrap();
+                Key {
+                    entry: Entry {
+                        id: i.to_string(),
+                        path,
+                        size: 1,
+                        modified: 1,
+                    },
+                    dpi: 96,
+                    selected: i == 2,
+                    colors: render::Colors::from_theme(&winarchy_theme::Theme::default_theme()),
+                }
+            })
+            .collect();
         let loader = Loader::default();
         let frames = || loop {
             match wait(&loader).result.unwrap() {
-                Output::Progress(_) => {},
+                Output::Progress(_) => {}
                 Output::Frames(frames) => break frames,
                 _ => panic!("unexpected output"),
             }
