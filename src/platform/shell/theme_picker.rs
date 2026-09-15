@@ -547,15 +547,18 @@ impl Picker {
                     .rev()
                     .find(|c| c.contains(x, y))
                     .map(|c| c.index);
+                let mut clicked = self.shown.clone();
                 let result = if let Some(index) = hit {
-                    self.shown.action(Action::Click(index))
+                    clicked.action(Action::Click(index))
                 } else if self.shown.cards(w, h).iter().any(|c| c.contains(x, y)) {
                     // A progressive card that has no pixels yet cannot be clicked.
                     Outcome::None
                 } else {
-                    self.shown.click(x, y, w, h)
+                    clicked.click(x, y, w, h)
                 };
-                self.model = self.shown.clone();
+                // Keep `shown` authoritative until pixels actually arrive;
+                // catalog revalidation must notice a click changed selection.
+                self.model = clicked;
                 self.model
                     .replace(self.entries.iter().map(|e| e.id.clone()).collect());
                 result

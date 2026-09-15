@@ -176,6 +176,25 @@ fn headless_picker_renders_filters_and_never_applies_while_browsing() {
         uploaded,
         "clicking the old visible center must not publish the queued keyboard image"
     );
+    picker.rescan();
+    assert_eq!(
+        picker.input(epoch, Input::Click(510.0, 500.0)),
+        Outcome::None
+    );
+    assert_eq!(
+        picker.selected_id(),
+        Some("ocean"),
+        "shown selection tracks pixels, not queued clicks"
+    );
+    assert_eq!(settle(&mut picker), Outcome::None);
+    assert_eq!(
+        picker.selected_id(),
+        Some("amber"),
+        "a click during validation still renders the new selection"
+    );
+    assert_ne!(picker.rows.row_data(2).unwrap().image, uploaded);
+    picker.input(epoch, Input::Action(Action::Next));
+    assert_eq!(settle(&mut picker), Outcome::None);
     picker.input(epoch, Input::Action(Action::Text("o".into())));
     assert_eq!(settle(&mut picker), Outcome::None);
     snapshot(&window, "picker-filter-multiple");
