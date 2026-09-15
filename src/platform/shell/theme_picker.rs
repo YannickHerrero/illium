@@ -362,6 +362,10 @@ impl Picker {
 }
 
 #[cfg(test)]
+#[path = "theme_picker_tests.rs"]
+mod view_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     #[test]
