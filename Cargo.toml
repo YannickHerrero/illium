@@ -1,6 +1,6 @@
 [workspace]
-members = ["crates/winarchy-ipc", "crates/winarchy-theme", "crates/winarchyctl", "crates/winarchy-apps"]
-default-members = [".", "crates/winarchy-ipc", "crates/winarchy-theme", "crates/winarchyctl", "crates/winarchy-apps"]
+members = ["crates/winarchy-ipc", "crates/winarchy-theme", "crates/winarchyctl", "crates/winarchy-apps", "crates/winarchy-terminal"]
+default-members = [".", "crates/winarchy-ipc", "crates/winarchy-theme", "crates/winarchyctl", "crates/winarchy-apps", "crates/winarchy-terminal"]
 resolver = "3"
 
 [package]

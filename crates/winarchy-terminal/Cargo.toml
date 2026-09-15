@@ -1,0 +1,20 @@
+[package]
+name = "winarchy-terminal"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Minimal resident Windows terminal for WSL and Winarchy"
+repository = "https://github.com/YannickHerrero/winarchy"
+
+[dependencies]
+winarchy-theme = { path = "../winarchy-theme" }
+alacritty_terminal = { version = "0.26", default-features = false }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+[target.'cfg(windows)'.dependencies]
+winarchy-ipc = { path = "../winarchy-ipc" }
+portable-pty = "0.9"
+notify = "8"
+windows-numerics = "0.2"
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_HiDpi", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_System_Com", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_Graphics_Direct2D", "Win32_Graphics_Direct2D_Common", "Win32_Graphics_DirectWrite", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_DirectComposition"] }
