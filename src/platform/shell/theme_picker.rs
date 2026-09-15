@@ -330,7 +330,16 @@ impl Picker {
                 let (w, h) = self.dimensions();
                 // Mouse actions refer to what is actually drawn, not a queued
                 // keyboard selection whose pixels have not arrived yet.
-                let result = self.shown.click(x, y, w, h);
+                let hit = self.hit_cards.borrow().iter().rev()
+                    .find(|c| c.contains(x, y)).map(|c| c.index);
+                let result = if let Some(index) = hit {
+                    self.shown.action(Action::Click(index))
+                } else if self.shown.cards(w, h).iter().any(|c| c.contains(x, y)) {
+                    // A progressive card that has no pixels yet cannot be clicked.
+                    Outcome::None
+                } else {
+                    self.shown.click(x, y, w, h)
+                };
                 self.model = self.shown.clone();
                 self.model
                     .replace(self.entries.iter().map(|e| e.id.clone()).collect());
@@ -345,6 +354,12 @@ impl Picker {
             }
             Input::Action(action) => self.model.action(action),
         };
+        if let Outcome::Apply(ref target) = result
+            && (self.scanning || self.pending_cards.is_some())
+        {
+            self.confirm_target = Some(target.clone());
+            return Outcome::None;
+        }
         if result == Outcome::None && !self.scanning {
             self.render();
         }
@@ -384,6 +399,32 @@ impl Picker {
         }
         image
     }
+    fn show_frames(&mut self, cards: &[Card], frames: Vec<Option<Arc<crate::theme_picker::render::Frame>>>) {
+        let mut visible = Vec::new();
+        let rows: Vec<_> = cards.iter().zip(frames).filter_map(|(card, frame)| {
+            let frame = frame?;
+            visible.push(card.clone());
+            Some(PreviewCard {
+                image: self.image(&frame),
+                x: card.x - PAD,
+                y: card.y - PAD,
+                width: card.width + 2.0 * PAD,
+                height: card.height + 2.0 * PAD,
+            })
+        }).collect();
+        super::sync(&self.rows, &rows);
+        let label = if self.wallpaper_theme.is_some() {
+            self.model.selected_id().map(str::to_owned)
+                .unwrap_or_else(|| self.model.current_label())
+        } else {
+            self.model.current_label()
+        };
+        self.ui.set_selected_label(label.into());
+        self.ui.set_filter_text(self.model.filter.clone().into());
+        self.ui.set_content_ready(!self.model.ids.is_empty());
+        *self.hit_cards.borrow_mut() = visible;
+        self.shown = self.model.clone();
+    }
     pub fn poll(&mut self) -> Outcome {
         if self.opened && self.invalidated {
             return Outcome::Cancel;
@@ -408,35 +449,16 @@ impl Picker {
                 self.scanning = false;
                 self.render();
             }
+            Ok(Output::Progress(frames)) => {
+                if let Some(cards) = self.pending_cards.clone() {
+                    self.show_frames(&cards, frames);
+                }
+            }
             Ok(Output::Frames(frames)) => {
                 let Some(cards) = self.pending_cards.take() else {
                     return Outcome::None;
                 };
-                let rows: Vec<_> = cards
-                    .iter()
-                    .zip(frames)
-                    .map(|(card, frame)| PreviewCard {
-                        image: self.image(&frame),
-                        x: card.x - PAD,
-                        y: card.y - PAD,
-                        width: card.width + 2.0 * PAD,
-                        height: card.height + 2.0 * PAD,
-                    })
-                    .collect();
-                super::sync(&self.rows, &rows);
-                let label = if self.wallpaper_theme.is_some() {
-                    self.model
-                        .selected_id()
-                        .map(str::to_owned)
-                        .unwrap_or_else(|| self.model.current_label())
-                } else {
-                    self.model.current_label()
-                };
-                self.ui.set_selected_label(label.into());
-                self.ui.set_filter_text(self.model.filter.clone().into());
-                self.ui.set_content_ready(!self.model.ids.is_empty());
-                *self.hit_cards.borrow_mut() = cards;
-                self.shown = self.model.clone();
+                self.show_frames(&cards, frames.into_iter().map(Some).collect());
                 if let Some(target) = self.confirm_target.take()
                     && self.model.selected_id() == Some(target.as_str())
                 {

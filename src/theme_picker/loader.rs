@@ -54,6 +54,8 @@ pub enum Job {
 pub enum Output {
     Catalog(Vec<Entry>),
     Frames(Vec<Arc<Frame>>),
+    /// Cumulative snapshot: a slow UI may skip intermediate completions safely.
+    Progress(Vec<Option<Arc<Frame>>>),
     Unreadable(Entry, String),
 }
 pub struct Completion {
@@ -77,16 +79,18 @@ impl Default for Loader {
     fn default() -> Self {
         let mut thumbnails: Cache<Entry, image::RgbaImage> = Cache::default();
         let mut frames: Cache<Key, Frame> = Cache::default();
-        Self::start(move |job, cancelled| match job {
+        Self::start(move |job, cancelled, publish| match job {
             Job::Scan(home) => preview::catalog(&home).map(Output::Catalog),
             Job::Wallpapers(home, theme) => preview::wallpapers(&home, &theme).map(Output::Catalog),
             Job::Render(keys) => {
                 if keys.len() > 33 {
                     return Err("preview request exceeds 33 visible cards".into());
                 }
-                let mut out = vec![];
+                let mut out = vec![None; keys.len()];
                 let mut bytes = 0;
-                for key in keys {
+                // Input is back-to-front paint order, not preparation priority.
+                // Prepare the center, then its nearest neighbors first.
+                for (index, key) in keys.into_iter().enumerate().rev() {
                     if cancelled() {
                         return Err("preview superseded".into());
                     }
@@ -118,16 +122,17 @@ impl Default for Loader {
                     if bytes > MAX_VIEW_BYTES {
                         return Err("preview view exceeds 256 MiB".into());
                     }
-                    out.push(frame);
+                    out[index] = Some(frame);
+                    publish(Output::Progress(out.clone()));
                 }
-                Ok(Output::Frames(out))
+                Ok(Output::Frames(out.into_iter().flatten().collect()))
             }
         })
     }
 }
 impl Loader {
     fn start(
-        mut prepare: impl FnMut(Job, &dyn Fn() -> bool) -> Result<Output, String> + Send + 'static,
+        mut prepare: impl FnMut(Job, &dyn Fn() -> bool, &dyn Fn(Output)) -> Result<Output, String> + Send + 'static,
     ) -> Self {
         let shared = Arc::new(Shared {
             state: Mutex::new(State {
@@ -155,7 +160,13 @@ impl Loader {
                     let s = worker.state.lock().unwrap();
                     s.closed || s.serial != serial
                 };
-                let result = prepare(job, &cancelled);
+                let publish = |output| {
+                    let mut state = worker.state.lock().unwrap();
+                    if !state.closed && state.serial == serial {
+                        state.result = Some(Completion { serial, result: Ok(output) });
+                    }
+                };
+                let result = prepare(job, &cancelled, &publish);
                 let mut state = worker.state.lock().unwrap();
                 if !state.closed && state.serial == serial {
                     state.result = Some(Completion { serial, result });
@@ -213,7 +224,7 @@ mod tests {
         let (started_tx, started_rx) = mpsc::channel();
         let (release_tx, release_rx) = mpsc::channel();
         let mut first = true;
-        let loader = Loader::start(move |_, cancelled| {
+        let loader = Loader::start(move |_, cancelled, _| {
             if first {
                 first = false;
                 started_tx.send(()).unwrap();
@@ -229,6 +240,25 @@ mod tests {
         release_tx.send(()).unwrap();
         assert_eq!(wait(&loader).serial, serial);
         loader.cancel();
+        assert!(loader.take_result().is_none());
+    }
+    #[test]
+    fn progress_is_available_before_completion_and_cancel_discards_it() {
+        let (started_tx, started_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let loader = Loader::start(move |_, _, publish| {
+            publish(Output::Progress(vec![None]));
+            started_tx.send(()).unwrap();
+            release_rx.recv().unwrap();
+            Ok(Output::Frames(vec![]))
+        });
+        let serial = loader.request(Job::Render(vec![]));
+        started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        let result = loader.take_result().unwrap();
+        assert_eq!(result.serial, serial);
+        assert!(matches!(result.result, Ok(Output::Progress(_))));
+        loader.cancel();
+        release_tx.send(()).unwrap();
         assert!(loader.take_result().is_none());
     }
     #[test]
