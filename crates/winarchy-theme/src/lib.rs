@@ -2,6 +2,7 @@
 //! No graphics dependency: the daemon and every application convert the
 //! `#rrggbb` strings to their own color type.
 pub mod pack;
+pub mod preview;
 use serde::Deserialize;
 use std::path::Path;
 #[derive(Clone, Debug, PartialEq, Deserialize)]

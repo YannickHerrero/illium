@@ -26,7 +26,7 @@ fn pack_id(name: &str) -> bool {
             .bytes()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-' || c == b'_')
 }
-fn metadata(path: &Path, directory: bool) -> Result<fs::Metadata, String> {
+pub(crate) fn metadata(path: &Path, directory: bool) -> Result<fs::Metadata, String> {
     let meta = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
     #[cfg(windows)]
     let link = {
@@ -44,7 +44,7 @@ fn metadata(path: &Path, directory: bool) -> Result<fs::Metadata, String> {
     }
     Ok(meta)
 }
-fn read(path: &Path, max: usize) -> Result<Vec<u8>, String> {
+pub(crate) fn read(path: &Path, max: usize) -> Result<Vec<u8>, String> {
     if metadata(path, false)?.len() > max as u64 {
         return Err(format!("{}: file too large", path.display()));
     }
@@ -220,6 +220,7 @@ pub fn install(home: &Path, source: &Path) -> Result<String, String> {
     crate::Theme::parse(std::str::from_utf8(&palette).map_err(|e| e.to_string())?)?;
     let source_images = source.join("wallpapers");
     let names = images(&source_images)?;
+    let previews = crate::preview::files(source)?;
     let themes = home.join("themes");
     fs::create_dir_all(&themes).map_err(|e| e.to_string())?;
     metadata(&themes, true)?;
@@ -236,6 +237,15 @@ pub fn install(home: &Path, source: &Path) -> Result<String, String> {
         fs::write(stage.join("theme.toml"), &palette).map_err(|e| e.to_string())?;
         fs::create_dir(stage.join("wallpapers")).map_err(|e| e.to_string())?;
         let mut total = 0;
+        for file in previews {
+            let bytes = read(&source.join(&file), MAX_IMAGE_BYTES)?;
+            total += bytes.len() as u64;
+            if total > MAX_PACK_BYTES {
+                return Err("pack images exceed 512 MiB".into());
+            }
+            decode_bytes(&bytes).map_err(|e| format!("{file}: {e}"))?;
+            fs::write(stage.join(file), bytes).map_err(|e| e.to_string())?;
+        }
         for file in names {
             let bytes = read(&source_images.join(&file), MAX_IMAGE_BYTES)?;
             total += bytes.len() as u64;
