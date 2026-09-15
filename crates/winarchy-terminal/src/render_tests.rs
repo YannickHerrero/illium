@@ -6,6 +6,7 @@ unsafe extern "system" fn procedure(hwnd: HWND, message: u32, w: WPARAM, l: LPAR
     unsafe { DefWindowProcW(hwnd, message, w, l) }
 }
 #[test]
+#[ignore = "requires a desktop compositor; creates hidden windows only"]
 fn hidden_gpu_surface_survives_resize_and_font_changes() {
     unsafe {
         let instance = GetModuleHandleW(None).unwrap();
@@ -57,6 +58,7 @@ fn hidden_gpu_surface_survives_resize_and_font_changes() {
         surface.fonts = g.fonts(&config).unwrap();
         surface.draw(&Frame::new(Some(&model), &p)).unwrap();
         assert_eq!(surface.cell_at(-50, -50), (0, 0));
+        model.feed(b"\x1b[?25l"); // Opaque pixels below must come from glyphs, not the cursor.
         // Read the actual GPU texture: a screenshot over an arbitrary desktop
         // cannot establish that only the background receives alpha.
         surface
@@ -97,7 +99,7 @@ fn hidden_gpu_surface_survives_resize_and_font_changes() {
                 }
             }
         }
-        assert!(opaque > 20, "text/cursor must retain opaque pixels");
+        assert!(opaque > 20, "glyphs must retain opaque pixels");
         context.Unmap(&staging, 0);
         drop(surface);
         drop(g);
