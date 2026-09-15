@@ -60,6 +60,27 @@ fn key(text: &str, control: bool, shift: bool, alt: bool, meta: bool) -> Option<
     })
 }
 
+#[derive(Clone, PartialEq)]
+struct ViewKey {
+    home: PathBuf,
+    wallpaper_theme: Option<String>,
+    active: String,
+    width: f32,
+    height: f32,
+    physical_width: i32,
+    colors: Colors,
+}
+struct View {
+    key: ViewKey,
+    entries: Vec<Entry>,
+    model: Model,
+    cards: Vec<Card>,
+    frames: Vec<Arc<crate::theme_picker::render::Frame>>,
+}
+impl View {
+    fn bytes(&self) -> usize { self.frames.iter().map(|f| f.bytes()).sum() }
+}
+
 pub struct Picker {
     ui: ThemePicker,
     rows: Rc<VecModel<PreviewCard>>,
@@ -71,6 +92,9 @@ pub struct Picker {
         usize,
     )>,
     loader: Loader,
+    // At most two initial views, with a shared 64 MiB bound. These retain CPU
+    // frames, not an unbounded second set of Slint image buffers.
+    views: VecDeque<View>,
     epoch: Rc<Cell<u64>>,
     pub opened: bool,
     pending_window: bool,
@@ -84,6 +108,7 @@ pub struct Picker {
     entries: Vec<Entry>,
     model: Model,
     shown: Model,
+    shown_key: Option<ViewKey>,
     hit_cards: Rc<RefCell<Vec<Card>>>,
     serial: u64,
     scanning: bool,
@@ -128,6 +153,7 @@ impl Picker {
             rows,
             image_cache: VecDeque::new(),
             loader: Loader::default(),
+            views: VecDeque::new(),
             epoch,
             opened: false,
             pending_window: false,
@@ -146,6 +172,7 @@ impl Picker {
             entries: vec![],
             model: Model::default(),
             shown: Model::default(),
+            shown_key: None,
             hit_cards,
             serial: 0,
             scanning: false,
@@ -191,13 +218,24 @@ impl Picker {
         self.hit_cards.borrow_mut().clear();
         self.model = Model::default();
         self.shown = Model::default();
+        self.shown_key = None;
         self.pending_cards = None;
         self.confirm_target = None;
         self.error = None;
+        let key = self.view_key();
+        if let Some(index) = self.views.iter().position(|v| v.key == key) {
+            let view = self.views.remove(index).unwrap();
+            self.entries = view.entries.clone();
+            self.model = view.model.clone();
+            self.show_frames(&view.cards, view.frames.iter().cloned().map(Some).collect(), true);
+            self.views.push_back(view);
+        }
         self.ui.show().map_err(|e| e.to_string())?;
         self.opened = true;
         self.pending_window = true;
-        self.rescan();
+        // A cached view is immediately visible, but confirmation waits for
+        // fresh filesystem validation (including edits while closed).
+        self.scan();
         Ok(())
     }
     pub fn open_wallpapers(
@@ -283,6 +321,10 @@ impl Picker {
         }
     }
     pub fn rescan(&mut self) {
+        self.views.clear();
+        self.scan();
+    }
+    fn scan(&mut self) {
         if !self.opened {
             return;
         }
@@ -294,6 +336,30 @@ impl Picker {
             None => Job::Scan(self.home.clone()),
         };
         self.serial = self.loader.request(job);
+    }
+    fn view_key(&self) -> ViewKey {
+        let (width, height) = self.dimensions();
+        ViewKey {
+            home: self.home.clone(), wallpaper_theme: self.wallpaper_theme.clone(),
+            active: self.active.clone(), width, height,
+            physical_width: self.monitor.w, colors: self.colors,
+        }
+    }
+    fn remember_view(&mut self, cards: &[Card], frames: &[Arc<crate::theme_picker::render::Frame>]) {
+        let initial = Model::new(self.model.ids.clone(), &self.active);
+        if self.model != initial { return; }
+        let key = self.view_key();
+        let view = View {
+            key: key.clone(), entries: self.entries.clone(), model: self.model.clone(),
+            cards: cards.to_vec(), frames: frames.to_vec(),
+        };
+        const LIMIT: usize = 64 * 1024 * 1024;
+        if view.bytes() > LIMIT { return; }
+        self.views.retain(|v| v.key != key);
+        while self.views.len() >= 2 || self.views.iter().map(View::bytes).sum::<usize>() + view.bytes() > LIMIT {
+            self.views.pop_front();
+        }
+        self.views.push_back(view);
     }
     fn dimensions(&self) -> (f32, f32) {
         (self.ui.get_surface_width(), self.ui.get_surface_height())
@@ -399,7 +465,7 @@ impl Picker {
         }
         image
     }
-    fn show_frames(&mut self, cards: &[Card], frames: Vec<Option<Arc<crate::theme_picker::render::Frame>>>) {
+    fn show_frames(&mut self, cards: &[Card], frames: Vec<Option<Arc<crate::theme_picker::render::Frame>>>, complete: bool) {
         let mut visible = Vec::new();
         let rows: Vec<_> = cards.iter().zip(frames).filter_map(|(card, frame)| {
             let frame = frame?;
@@ -424,6 +490,7 @@ impl Picker {
         self.ui.set_content_ready(!self.model.ids.is_empty());
         *self.hit_cards.borrow_mut() = visible;
         self.shown = self.model.clone();
+        self.shown_key = complete.then(|| self.view_key());
     }
     pub fn poll(&mut self) -> Outcome {
         if self.opened && self.invalidated {
@@ -437,6 +504,8 @@ impl Picker {
         }
         match completion.result {
             Ok(Output::Catalog(entries)) => {
+                let unchanged = self.entries == entries && self.model == self.shown
+                    && self.ui.get_content_ready() && self.shown_key.as_ref() == Some(&self.view_key());
                 self.entries = entries;
                 let ids = self.entries.iter().map(|e| e.id.clone()).collect();
                 if self.scanning && self.model.ids.is_empty() {
@@ -447,18 +516,27 @@ impl Picker {
                     self.model.replace(ids);
                 }
                 self.scanning = false;
-                self.render();
+                if unchanged {
+                    if let Some(target) = self.confirm_target.take()
+                        && self.model.selected_id() == Some(target.as_str())
+                    {
+                        return Outcome::Apply(target);
+                    }
+                } else {
+                    self.render();
+                }
             }
             Ok(Output::Progress(frames)) => {
                 if let Some(cards) = self.pending_cards.clone() {
-                    self.show_frames(&cards, frames);
+                    self.show_frames(&cards, frames, false);
                 }
             }
             Ok(Output::Frames(frames)) => {
                 let Some(cards) = self.pending_cards.take() else {
                     return Outcome::None;
                 };
-                self.show_frames(&cards, frames.into_iter().map(Some).collect());
+                self.remember_view(&cards, &frames);
+                self.show_frames(&cards, frames.into_iter().map(Some).collect(), true);
                 if let Some(target) = self.confirm_target.take()
                     && self.model.selected_id() == Some(target.as_str())
                 {

@@ -312,7 +312,23 @@ fn headless_picker_renders_filters_and_never_applies_while_browsing() {
     assert_eq!(settle(&mut picker), Outcome::None);
     assert!(picker.wallpaper_theme.is_none());
     assert_eq!(picker.selected_id(), Some("ocean"));
+    let image = picker.rows.row_data(picker.rows.row_count() - 1).unwrap().image;
     picker.close();
+    picker.open(&config, monitor, None).unwrap();
+    assert!(picker.ui.get_content_ready(), "warm view is visible before polling");
+    assert!(picker.loading(), "cached pixels still require catalog validation");
+    assert_eq!(picker.rows.row_data(picker.rows.row_count() - 1).unwrap().image, image);
+    assert_eq!(picker.input(picker.epoch.get(), Input::Action(Action::Confirm)), Outcome::None);
+    assert_eq!(settle(&mut picker), Outcome::Apply("ocean".into()));
+    picker.close();
+    fs::remove_file(temp.0.join("themes/ocean.toml")).unwrap();
+    picker.open(&config, monitor, None).unwrap();
+    picker.input(picker.epoch.get(), Input::Action(Action::Confirm));
+    assert_eq!(settle(&mut picker), Outcome::None, "removed cached target cannot apply");
+    assert_ne!(picker.selected_id(), Some("ocean"));
+    picker.close();
+    picker.rescan();
+    assert!(picker.views.is_empty(), "notifications invalidate closed views too");
     assert_eq!(fs::read(temp.0.join("winarchy.toml")).unwrap(), before);
     assert!(!temp.0.join("wallpapers.json").exists());
 }

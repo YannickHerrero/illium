@@ -54,7 +54,7 @@ pub fn label(id: &str) -> String {
     result
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, PartialEq)]
 pub struct Model {
     pub ids: Vec<String>,
     pub filter: String,
