@@ -46,10 +46,12 @@ fn wifi_provider_and_native_counters_are_read_only() {
     assert_ne!(values["receiving"], "—");
     assert_ne!(values["sending"], "—");
 }
-struct Headless(Rc<MinimalSoftwareWindow>);
+struct Headless(Rc<RefCell<Vec<Rc<MinimalSoftwareWindow>>>>);
 impl Platform for Headless {
     fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, slint::PlatformError> {
-        Ok(self.0.clone())
+        let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
+        self.0.borrow_mut().push(window.clone());
+        Ok(window)
     }
 }
 fn press(window: &MinimalSoftwareWindow, text: slint::SharedString) {
@@ -62,8 +64,11 @@ fn wifi_view_renders_and_pins_password_target() {
     let dir = std::path::PathBuf::from(
         std::env::var_os("WINARCHY_WIFI_TEST_DIR").expect("test applet folder"),
     );
-    let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
-    slint::platform::set_platform(Box::new(Headless(window.clone()))).unwrap();
+    let windows = Rc::new(RefCell::new(Vec::new()));
+    slint::platform::set_platform(Box::new(Headless(windows.clone()))).unwrap();
+    // The production shell initializes before applets. Its font registrations
+    // must not force runtime text to use an ASCII-only bitmap subset.
+    let _bar = shell::Bar::new().unwrap();
     let applet = Applet {
         name: "wifi".into(),
         manifest: toml::from_str(&std::fs::read_to_string(dir.join("applet.toml")).unwrap())
@@ -72,6 +77,7 @@ fn wifi_view_renders_and_pins_password_target() {
     };
     let def = compile(&applet).unwrap();
     let instance = def.create().unwrap();
+    let window = windows.borrow().last().unwrap().clone();
     let calls = Rc::new(RefCell::new(Vec::new()));
     let captured = calls.clone();
     instance
@@ -192,6 +198,33 @@ fn wifi_view_renders_and_pins_password_target() {
     data["ssid"] = serde_json::json!("Un nom de réseau très long | 日本語 | à vérifier");
     set_data(&instance, &def, &data).unwrap();
     snapshot("wifi-light-long");
+    // Compare a string made only of accented glyphs against an empty heading.
+    // With the old shell bitmap registration, all these glyphs disappeared.
+    let heading_pixels = |heading: &str| {
+        data["ssid"] = serde_json::json!(heading);
+        set_data(&instance, &def, &data).unwrap();
+        window.request_redraw();
+        let mut result = Vec::new();
+        window.draw_if_needed(|renderer| {
+            let size = window.size();
+            let mut pixels = vec![Rgb8Pixel::default(); (size.width * size.height) as usize];
+            renderer.render(&mut pixels, size.width as usize);
+            for y in 18..45 {
+                result.extend_from_slice(
+                    &pixels[y * size.width as usize + 65..y * size.width as usize + 370],
+                );
+            }
+        });
+        result
+    };
+    let mut heading_pixels = heading_pixels;
+    let empty = heading_pixels("");
+    let accented = heading_pixels("éàçêÉüñ");
+    assert!(!empty.is_empty());
+    assert!(
+        empty != accented,
+        "accented glyphs disappeared after shell initialization"
+    );
     window.dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor: 1.5 });
     window.set_size(slint::PhysicalSize::new(720, 900));
     snapshot("wifi-light-150");

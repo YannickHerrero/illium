@@ -26,7 +26,7 @@ slint = { version = "=1.12.1", default-features = false, features = ["std", "bac
 raw-window-handle = "0.6"
 # Applet views are compiled at run time; `internal`/`internal-json` expose the
 # typed JSON conversion. i-slint-core's `svg` feature enables run-time SVG
-# decoding for applet icons and views (the shell's own icons are pre-rendered).
+# decoding for applet views and the shell's embedded icons.
 slint-interpreter = { version = "=1.12.1", default-features = false, features = ["std", "compat-1-2", "internal", "internal-json"] }
 i-slint-core = { version = "=1.12.1", default-features = false, features = ["std", "svg"] }
 # Only to walk the declared type of an applet view's `data` property.
