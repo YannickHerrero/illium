@@ -29,7 +29,8 @@ fn identity(entry: &Entry) -> Vec<u8> {
     let mut key = b"winarchy-thumbnail-v1\0".to_vec();
     key.extend_from_slice(&entry.size.to_le_bytes());
     key.extend_from_slice(&entry.modified.to_le_bytes());
-    key.extend_from_slice(entry.path.as_os_str().as_encoded_bytes());
+    let path = std::path::absolute(&entry.path).unwrap_or_else(|_| entry.path.clone());
+    key.extend_from_slice(path.as_os_str().as_encoded_bytes());
     key
 }
 fn filename(key: &[u8]) -> String {
@@ -128,6 +129,46 @@ pub fn thumbnail(entry: &Entry) -> Result<image::RgbaImage, String> {
 mod tests {
     use super::*;
     #[test]
+    fn pruning_bounds_disk_usage_without_touching_unrelated_files() {
+        let dir = std::env::temp_dir().join(format!("picker-prune-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("unrelated.txt"), "keep").unwrap();
+        for i in 0..3 {
+            fs::File::create(dir.join(format!("{i}.rgba")))
+                .unwrap()
+                .set_len(LIMIT / 2)
+                .unwrap();
+        }
+        prune(&dir);
+        let bytes: u64 = fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .filter(|f| f.path().extension().is_some_and(|e| e == "rgba"))
+            .map(|f| f.metadata().unwrap().len())
+            .sum();
+        assert!(bytes <= LIMIT);
+        assert_eq!(
+            fs::read_to_string(dir.join("unrelated.txt")).unwrap(),
+            "keep"
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn relative_and_absolute_source_paths_share_an_identity() {
+        let entry = Entry {
+            id: "test".into(),
+            path: "config/test.png".into(),
+            size: 1,
+            modified: 2,
+        };
+        let absolute = Entry {
+            path: std::path::absolute(&entry.path).unwrap(),
+            ..entry.clone()
+        };
+        assert_eq!(identity(&entry), identity(&absolute));
+    }
+    #[test]
     fn lossless_hit_invalidation_corruption_and_unwritable_cache() {
         let dir = std::env::temp_dir().join(format!("picker-disk-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
@@ -162,7 +203,9 @@ mod tests {
             thumbnail_at(&entry, Some(&cache)).is_ok(),
             "corrupt cache is repaired"
         );
-        assert!(load(&cache.join(filename(&identity(&entry))), b"wrong identity").is_none());
+        let mut wrong_key = identity(&entry);
+        wrong_key[0] ^= 1;
+        assert!(load(&cache.join(filename(&identity(&entry))), &wrong_key).is_none());
         fs::remove_dir_all(dir).unwrap();
     }
 }
