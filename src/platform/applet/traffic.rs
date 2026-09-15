@@ -15,6 +15,7 @@ pub(super) struct Monitor {
     values: serde_json::Value,
     pub due: Instant,
     running: bool,
+    failed: bool,
 }
 impl Default for Monitor {
     fn default() -> Self {
@@ -24,6 +25,7 @@ impl Default for Monitor {
             values: crate::traffic::unavailable(),
             due: Instant::now(),
             running: false,
+            failed: false,
         }
     }
 }
@@ -32,6 +34,7 @@ impl Monitor {
         if self.interface != interface {
             self.interface = interface.into();
             self.tracker.reset();
+            self.failed = false;
             self.values = crate::traffic::unavailable();
             self.due = Instant::now();
         }
@@ -60,11 +63,14 @@ impl Monitor {
             });
         });
     }
-    pub fn finish(&mut self, interface: &str, result: Result<Sample, String>) {
+    /// Request one metadata refresh on a transition to unavailable counters.
+    pub fn finish(&mut self, interface: &str, result: Result<Sample, String>) -> bool {
         self.running = false;
         if self.interface != interface {
-            return;
+            return false;
         }
+        let refresh = result.is_err() && !self.failed;
+        self.failed = result.is_err();
         self.values = match result {
             Ok(sample) => self.tracker.update(interface, sample),
             Err(error) => {
@@ -73,9 +79,10 @@ impl Monitor {
                 crate::traffic::unavailable()
             }
         };
+        refresh
     }
 }
-fn read(interface: &str) -> Result<Sample, String> {
+pub(super) fn read(interface: &str) -> Result<Sample, String> {
     let guid = GUID::try_from(interface.trim_matches(['{', '}']))
         .map_err(|e| format!("invalid interface GUID: {e}"))?;
     let mut row = MIB_IF_ROW2 {
@@ -114,6 +121,22 @@ mod tests {
         );
         assert!(!monitor.running);
         assert_eq!(monitor.values, crate::traffic::unavailable());
+    }
+    #[test]
+    fn failures_request_one_refresh_not_a_scan_storm() {
+        let mut monitor = Monitor::default();
+        monitor.select("wifi");
+        assert!(monitor.finish("wifi", Err("disconnected".into())));
+        assert!(!monitor.finish("wifi", Err("still disconnected".into())));
+        assert!(!monitor.finish(
+            "wifi",
+            Ok(Sample {
+                at: Instant::now(),
+                received: 100,
+                sent: 100
+            })
+        ));
+        assert!(monitor.finish("wifi", Err("disconnected again".into())));
     }
     #[test]
     fn native_reader_rejects_invalid_guids() {

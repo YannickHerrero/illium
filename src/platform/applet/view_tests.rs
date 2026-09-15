@@ -6,6 +6,46 @@ use slint::platform::{
     software_renderer::{MinimalSoftwareWindow, RepaintBufferType},
 };
 use std::{cell::RefCell, rc::Rc};
+#[test]
+#[ignore = "requires a connected Wi-Fi interface and WINARCHY_WIFI_TEST_DIR; read-only"]
+fn wifi_provider_and_native_counters_are_read_only() {
+    let dir = std::path::PathBuf::from(
+        std::env::var_os("WINARCHY_WIFI_TEST_DIR").expect("test applet folder"),
+    );
+    let applet = Applet {
+        name: "wifi".into(),
+        manifest: toml::from_str(&std::fs::read_to_string(dir.join("applet.toml")).unwrap())
+            .unwrap(),
+        dir,
+    };
+    let result = run(
+        &applets::command(&applet),
+        &applets::environment(&applet),
+        &applet.dir,
+        Some(r#"["refresh","",""]"#),
+    )
+    .unwrap();
+    let data: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(
+        data["error"], "",
+        "read-only provider error: {}",
+        data["error"]
+    );
+    assert_eq!(
+        data["connected"], true,
+        "this opt-in test requires connected Wi-Fi"
+    );
+    let interface = data["interface_guid"].as_str().unwrap();
+    let first = traffic::read(interface).unwrap();
+    std::thread::sleep(Duration::from_millis(1100));
+    let second = traffic::read(interface).unwrap();
+    assert!(second.received >= first.received && second.sent >= first.sent);
+    let mut tracker = crate::traffic::Tracker::default();
+    tracker.update(interface, first);
+    let values = tracker.update(interface, second);
+    assert_ne!(values["receiving"], "—");
+    assert_ne!(values["sending"], "—");
+}
 struct Headless(Rc<MinimalSoftwareWindow>);
 impl Platform for Headless {
     fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, slint::PlatformError> {

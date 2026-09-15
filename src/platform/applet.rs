@@ -311,7 +311,9 @@ impl Runtime {
         let Some(traffic) = &mut e.traffic else {
             return;
         };
-        traffic.finish(interface, result);
+        if traffic.finish(interface, result) {
+            e.due = Instant::now();
+        }
         traffic.merge(&mut e.data);
         if let (Some(instance), Some(def)) = (&e.instance, &e.definition)
             && let Err(error) = set_data(instance, def, &e.data)
