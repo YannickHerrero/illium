@@ -21,7 +21,14 @@ are installed with the other defaults and never overwritten. `calendar` uses
 so the arrows adjust the level. `wifi` lists the nearby networks: `j`/`k` or
 the arrows move, Enter connects (asking for the key of an unknown secured
 network, stored as a WPA2 profile), `d` disconnects, `f` forgets the saved
-profile and `r` rescans. The key travels only as the provider's argument.
+profile and `r` rescans. The key is passed as the provider's argument (never logged by Winarchy). Profile
+creation briefly uses a randomly named, current-user-only temporary directory,
+removed in a `finally` block; Windows then stores the saved WLAN profile.
+The Wi-Fi provider reads English/French `netsh` output, chooses one interface
+(the first connected one, otherwise the first available one), and reports its IP,
+gateway, DNS and link speed separately from traffic. “Connected” means associated
+with Wi-Fi, not verified Internet access. New secured profiles use WPA2-Personal;
+use Windows Settings for WPA3-only, enterprise or specially named managed profiles.
 
 ## Anatomy
 
@@ -103,7 +110,13 @@ with `no-frame: true`. Winarchy sets these properties when they exist:
 - `bg`, `surface`, `overlay`, `fg`, `muted`, `accent`: theme colors.
 
 Declaring `callback action(string)` and calling it re-runs the provider with
-the argument, then updates `data`.
+the argument, then updates `data`. A callback with multiple string arguments sends
+one JSON array instead, preserving delimiters, quotes and Unicode without a custom
+separator protocol. The Wi-Fi view uses `action(verb, ssid, key)`; its provider also
+accepts the older single-string actions for compatibility.
+
+Read-only Wi-Fi parser/action-encoding fixtures can be run on Windows with:
+`powershell -NoProfile -ExecutionPolicy Bypass -File tests/wifi-provider.ps1`.
 
 Images in the view load relative to the folder: `@image-url("sun.svg")`.
 SVG and the usual raster formats are supported at run time; `colorize` tints

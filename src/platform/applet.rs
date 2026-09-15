@@ -40,6 +40,18 @@ mod scheduling_tests {
         runtime
     }
     #[test]
+    fn structured_actions_preserve_delimiters_and_unicode() {
+        let args = ["connect", "Café | \\\"", "password|\\\\\""];
+        let values = args
+            .iter()
+            .map(|s| Value::String((*s).into()))
+            .collect::<Vec<_>>();
+        let encoded = action_argument(&values).unwrap();
+        assert_eq!(serde_json::from_str::<Vec<String>>(&encoded).unwrap(), args);
+        assert_eq!(action_argument(&values[..1]).unwrap(), "connect");
+        assert!(action_argument(&[Value::Bool(true)]).is_none());
+    }
+    #[test]
     fn busy_actions_are_bounded_and_ordered() {
         let mut runtime = runtime();
         runtime.action("wifi", None);
@@ -335,10 +347,7 @@ impl Runtime {
                 let tx = self.tx.clone();
                 let applet = name.to_owned();
                 let _ = instance.set_callback("action", move |args| {
-                    let arg = match args.first() {
-                        Some(Value::String(s)) => Some(s.to_string()),
-                        _ => None,
-                    };
+                    let arg = action_argument(args);
                     let _ = tx.send(Event::AppletAction(applet.clone(), arg));
                     Value::Void
                 });
@@ -413,6 +422,21 @@ impl Runtime {
             .iter()
             .filter_map(|e| e.instance.as_ref())
             .any(|i| shell::id(i.window()) == id)
+    }
+}
+/// One string preserves legacy actions; multiple strings use unambiguous JSON.
+fn action_argument(args: &[Value]) -> Option<String> {
+    let strings = args
+        .iter()
+        .map(|value| match value {
+            Value::String(s) => Some(s.as_str()),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()?;
+    match strings.as_slice() {
+        [] => None,
+        [only] => Some((*only).to_owned()),
+        _ => serde_json::to_string(&strings).ok(),
     }
 }
 fn compile(applet: &Applet) -> Result<ComponentDefinition, String> {
