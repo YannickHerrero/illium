@@ -21,7 +21,8 @@ use winarchy_terminal::{
     config::Config,
     input::{self, Mods},
     palette::Palette,
-    render::{Frame, Graphics, Surface},
+    reload::{self, Snapshot},
+    render::{Fonts, Frame, Graphics, Surface},
     session::Session,
 };
 use windows::{
@@ -39,6 +40,7 @@ const PAINT: u32 = WM_APP + 3;
 const RESIZE: u32 = WM_APP + 4;
 const SPARE: u32 = WM_APP + 5;
 const CLOSE: u32 = WM_APP + 6;
+const RELOAD: u32 = WM_APP + 7;
 const CLASS: PCWSTR = w!("WinarchyTerminal");
 pub struct Request {
     pub command: String,
@@ -62,6 +64,8 @@ struct App {
     spare: Option<HWND>,
     next_id: usize,
     graphics: Rc<Graphics>,
+    fonts: Rc<Fonts>,
+    snapshot: Snapshot,
     config: Config,
     palette: Palette,
     thread: u32,
@@ -139,7 +143,8 @@ pub fn run(
         crate::log(&e);
         Config::default()
     });
-    let palette = Palette::new(&winarchy_theme::Theme::current(&home));
+    let theme = winarchy_theme::Theme::current(&home);
+    let palette = Palette::new(&theme);
     let start = Instant::now();
     let graphics = Graphics::new(&config).map_err(|e| e.to_string())?;
     let thread = unsafe { GetCurrentThreadId() };
@@ -161,6 +166,11 @@ pub fn run(
         windows: HashMap::new(),
         spare: None,
         next_id: 1,
+        fonts: graphics.fonts.clone(),
+        snapshot: Snapshot {
+            config: config.clone(),
+            theme,
+        },
         graphics,
         config,
         palette,
@@ -168,6 +178,9 @@ pub fn run(
         resident,
     };
     app.prepare()?;
+    let reloaded = reload::watch(home, move || post(thread, RELOAD, 0, 0))
+        .map_err(|e| crate::log(&format!("theme watcher: {e}")))
+        .ok();
     crate::log(&format!(
         "resident_ready_ms={:.2}",
         start.elapsed().as_secs_f64() * 1000.
@@ -235,6 +248,18 @@ pub fn run(
                         }
                     }
                     CLOSE => app.close(msg.wParam.0),
+                    RELOAD => {
+                        if let Some(slot) = &reloaded
+                            && let Some(result) = slot.lock().unwrap().take()
+                        {
+                            match result {
+                                Ok(snapshot) => app.apply(snapshot),
+                                Err(e) => {
+                                    crate::log(&format!("reload retained last valid settings: {e}"))
+                                }
+                            }
+                        }
+                    }
                     SPARE => {
                         if let Err(e) = app.prepare() {
                             crate::log(&format!("prepare window: {e}"));
@@ -261,6 +286,55 @@ pub fn run(
     Ok(())
 }
 impl App {
+    fn apply(&mut self, snapshot: Snapshot) {
+        if snapshot == self.snapshot {
+            return;
+        }
+        let fonts_changed = snapshot.config.font_family != self.config.font_family
+            || snapshot.config.font_size != self.config.font_size;
+        let fonts = if fonts_changed {
+            match self.graphics.fonts(&snapshot.config) {
+                Ok(f) => f,
+                Err(e) => {
+                    crate::log(&format!("font reload: {e}"));
+                    return;
+                }
+            }
+        } else {
+            self.fonts.clone()
+        };
+        self.palette = Palette::new(&snapshot.theme);
+        self.config = snapshot.config.clone();
+        self.fonts = fonts;
+        for window in self.windows.values_mut() {
+            if fonts_changed {
+                window.surface.fonts = self.fonts.clone();
+                window.config.font_family = self.config.font_family.clone();
+                window.config.font_size = self.config.font_size;
+            }
+            window.surface.padding = self.config.padding as f32;
+            if let Some(session) = &window.session {
+                *session.palette.lock().unwrap() = self.palette.clone();
+                if snapshot.config.scrollback != self.snapshot.config.scrollback {
+                    session.model.lock().unwrap().term.set_options(
+                        alacritty_terminal::term::Config {
+                            scrolling_history: snapshot.config.scrollback,
+                            osc52: alacritty_terminal::term::Osc52::Disabled,
+                            ..Default::default()
+                        },
+                    );
+                }
+                window.resize();
+                window.paint(&self.palette);
+            } else {
+                window.config = self.config.clone();
+                if let Err(e) = window.surface.draw(&Frame::new(None, &self.palette)) {
+                    crate::log(&e.to_string());
+                }
+            }
+        }
+        self.snapshot = snapshot;
+    }
     fn prepare(&mut self) -> Result<(), String> {
         if self.spare.is_some() || self.windows.len() >= 16 {
             return Ok(());
@@ -294,6 +368,7 @@ impl App {
                 self.config.padding,
             )
             .map_err(|e| e.to_string())?;
+            surface.fonts = self.fonts.clone();
             surface
                 .draw(&Frame::new(None, &self.palette))
                 .map_err(|e| e.to_string())?;
