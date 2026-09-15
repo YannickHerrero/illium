@@ -1,6 +1,7 @@
 import { Palette, Column, StatusLine, KeyHelp } from "common.slint";
 export struct TaskRow { pid: int, name: string, cpu: string, memory: string, accessible: bool }
 export component TasksWindow inherits Window {
+    no-frame: true;
     title: "Tasks";
     preferred-width: 720px;
     preferred-height: 480px;
