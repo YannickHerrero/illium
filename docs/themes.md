@@ -30,6 +30,12 @@ Themes may also provide `ansi` and `brights`, each an array of exactly eight `"#
 
 The built-in themes include the [official Catppuccin terminal palettes](https://github.com/catppuccin/wezterm/tree/main/dist). Existing installed files are not overwritten: upgrade Winarchy before adding these fields to local themes, as older versions reject unknown fields.
 
+`terminal_background_opacity` is optional (default `1.0`), a finite number from
+`0.0` to `1.0`. It controls only the native terminal's background, never the
+text, cursor or selection. For example `terminal_background_opacity = 0.85`.
+It does not change shell surfaces or configure WezTerm. Upgrade all Winarchy
+binaries before installing this field: older readers reject unknown fields.
+
 Select with `winarchyctl theme set my-theme`. Names cannot contain slashes, backslashes or dots. Editing the active palette triggers the directory watcher.
 
 ## Visual theme picker

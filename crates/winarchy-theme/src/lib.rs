@@ -24,9 +24,15 @@ pub struct Theme {
     /// Optional bright terminal colors, in the same order.
     #[serde(default)]
     pub brights: Option<Vec<String>>,
+    /// Background-only terminal opacity; text remains opaque.
+    #[serde(default = "opaque")]
+    pub terminal_background_opacity: f32,
     /// Windows color mode to apply with this theme: "dark" or "light".
     #[serde(default)]
     pub mode: Option<String>,
+}
+fn opaque() -> f32 {
+    1.0
 }
 #[derive(Deserialize)]
 struct Global {
@@ -77,6 +83,11 @@ impl Theme {
         Self::parse(DEFAULT).expect("embedded theme is valid")
     }
     pub fn validate(&self) -> Result<(), String> {
+        if !self.terminal_background_opacity.is_finite()
+            || !(0.0..=1.0).contains(&self.terminal_background_opacity)
+        {
+            return Err("terminal_background_opacity must be finite and between 0 and 1".into());
+        }
         if let Some(mode) = &self.mode
             && !["dark", "light"].contains(&mode.as_str())
         {
@@ -165,6 +176,28 @@ mod tests {
         assert!(Theme::parse(&format!("{DEFAULT}extra = 1\n")).is_err());
         assert_eq!(rgb("#zz0000"), None);
         assert_eq!(rgb("#fff"), None);
+    }
+    #[test]
+    fn terminal_opacity() {
+        assert_eq!(
+            Theme::parse(DEFAULT).unwrap().terminal_background_opacity,
+            1.0
+        );
+        for value in ["0.0", "0.85", "1.0"] {
+            let t = Theme::parse(&format!(
+                "{DEFAULT}\nterminal_background_opacity = {value}\n"
+            ))
+            .unwrap();
+            assert_eq!(t.terminal_background_opacity, value.parse::<f32>().unwrap());
+        }
+        for value in ["-0.1", "1.1", "nan", "inf", "-inf", "\"0.85\""] {
+            assert!(
+                Theme::parse(&format!(
+                    "{DEFAULT}\nterminal_background_opacity = {value}\n"
+                ))
+                .is_err()
+            );
+        }
     }
     #[test]
     fn terminal_palettes() {
