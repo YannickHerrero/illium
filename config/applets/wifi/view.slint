@@ -73,7 +73,7 @@ export component View inherits Window {
         root.target = ""; keys.focus();
     }
     function submit(verb: string, ssid: string, key: string) {
-        root.operation = verb == "connect" ? "Connexion en cours…" : verb == "disconnect" ? "Déconnexion en cours…" : verb == "forget" ? "Suppression du profil…" : "Actualisation…";
+        root.operation = verb == "connect" ? "Connecting…" : verb == "disconnect" ? "Disconnecting…" : verb == "forget" ? "Forgetting network…" : "Refreshing…";
         root.action(verb, ssid, key);
     }
     function connect() {
@@ -116,21 +116,21 @@ export component View inherits Window {
                     VerticalLayout {
                         spacing: 3px;
                         Text { text: root.data.connected ? root.data.ssid : "Wi-Fi"; color: root.fg; font-size: 21px; font-weight: 600; overflow: elide; }
-                        Text { text: root.working ? (root.operation != "" ? root.operation : "Actualisation…") : root.data.status; color: root.muted; font-size: 11px; overflow: elide; }
+                        Text { text: root.working ? (root.operation != "" ? root.operation : "Refreshing…") : root.data.status; color: root.muted; font-size: 11px; overflow: elide; }
                     }
-                    ActionButton { label: "Actualiser"; width: 82px; fg: root.fg; fill: root.bg; line: root.overlay; enabled: root.can-act; clicked => { root.submit("refresh", "", ""); } }
+                    ActionButton { label: "Refresh"; width: 82px; fg: root.fg; fill: root.bg; line: root.overlay; enabled: root.can-act; clicked => { root.submit("refresh", "", ""); } }
                 }
                 HorizontalLayout {
                     height: 64px; spacing: 20px;
                     VerticalLayout {
                         spacing: 8px;
-                        Metric { label: "Réception"; value: root.data.receiving; fg: root.fg; muted: root.muted; }
-                        Metric { label: "Reçu"; value: root.data.downloaded; fg: root.fg; muted: root.muted; }
+                        Metric { label: "Receiving"; value: root.data.receiving; fg: root.fg; muted: root.muted; }
+                        Metric { label: "Downloaded"; value: root.data.downloaded; fg: root.fg; muted: root.muted; }
                     }
                     VerticalLayout {
                         spacing: 8px;
-                        Metric { label: "Envoi"; value: root.data.sending; fg: root.fg; muted: root.muted; }
-                        Metric { label: "Envoyé"; value: root.data.uploaded; fg: root.fg; muted: root.muted; }
+                        Metric { label: "Sending"; value: root.data.sending; fg: root.fg; muted: root.muted; }
+                        Metric { label: "Uploaded"; value: root.data.uploaded; fg: root.fg; muted: root.muted; }
                     }
                 }
                 Text { text: root.data.traffic-period; color: root.muted; font-size: 10px; height: 14px; overflow: elide; }
@@ -139,13 +139,13 @@ export component View inherits Window {
                     height: 54px; spacing: 20px;
                     VerticalLayout {
                         spacing: 6px;
-                        Metric { label: "Adresse IP"; value: root.data.ip; fg: root.fg; muted: root.muted; }
-                        Metric { label: "Bande"; value: root.data.band; fg: root.fg; muted: root.muted; }
+                        Metric { label: "IP address"; value: root.data.ip; fg: root.fg; muted: root.muted; }
+                        Metric { label: "Band"; value: root.data.band; fg: root.fg; muted: root.muted; }
                     }
                     VerticalLayout {
                         spacing: 6px;
-                        Metric { label: "Passerelle"; value: root.data.gateway; fg: root.fg; muted: root.muted; }
-                        Metric { label: "Liaison"; value: root.data.link-rate; fg: root.fg; muted: root.muted; }
+                        Metric { label: "Gateway"; value: root.data.gateway; fg: root.fg; muted: root.muted; }
+                        Metric { label: "Link speed"; value: root.data.link-rate; fg: root.fg; muted: root.muted; }
                     }
                 }
                 HorizontalLayout {
@@ -165,7 +165,7 @@ export component View inherits Window {
                             height: self.section-start ? 74px : 50px;
                             VerticalLayout {
                                 spacing: 0px;
-                                Text { visible: i == 0 ? true : n.known != root.data.networks[i - 1].known; height: self.visible ? 24px : 0px; text: n.known ? "RÉSEAUX ENREGISTRÉS" : "AUTRES RÉSEAUX"; color: root.muted; font-size: 10px; font-weight: 600; vertical-alignment: center; }
+                                Text { visible: i == 0 ? true : n.known != root.data.networks[i - 1].known; height: self.visible ? 24px : 0px; text: n.known ? "SAVED NETWORKS" : "OTHER NETWORKS"; color: root.muted; font-size: 10px; font-weight: 600; vertical-alignment: center; }
                                 Rectangle {
                                     height: 50px;
                                     background: n.connected ? root.surface : transparent;
@@ -177,19 +177,19 @@ export component View inherits Window {
                                         VerticalLayout {
                                             horizontal-stretch: 1; spacing: 2px;
                                             Text { text: n.ssid; color: root.fg; font-size: 13px; overflow: elide; }
-                                            Text { text: n.connected ? "Connecté au Wi-Fi" : n.available ? "Signal \{n.signal} %" : "Hors de portée"; color: root.muted; font-size: 10px; }
+                                            Text { text: n.connected ? "Connected to Wi-Fi" : n.available ? "Signal \{n.signal}%" : "Out of range"; color: root.muted; font-size: 10px; }
                                         }
                                         Image { source: @image-url("lock.svg"); colorize: root.muted; width: 14px; height: 16px; visible: n.secured; }
-                                        Text { text: "Ouvert"; visible: !n.secured; width: n.secured ? 0px : 40px; color: root.muted; font-size: 10px; vertical-alignment: center; }
+                                        Text { text: "Open"; visible: !n.secured; width: n.secured ? 0px : 40px; color: root.muted; font-size: 10px; vertical-alignment: center; }
                                     }
                                     TouchArea { enabled: root.can-act; clicked => { root.cursor = i; root.connect(); } }
                                 }
                             }
                         }
-                        if root.count == 0: Text { text: root.busy ? "Recherche des réseaux…" : "Aucun réseau disponible"; color: root.muted; font-size: 12px; height: 48px; vertical-alignment: center; }
+                        if root.count == 0: Text { text: root.busy ? "Looking for networks…" : "No networks available"; color: root.muted; font-size: 12px; height: 48px; vertical-alignment: center; }
                     }
                 }
-                if root.asking: Text { text: "Clé WPA2 pour " + root.target; color: root.fg; font-size: 12px; overflow: elide; }
+                if root.asking: Text { text: "WPA2 password for " + root.target; color: root.fg; font-size: 12px; overflow: elide; }
                 Rectangle {
                     visible: root.asking; height: root.asking ? 32px : 0px;
                     border-width: 1px; border-color: root.accent;
@@ -206,18 +206,18 @@ export component View inherits Window {
                 }
                 if root.confirming: HorizontalLayout {
                     spacing: 8px;
-                    Text { text: "Oublier « " + root.target + " » ?"; color: root.fg; font-size: 12px; overflow: elide; horizontal-stretch: 1; vertical-alignment: center; }
-                    ActionButton { label: "Confirmer"; fg: root.fg; fill: root.bg; line: root.accent; clicked => { root.confirming = false; root.submit("forget", root.target, ""); } }
-                    ActionButton { label: "Annuler"; fg: root.fg; fill: root.bg; line: root.overlay; clicked => { root.confirming = false; } }
+                    Text { text: "Forget “" + root.target + "”?"; color: root.fg; font-size: 12px; overflow: elide; horizontal-stretch: 1; vertical-alignment: center; }
+                    ActionButton { label: "Confirm"; fg: root.fg; fill: root.bg; line: root.accent; clicked => { root.confirming = false; root.submit("forget", root.target, ""); } }
+                    ActionButton { label: "Cancel"; fg: root.fg; fill: root.bg; line: root.overlay; clicked => { root.confirming = false; } }
                 }
                 if root.error-text != "": Text { text: root.error-text; color: root.fg; font-size: 11px; wrap: word-wrap; max-height: 44px; overflow: elide; }
                 HorizontalLayout {
                     spacing: 8px;
-                    ActionButton { label: "Déconnecter"; fg: root.fg; fill: root.bg; line: root.overlay; enabled: root.can-act && root.data.connected; clicked => { root.submit("disconnect", "", ""); } }
-                    ActionButton { label: "Oublier"; fg: root.fg; fill: root.bg; line: root.overlay; enabled: root.can-act && root.count > 0 && root.data.networks[min(root.cursor, root.count - 1)].known; clicked => { root.forget(); } }
-                    ActionButton { label: "Paramètres Windows"; min-width: 145px; fg: root.fg; fill: root.bg; line: root.overlay; enabled: root.can-act; clicked => { root.submit("settings", "", ""); } }
+                    ActionButton { label: "Disconnect"; fg: root.fg; fill: root.bg; line: root.overlay; enabled: root.can-act && root.data.connected; clicked => { root.submit("disconnect", "", ""); } }
+                    ActionButton { label: "Forget"; fg: root.fg; fill: root.bg; line: root.overlay; enabled: root.can-act && root.count > 0 && root.data.networks[min(root.cursor, root.count - 1)].known; clicked => { root.forget(); } }
+                    ActionButton { label: "Windows Settings"; min-width: 145px; fg: root.fg; fill: root.bg; line: root.overlay; enabled: root.can-act; clicked => { root.submit("settings", "", ""); } }
                 }
-                Text { text: root.asking ? "Entrée : connecter · Échap : annuler" : "↑↓ sélectionner · Entrée connecter · r actualiser"; color: root.muted; font-size: 10px; overflow: elide; height: 14px; }
+                Text { text: root.asking ? "Enter: connect · Esc: cancel" : "↑↓ select · Enter connect · r refresh"; color: root.muted; font-size: 10px; overflow: elide; height: 14px; }
             }
         }
     }

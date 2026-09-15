@@ -83,6 +83,11 @@ Built-in providers avoid a process for fast cadences:
 
 ### Wi-Fi panel
 
+The panel uses English labels, status messages and decimal byte units (`KB/s`,
+`MB`, `GB`). SSIDs retain their original Unicode characters; diagnostics returned
+by Windows itself may follow the Windows display language. System fonts are used
+at runtime rather than a bitmap subset of the shell's static text.
+
 The 480×600 logical-pixel panel separates the connected-network header, traffic,
 interface details and scrollable saved/other networks. A lock means secured, not
 necessarily WPA2. Saved networks that are not visible remain listed as out of range.

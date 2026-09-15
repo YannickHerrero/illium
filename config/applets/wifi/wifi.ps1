@@ -71,8 +71,8 @@ function Parse-Networks([string[]]$lines, [string[]]$known, [string]$ssid) {
 }
 function New-ProfileXml([string]$ssid, [string]$key) {
   $ssidBytes = [Text.Encoding]::UTF8.GetBytes($ssid)
-  if ($ssidBytes.Length -lt 1 -or $ssidBytes.Length -gt 32) { throw "Le SSID doit contenir de 1 à 32 octets UTF-8." }
-  if ($key -and ($key.Length -lt 8 -or $key.Length -gt 63)) { throw "La clé WPA2 doit contenir de 8 à 63 caractères." }
+  if ($ssidBytes.Length -lt 1 -or $ssidBytes.Length -gt 32) { throw "The SSID must contain 1 to 32 UTF-8 bytes." }
+  if ($key -and ($key.Length -lt 8 -or $key.Length -gt 63)) { throw "The WPA2 password must contain 8 to 63 characters." }
   $name = [Security.SecurityElement]::Escape($ssid)
   $hex = ($ssidBytes | ForEach-Object { "{0:X2}" -f $_ }) -join ""
   $security = if ($key) {
@@ -99,7 +99,7 @@ function Add-Profile([string]$ssid, [string]$key, [string]$interface) {
 }
 
 if ($FunctionsOnly) { return }
-$data = [ordered]@{ connected = $false; ssid = ""; signal = 0; rate = 0.0; band = "—"; interface_guid = ""; ip = "—"; gateway = "—"; dns = "—"; link_rate = "—"; status = "Wi-Fi déconnecté"; networks = @(); error = "" }
+$data = [ordered]@{ connected = $false; ssid = ""; signal = 0; rate = 0.0; band = "—"; interface_guid = ""; ip = "—"; gateway = "—"; dns = "—"; link_rate = "—"; status = "Wi-Fi disconnected"; networks = @(); error = "" }
 try {
   $parts = Read-Action $Action
   $interfaces = @(Parse-Interfaces (Invoke-Netsh @("wlan", "show", "interfaces")))
@@ -111,7 +111,7 @@ try {
     "refresh" { }
     "settings" { Start-Process "ms-settings:network-wifi" }
     "connect" {
-      if (-not $interface -or -not $parts[1]) { throw "Aucun réseau sélectionné." }
+      if (-not $interface -or -not $parts[1]) { throw "No network selected." }
       if ($parts[2] -or $known -cnotcontains $parts[1]) { Add-Profile $parts[1] $parts[2] $interface }
       if (-not $script:error_text) {
         $null = Invoke-Netsh @("wlan", "connect", "name=$($parts[1])", "ssid=$($parts[1])", "interface=$interface")
@@ -121,7 +121,7 @@ try {
           $selected = @(Parse-Interfaces (Invoke-Netsh @("wlan", "show", "interfaces")) | Where-Object { $_.name -ceq $interface })
           if ($selected.Count -and $selected[0].ssid -ceq $parts[1]) { break }
         }
-        if (-not $script:error_text -and (-not $selected.Count -or $selected[0].ssid -cne $parts[1])) { $script:error_text = "Connexion non confirmée. Vérifiez la clé ou ouvrez les paramètres Windows (WPA3/entreprise)." }
+        if (-not $script:error_text -and (-not $selected.Count -or $selected[0].ssid -cne $parts[1])) { $script:error_text = "Connection not confirmed. Check the password or open Windows Settings (WPA3/enterprise)." }
       }
     }
     "disconnect" {
@@ -135,10 +135,10 @@ try {
       }
     }
     "forget" {
-      if ($parts[1].IndexOfAny([char[]]'*?') -ge 0) { throw "Ouvrez Windows pour supprimer un profil contenant un caractère générique." }
+      if ($parts[1].IndexOfAny([char[]]'*?') -ge 0) { throw "Use Windows Settings to forget a profile containing wildcard characters." }
       if ($interface -and $parts[1]) { $null = Invoke-Netsh @("wlan", "delete", "profile", "name=$($parts[1])", "interface=$interface") }
     }
-    default { throw "Action Wi-Fi inconnue." }
+    default { throw "Unknown Wi-Fi action." }
   }
   if ($parts[0] -in @("connect", "disconnect", "forget")) {
     $selected = @(Parse-Interfaces (Invoke-Netsh @("wlan", "show", "interfaces")) | Where-Object { $_.name -ceq $interface })
@@ -147,8 +147,8 @@ try {
   if ($selected.Count) {
     $wifi = $selected[0]
     $data.connected = [bool]$wifi.ssid; $data.ssid = $wifi.ssid; $data.signal = $wifi.signal; $data.rate = $wifi.rate; $data.band = $wifi.band; $data.interface_guid = $wifi.guid
-    $data.status = if ($data.connected) { "Connecté au Wi-Fi · Signal $($wifi.signal) %" } else { "Wi-Fi déconnecté" }
-    if ($wifi.rate -gt 0) { $data.link_rate = "$([Math]::Round($wifi.rate)) Mb/s" }
+    $data.status = if ($data.connected) { "Connected to Wi-Fi · Signal $($wifi.signal)%" } else { "Wi-Fi disconnected" }
+    if ($wifi.rate -gt 0) { $data.link_rate = "$([Math]::Round($wifi.rate)) Mbps" }
     $data.networks = @(Parse-Networks (Invoke-Netsh @("wlan", "show", "networks", "mode=bssid", "interface=$interface")) $known $wifi.ssid)
     if ($data.connected) {
       $adapter = [Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | Where-Object { $_.Id.Trim('{}') -ieq $wifi.guid.Trim('{}') } | Select-Object -First 1
@@ -163,7 +163,7 @@ try {
         if ($dns.Count) { $data.dns = $dns -join ", " }
       }
     }
-  } elseif (-not $script:error_text) { $data.status = "Aucun adaptateur Wi-Fi disponible" }
+  } elseif (-not $script:error_text) { $data.status = "No Wi-Fi adapter available" }
 } catch { if (-not $script:error_text) { $script:error_text = $_.Exception.Message } }
 $data.error = $script:error_text
 $data | ConvertTo-Json -Compress -Depth 4

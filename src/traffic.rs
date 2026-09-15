@@ -48,15 +48,15 @@ impl Tracker {
             "receiving": receiving, "sending": sending,
             "downloaded": bytes((sample.received - first.received) as f64),
             "uploaded": bytes((sample.sent - first.sent) as f64),
-            "traffic_period": format!("Suivi de cette interface · {} min", sample.at.duration_since(first.at).as_secs() / 60),
+            "traffic_period": format!("Monitoring this adapter · {} min", sample.at.duration_since(first.at).as_secs() / 60),
         })
     }
 }
 pub fn unavailable() -> serde_json::Value {
-    serde_json::json!({"receiving":"—", "sending":"—", "downloaded":"—", "uploaded":"—", "traffic_period":"Trafic indisponible"})
+    serde_json::json!({"receiving":"—", "sending":"—", "downloaded":"—", "uploaded":"—", "traffic_period":"Traffic unavailable"})
 }
 fn bytes(mut value: f64) -> String {
-    let units = ["o", "Ko", "Mo", "Go", "To"];
+    let units = ["B", "KB", "MB", "GB", "TB"];
     let mut unit = 0;
     while value >= 1000.0 && unit < units.len() - 1 {
         value /= 1000.0;
@@ -89,9 +89,9 @@ mod tests {
                 sent: 1500,
             },
         );
-        assert_eq!(result["receiving"], "2.0 Ko/s");
-        assert_eq!(result["sending"], "250 o/s");
-        assert_eq!(result["downloaded"], "4.0 Ko");
+        assert_eq!(result["receiving"], "2.0 KB/s");
+        assert_eq!(result["sending"], "250 B/s");
+        assert_eq!(result["downloaded"], "4.0 KB");
     }
     #[test]
     fn interface_changes_and_counter_resets_start_a_new_baseline() {
@@ -107,7 +107,7 @@ mod tests {
                     sent: received,
                 },
             );
-            assert_eq!(result["downloaded"], "0 o");
+            assert_eq!(result["downloaded"], "0 B");
             assert_eq!(result["receiving"], "—");
         }
     }
@@ -132,7 +132,7 @@ mod tests {
             },
         );
         assert_eq!(result["receiving"], "—");
-        assert_eq!(result["downloaded"], "5.0 Ko");
+        assert_eq!(result["downloaded"], "5.0 KB");
         tracker.reset();
         assert_eq!(
             tracker.update(
@@ -143,7 +143,7 @@ mod tests {
                     sent: 0
                 }
             )["downloaded"],
-            "0 o"
+            "0 B"
         );
     }
     #[test]

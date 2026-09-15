@@ -88,9 +88,9 @@ fn wifi_view_renders_and_pins_password_target() {
         .unwrap();
     let mut data = serde_json::json!({
         "connected":true, "ssid":"Maison | Café", "signal":92, "rate":866.0, "band":"5 GHz",
-        "status":"Connecté au Wi-Fi · Signal 92 %", "ip":"192.168.1.207", "gateway":"192.168.1.254",
-        "dns":"195.36.145.100, 195.36.228.100", "link_rate":"866 Mb/s",
-        "receiving":"963.1 Ko/s", "sending":"4.9 Ko/s", "downloaded":"1.3 Go", "uploaded":"240.0 Mo", "traffic_period":"Suivi de cette interface · 42 min",
+        "status":"Connected to Wi-Fi · Signal 92%", "ip":"192.168.1.207", "gateway":"192.168.1.254",
+        "dns":"195.36.145.100, 195.36.228.100", "link_rate":"866 Mbps",
+        "receiving":"963.1 KB/s", "sending":"4.9 KB/s", "downloaded":"1.3 GB", "uploaded":"240.0 MB", "traffic_period":"Monitoring this adapter · 42 min",
         "networks":[
             {"ssid":"Maison | Café", "signal":92, "secured":true, "known":true, "connected":true, "available":true},
             {"ssid":"Travail", "signal":78, "secured":true, "known":true, "connected":false, "available":true},
@@ -230,9 +230,8 @@ fn wifi_view_renders_and_pins_password_target() {
     snapshot("wifi-light-150");
     data["connected"] = serde_json::json!(false);
     data["networks"] = serde_json::json!([]);
-    data["status"] = serde_json::json!("Aucun adaptateur Wi-Fi disponible");
-    data["error"] =
-        serde_json::json!("Accès refusé : vérifiez les autorisations de localisation Windows.");
+    data["status"] = serde_json::json!("No Wi-Fi adapter available");
+    data["error"] = serde_json::json!("Access denied: check Windows location permissions.");
     set_data(&instance, &def, &data).unwrap();
     snapshot("wifi-unavailable");
     data["error"] = serde_json::json!("");
