@@ -1,5 +1,7 @@
 //! Omarchy image picker interaction/geometry port (see docs/licenses/omarchy.md).
 //! Pure state: browsing never writes preferences or applies a theme.
+pub mod loader;
+pub mod render;
 pub const EXPANDED_WIDTH: f32 = 768.0;
 pub const EXPANDED_HEIGHT: f32 = 475.0;
 pub const SLICE_WIDTH: f32 = 108.0;
@@ -51,7 +53,7 @@ pub fn label(id: &str) -> String {
     result
 }
 
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct Model {
     pub ids: Vec<String>,
     pub filter: String,

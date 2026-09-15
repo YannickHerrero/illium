@@ -4922,6 +4922,7 @@ version = "0.1.0"
 dependencies = [
  "i-slint-compiler",
  "i-slint-core",
+ "image",
  "raw-window-handle",
  "serde",
  "serde_json",
@@ -4929,6 +4930,7 @@ dependencies = [
  "slint-build",
  "slint-interpreter",
  "spin_on",
+ "tiny-skia",
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
