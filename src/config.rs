@@ -122,6 +122,10 @@ const DEFAULTS: &[(&str, &str)] = &[
     ),
     ("apps.toml", include_str!("../config/defaults/apps.toml")),
     (
+        "terminal.toml",
+        include_str!("../config/defaults/terminal.toml"),
+    ),
+    (
         "keybindings.toml",
         include_str!("../config/defaults/keybindings.toml"),
     ),

@@ -32,7 +32,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory dist/winarchy
-          Copy-Item target/release/winarchy.exe,target/release/winarchyctl.exe,target/release/winarchy-apps.exe,README.md,LICENSE dist/winarchy
+          Copy-Item target/release/winarchy.exe,target/release/winarchyctl.exe,target/release/winarchy-apps.exe,target/release/winarchy-terminal.exe,README.md,LICENSE dist/winarchy
           Copy-Item -Recurse config,docs dist/winarchy
           Compress-Archive dist/winarchy/* dist/winarchy-windows-x64.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

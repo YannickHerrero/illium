@@ -66,6 +66,10 @@ mod tests {
     fn defaults_and_bounds() {
         assert_eq!(Config::parse("").unwrap(), Config::default());
         assert_eq!(
+            Config::parse(include_str!("../../../config/defaults/terminal.toml")).unwrap(),
+            Config::default()
+        );
+        assert_eq!(
             Config::parse("font_size=16\ndistribution='Ubuntu'")
                 .unwrap()
                 .distribution,
