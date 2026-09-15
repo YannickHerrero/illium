@@ -254,6 +254,33 @@ impl Frame {
                 flags: c.flags,
             });
         }
+        if model.error.is_some() || model.exited {
+            use alacritty_terminal::grid::Dimensions;
+            let message = model
+                .error
+                .as_deref()
+                .unwrap_or("WSL exited — close this window");
+            let row = model.term.screen_lines() - 1;
+            frame.cells.retain(|c| c.row != row);
+            for (col, c) in message
+                .chars()
+                .chain(std::iter::repeat(' '))
+                .take(model.term.columns())
+                .enumerate()
+            {
+                frame.cells.push(Cell {
+                    col,
+                    row,
+                    text: c.to_string(),
+                    fg: p.colors[NamedColor::Foreground as usize],
+                    bg: p.selection,
+                    background: true,
+                    selected: false,
+                    flags: Flags::empty(),
+                });
+            }
+            frame.cursor = None;
+        }
         frame
     }
 }
