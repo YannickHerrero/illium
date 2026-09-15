@@ -21,7 +21,8 @@ surface, renderer or live wallpaper preview is introduced.
 - Carousel width 1782. Card width min(screen width−80, 1822), height 609.
   Card centered on screen, carousel starts 30px below its top. Selected card
   centered horizontally. Side cards centered vertically; selected drawn last,
-  nearer slices drawn over farther ones. Only relative positions −16…16 shown.
+  nearer slices drawn over farther ones. Only relative positions −16…16 shown;
+  cards entirely outside the monitor (including their border) are not prepared.
   Carousel can overflow the card and is clipped only by the monitor.
 - Label: centered, 768px wide, 16px below carousel, 24px semibold; right elision.
   Filter: 8px below label, 14px, .85 opacity, hidden when empty. Both have a
@@ -61,8 +62,67 @@ packs can supply their own images without rebuilding Winarchy.
 
 Decode/resize/masking happen outside the UI thread. No downloads, shell
 scripts, videos, configuration schema extension or new UI dependencies in CLI.
-A bounded cache and generation checks prevent stale loads from changing the
+Bounded caches and generation checks prevent superseded loads from changing the
 current view. Asset edits must not restart providers or reload application lists.
+
+## Opening performance
+
+- Retain up to two initial views (theme picker and active-theme wallpapers),
+  bounded together to 64 MiB of CPU frames. A matching view is populated before
+  showing the window. Its key includes configuration location, picker mode,
+  applied selection, logical dimensions, physical width/DPI and palette colors.
+- Revalidate the catalog asynchronously on every opening. Cached pixels are not
+  authorization to apply an old selection: Enter/click confirmation waits for
+  validation, and a removed or unreadable target cannot confirm its replacement.
+  Asset notifications invalidate closed/preloaded views too.
+- After a two-second startup grace period, idle checks every 500 ms prewarm both
+  initial views, once per context. No prewarm starts while a picker/launcher is
+  open or the desktop wallpaper is loading. Prewarming never shows/focuses the
+  window or changes preferences. Interactive requests supersede background work;
+  an in-flight image decode is not interruptible, but cancellation is checked
+  before decoding and before raster preparation.
+- Prepare the selected image first, then neighboring pairs with at most two
+  simultaneous image decodes. Paint order remains unchanged. Cumulative partial
+  results allow the center to appear before all neighbors are ready; cards with
+  no pixels yet are not clickable. Completion/confirmation remains generation
+  checked. Cache hits do not spawn extra threads.
+- Persist lossless 1536×864 RGBA thumbnails in
+  `%LOCALAPPDATA%\winarchy\picker-thumbnails-v1` on Windows (under
+  `$XDG_CACHE_HOME/winarchy/`, or `~/.cache/winarchy/`, for Linux CPU tests).
+  Cache identities include the absolute source path, source size/mtime and
+  thumbnail format version. Full identities and exact file lengths are checked
+  on read; writes use temporary files. Missing, truncated or unwritable cache
+  files fall back to the original PNG/JPEG. Originals are never modified.
+  The disk cache is pruned by oldest write time to 256 MiB after writes and may
+  be deleted while Winarchy is stopped. It is outside the watched config tree.
+- Existing RAM thumbnail, raster and Slint-image caches each remain bounded to
+  64 MiB; initial-view retention is separately bounded to 64 MiB, with shared
+  frames rather than duplicated CPU pixels. An in-flight view is capped at
+  256 MiB. Original image decode buffers are additional transient memory, now
+  limited to two concurrent decodes.
+
+### Measuring
+
+Build/run the CPU benchmark in release mode:
+
+```text
+cargo run -p winarchy --release --example profile_picker -- <config-home>
+cargo run -p winarchy --release --example profile_picker -- <config-home> <wallpaper-theme>
+```
+
+It reports catalog time, first available CPU pixels and all-card preparation
+for a 1920×1080, 96-DPI view centered on the middle catalog entry. Each invocation
+compares empty RAM caches with a second, RAM-warm render. The disk cache is used
+normally; use a disposable `LOCALAPPDATA`/`XDG_CACHE_HOME` directory to compare
+empty-disk and disk-warm runs without clearing your real cache. Only cache files
+are written; no theme or wallpaper is applied.
+
+These timings exclude Slint/native window creation, UI polling, buffer uploads
+and Windows compositing. Validate real shortcut-to-visible latency on Windows
+in a release build, both immediately after startup and after idle prewarming,
+then on repeated openings. Also check progressive clicks/Enter, closing during
+preload, edits while closed, theme changes, and monitor/DPI changes. Linux unit
+tests and Windows cross-compilation do not establish native display latency.
 
 ## Visual acceptance
 
