@@ -1,5 +1,6 @@
 //! Omarchy image picker interaction/geometry port (see docs/licenses/omarchy.md).
 //! Pure state: browsing never writes preferences or applies a theme.
+mod disk_cache;
 pub mod loader;
 pub mod render;
 pub const EXPANDED_WIDTH: f32 = 768.0;
