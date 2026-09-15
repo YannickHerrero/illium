@@ -42,6 +42,26 @@ mod scheduling_tests {
         runtime
     }
     #[test]
+    fn large_popups_respect_bar_and_monitor_edges() {
+        let monitor = Rect {
+            x: -1920,
+            y: 100,
+            w: 1920,
+            h: 1080,
+        };
+        for top in [true, false] {
+            let rect = popup_rect(monitor, (960, 1200), 60, 12, -10, top);
+            assert_eq!(rect.h, 996);
+            assert!(rect.x >= monitor.x && rect.x + rect.w <= monitor.x + monitor.w);
+            assert!(rect.y >= monitor.y && rect.y + rect.h <= monitor.y + monitor.h);
+            if top {
+                assert_eq!(rect.y, monitor.y + 72);
+            } else {
+                assert_eq!(rect.y + rect.h, monitor.y + monitor.h - 72);
+            }
+        }
+    }
+    #[test]
     fn structured_actions_preserve_delimiters_and_unicode() {
         let args = ["connect", "Café | \\\"", "password|\\\\\""];
         let values = args
@@ -366,25 +386,26 @@ impl Runtime {
             set_data(&instance, def, &e.data)?;
         }
         let size = &e.applet.manifest.popup;
-        let (w, h) = (
-            super::dpi::scale(monitor, size.width).min(monitor.w),
-            super::dpi::scale(monitor, size.height).min(monitor.h),
+        let rect = popup_rect(
+            monitor,
+            (
+                super::dpi::scale(monitor, size.width),
+                super::dpi::scale(monitor, size.height),
+            ),
+            super::dpi::scale(monitor, c.bar.height),
+            super::dpi::scale(monitor, 6),
+            monitor.x + super::dpi::scale(monitor, x),
+            c.bar.position == "top",
         );
-        let _ = instance.set_property("popup-width", Value::Number(size.width as f64));
-        let _ = instance.set_property("popup-height", Value::Number(size.height as f64));
-        let bar = super::dpi::scale(monitor, c.bar.height);
-        let gap = super::dpi::scale(monitor, 6);
-        let center = monitor.x + super::dpi::scale(monitor, x);
-        self.pending = Some(Rect {
-            x: (center - w / 2).clamp(monitor.x, monitor.x + monitor.w - w),
-            y: if c.bar.position == "top" {
-                monitor.y + bar + gap
-            } else {
-                monitor.y + monitor.h - bar - gap - h
-            },
-            w,
-            h,
-        });
+        let _ = instance.set_property(
+            "popup-width",
+            Value::Number(super::dpi::logical(monitor, rect.w) as f64),
+        );
+        let _ = instance.set_property(
+            "popup-height",
+            Value::Number(super::dpi::logical(monitor, rect.h) as f64),
+        );
+        self.pending = Some(rect);
         instance.show().map_err(|err| err.to_string())?;
         self.open = Some(name.to_owned());
         Ok(())
@@ -442,6 +463,27 @@ impl Runtime {
             .iter()
             .filter_map(|e| e.instance.as_ref())
             .any(|i| shell::id(i.window()) == id)
+    }
+}
+fn popup_rect(
+    monitor: Rect,
+    requested: (i32, i32),
+    bar: i32,
+    gap: i32,
+    center: i32,
+    top: bool,
+) -> Rect {
+    let w = requested.0.clamp(1, monitor.w.max(1));
+    let h = requested.1.clamp(1, (monitor.h - bar - gap * 2).max(1));
+    Rect {
+        x: (center - w / 2).clamp(monitor.x, monitor.x + monitor.w - w),
+        y: if top {
+            monitor.y + bar + gap
+        } else {
+            monitor.y + monitor.h - bar - gap - h
+        },
+        w,
+        h,
     }
 }
 /// One string preserves legacy actions; multiple strings use unambiguous JSON.
