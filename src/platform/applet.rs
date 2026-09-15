@@ -303,6 +303,7 @@ impl Runtime {
         };
         set_colors(&instance, &c.theme);
         let _ = instance.set_property("busy", Value::Bool(e.running));
+        let _ = instance.set_property("open", Value::Bool(true));
         if e.data != serde_json::Value::Null {
             set_data(&instance, def, &e.data)?;
         }
@@ -351,6 +352,7 @@ impl Runtime {
             && let Some(instance) = &e.instance
         {
             let _ = instance.invoke("dismissed", &[]);
+            let _ = instance.set_property("open", Value::Bool(false));
             let _ = instance.hide();
         }
         self.pending = None;
@@ -549,11 +551,10 @@ fn builtin(provider: &str, action: Option<&str>) -> Result<String, String> {
         "builtin:clock" => Ok(clock().to_string()),
         "builtin:system" => Ok(system().to_string()),
         "builtin:volume" => {
-            if let Some(action) = action {
-                super::status::volume_apply(action)?;
+            if let Some(action) = action.filter(|a| *a != "refresh") {
+                super::audio::apply(action)?;
             }
-            let (volume, muted) = super::status::volume_state().ok_or("no audio output device")?;
-            Ok(serde_json::json!({ "volume": volume, "muted": muted }).to_string())
+            Ok(super::audio::snapshot()?.to_string())
         }
         other => Err(format!("unknown provider {other}")),
     }

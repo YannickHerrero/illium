@@ -1,6 +1,7 @@
-# Master volume of the default output, opened by clicking the volume module.
+# Audio panel opened by clicking the volume module: output and input levels,
+# device choice and per-application sources. Polls every 200 ms while open.
 attach = "volume"
 provider = "builtin:volume"
-interval = "5s"
+interval = "1m"
 focusable = true
-popup = { width = 300, height = 120 }
+popup = { width = 380, height = 640 }

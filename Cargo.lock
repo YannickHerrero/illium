@@ -4937,6 +4937,7 @@ dependencies = [
  "winarchy-ipc",
  "winarchy-theme",
  "windows",
+ "windows-core 0.61.2",
  "winresource",
 ]
 

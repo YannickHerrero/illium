@@ -1,9 +1,7 @@
 use crate::config::Config;
 use windows::Win32::{
     Foundation::FILETIME,
-    Media::Audio::{Endpoints::*, *},
     System::{
-        Com::*,
         Power::*,
         SystemInformation::{GetLocalTime, GlobalMemoryStatusEx, MEMORYSTATUSEX},
         Threading::GetSystemTimes,
@@ -75,68 +73,12 @@ pub fn battery_status() -> Option<(u8, bool)> {
     unsafe { GetSystemPowerStatus(&mut p) }.ok()?;
     (p.BatteryLifePercent <= 100).then_some((p.BatteryLifePercent, p.ACLineStatus == 1))
 }
-fn endpoint() -> Option<IAudioEndpointVolume> {
-    unsafe {
-        let enumerator: IMMDeviceEnumerator =
-            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
-        let device = enumerator.GetDefaultAudioEndpoint(eRender, eConsole).ok()?;
-        device.Activate(CLSCTX_ALL, None).ok()
-    }
-}
-/// Master volume in percent and mute state of the default output device.
-pub fn volume_state() -> Option<(u32, bool)> {
-    let endpoint = endpoint()?;
-    unsafe {
-        Some((
-            (endpoint.GetMasterVolumeLevelScalar().ok()? * 100.0).round() as u32,
-            endpoint.GetMute().ok()?.as_bool(),
-        ))
-    }
-}
-/// `set <percent>`, `up`, `down` (5% steps) or `toggle-mute`.
-pub fn volume_apply(action: &str) -> Result<(), String> {
-    let endpoint = endpoint().ok_or("no audio output device")?;
-    let (level, muted) = volume_state().ok_or("no audio output device")?;
-    let target = match action.split_once(' ') {
-        Some(("set", n)) => n
-            .trim()
-            .parse::<i64>()
-            .map_err(|_| format!("invalid volume: {n}"))?,
-        None if action == "up" => i64::from(level) + 5,
-        None if action == "down" => i64::from(level) - 5,
-        None if action == "toggle-mute" => {
-            return unsafe { endpoint.SetMute(!muted, std::ptr::null()) }
-                .map_err(|e| e.to_string());
-        }
-        _ => return Err(format!("unknown volume action: {action}")),
-    };
-    let target = target.clamp(0, 100) as f32 / 100.0;
-    unsafe {
-        endpoint
-            .SetMasterVolumeLevelScalar(target, std::ptr::null())
-            .map_err(|e| e.to_string())?;
-        if muted && target > 0.0 {
-            let _ = endpoint.SetMute(false, std::ptr::null());
-        }
-    }
-    Ok(())
-}
-fn volume() -> Option<String> {
-    volume_state().map(|(level, muted)| {
-        if muted {
-            "muted".into()
-        } else {
-            format!("vol {level}%")
-        }
-    })
-}
 /// Module name and rendered value for each module that has something to show.
 pub fn items(c: &Config, title: &str, modules: &[String]) -> Vec<(String, String)> {
     let mut out = Vec::new();
     for module in modules {
         let value = match module.as_str() {
             "window-title" => Some(title.to_owned()),
-            "volume" => volume(),
             "clock" => unsafe {
                 let t = GetLocalTime();
                 Some(crate::clock::format(

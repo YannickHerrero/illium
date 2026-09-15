@@ -1,5 +1,6 @@
 mod applet;
 mod apps;
+mod audio;
 mod dpi;
 use winarchy_ipc::identity;
 mod input;

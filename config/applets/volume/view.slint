@@ -1,19 +1,85 @@
-struct Data { volume: int, muted: bool }
+struct Device { id: string, name: string, default: bool }
+struct Session { id: string, name: string, volume: int, muted: bool }
+struct Data {
+    volume: int, muted: bool, output-name: string, outputs: [Device],
+    input-volume: int, input-muted: bool, input-level: int, inputs: [Device],
+    sessions: [Session],
+}
+component Slider inherits Rectangle {
+    in property <int> value;
+    in property <color> fill;
+    in property <color> track;
+    in property <color> knob;
+    callback changed(int);
+    callback grabbed(bool);
+    property <float> ratio: touch.pressed ? max(0, min(1, touch.mouse-x / self.width)) : value / 100;
+    height: 16px;
+    Rectangle {
+        y: 5px; height: 6px; width: parent.width; background: track; border-radius: 3px;
+        Rectangle { x: 0; width: parent.width * root.ratio; height: parent.height; background: fill; border-radius: 3px; }
+    }
+    Rectangle { x: (parent.width - 14px) * root.ratio; y: 1px; width: 14px; height: 14px; border-radius: 7px; background: knob; }
+    touch := TouchArea {
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) { root.grabbed(true); }
+            if (e.kind == PointerEventKind.up) { root.grabbed(false); root.changed(round(max(0, min(1, self.mouse-x / self.width)) * 100)); }
+            if (e.kind == PointerEventKind.cancel) { root.grabbed(false); }
+        }
+    }
+}
+component SectionHeader inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value;
+    in property <color> fg;
+    in property <color> muted;
+    height: 20px;
+    Text { text: label; color: muted; font-size: 12px; font-weight: 600; letter-spacing: 1px; vertical-alignment: center; horizontal-stretch: 1; }
+    Text { text: value; color: fg; font-size: 13px; vertical-alignment: center; horizontal-alignment: right; }
+}
+component DeviceRow inherits Rectangle {
+    in property <Device> device;
+    in property <image> icon;
+    in property <color> fg;
+    in property <color> muted;
+    in property <color> surface;
+    callback chosen();
+    height: 40px;
+    background: device.default ? surface : (touch.has-hover ? surface.with-alpha(0.5) : transparent);
+    border-radius: 3px;
+    HorizontalLayout {
+        padding-left: 14px; padding-right: 14px; spacing: 14px;
+        Image { source: icon; colorize: device.default ? fg : muted; width: 16px; height: 16px; vertical-alignment: center; }
+        Text { text: device.name; color: device.default ? fg : muted; font-size: 14px; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+    }
+    touch := TouchArea { clicked => { root.chosen(); } }
+}
 export component View inherits Window {
     no-frame: true;
-    in property <length> popup-width: 300px;
-    in property <length> popup-height: 120px;
-    width: popup-width;
-    height: popup-height;
+    in property <length> popup-width: 380px;
+    in property <length> popup-height: 640px;
+    width: popup-width; height: popup-height;
     in property <color> bg: #1e1e2e;
+    in property <color> surface: #313244;
     in property <color> overlay: #45475a;
     in property <color> fg: #cdd6f4;
     in property <color> muted: #a6adc8;
     in property <color> accent: #cba6f7;
     in property <Data> data;
+    in property <bool> busy: false;
+    in property <bool> open: false;
+    in property <string> provider-error;
     callback action(string);
+    property <bool> dragging: false;
+    property <color> level-fill: root.data.muted ? root.muted : root.fg;
     background: bg;
     forward-focus: keys;
+    // Live input meter and changes made elsewhere (media keys, other apps);
+    // paused while a slider is held so the rows under the pointer stay put.
+    Timer {
+        interval: 200ms;
+        running: root.open && !root.dragging;
+        triggered => { root.action("refresh"); }
+    }
     keys := FocusScope {
         key-pressed(event) => {
             if (event.text == Key.LeftArrow || event.text == "h" || event.text == "j" || event.text == Key.DownArrow) { root.action("down"); return accept; }
@@ -23,22 +89,87 @@ export component View inherits Window {
             return reject;
         }
         Rectangle {
-            border-width: 1px;
-            border-color: root.overlay;
+            border-width: 1px; border-color: root.accent;
             VerticalLayout {
                 padding: 18px; spacing: 14px;
                 HorizontalLayout {
-                    Text { text: "VOLUME"; color: root.muted; font-size: 13px; letter-spacing: 1px; horizontal-stretch: 1; }
-                    Text { text: root.data.muted ? "muted" : "\{root.data.volume}%"; color: root.data.muted ? root.muted : root.fg; font-size: 14px; }
-                }
-                slider := Rectangle {
-                    height: 8px; background: root.overlay;
-                    Rectangle { x: 0; width: parent.width * max(0, min(100, root.data.volume)) / 100; height: parent.height; background: root.data.muted ? root.muted : root.accent; }
-                    TouchArea {
-                        clicked => { root.action("set \{round(self.mouse-x / self.width * 100)}"); }
+                    height: 44px; spacing: 14px;
+                    Image { source: root.data.muted ? @image-url("speaker-muted.svg") : @image-url("speaker.svg"); colorize: root.fg; width: 34px; height: 34px; vertical-alignment: center; }
+                    VerticalLayout {
+                        spacing: 3px; horizontal-stretch: 1;
+                        Text { text: "Audio"; color: root.fg; font-size: 21px; font-weight: 600; }
+                        Text { text: root.data.output-name == "" ? "No output device" : root.data.output-name; color: root.muted; font-size: 11px; letter-spacing: 1.5px; overflow: elide; }
+                    }
+                    Rectangle {
+                        width: 48px; height: 26px; y: (parent.height - self.height) / 2;
+                        background: root.data.muted ? root.overlay : root.surface;
+                        border-radius: 3px;
+                        Rectangle {
+                            x: root.data.muted ? 3px : parent.width - self.width - 3px;
+                            y: 3px; width: 20px; height: 20px; border-radius: 2px;
+                            background: root.data.muted ? root.muted : root.fg;
+                            animate x { duration: 120ms; }
+                        }
+                        TouchArea { clicked => { root.action("toggle-mute"); } }
                     }
                 }
-                Text { text: "← → adjust   m mute   0 silence"; color: root.muted; font-size: 11px; }
+                Rectangle { height: 1px; background: root.overlay; }
+                Flickable {
+                    vertical-stretch: 1;
+                    viewport-height: max(self.height, body.preferred-height);
+                    body := VerticalLayout {
+                        alignment: start; spacing: 12px;
+                        SectionHeader { label: "OUTPUT"; value: "\{root.data.volume}%"; fg: root.data.muted ? root.muted : root.fg; muted: root.muted; }
+                        Slider {
+                            value: root.data.volume; fill: root.level-fill; track: root.overlay; knob: root.fg;
+                            grabbed(held) => { root.dragging = held; }
+                            changed(level) => { root.action("set \{level}"); }
+                        }
+                        for d in root.data.outputs: DeviceRow {
+                            device: d; icon: @image-url("output.svg"); fg: root.fg; muted: root.muted; surface: root.surface;
+                            chosen => { if (!d.default) { root.action("output " + d.id); } }
+                        }
+                        if root.data.outputs.length == 0: Text { text: "No output device"; color: root.muted; font-size: 12px; height: 24px; vertical-alignment: center; }
+                        Rectangle { height: 1px; background: root.overlay; }
+                        SectionHeader { label: "INPUT"; value: root.data.inputs.length == 0 ? "" : "\{root.data.input-volume}%"; fg: root.data.input-muted ? root.muted : root.fg; muted: root.muted; }
+                        Slider {
+                            value: root.data.input-volume; fill: root.data.input-muted ? root.muted : root.fg; track: root.overlay; knob: root.fg;
+                            grabbed(held) => { root.dragging = held; }
+                            changed(level) => { root.action("input-set \{level}"); }
+                        }
+                        Rectangle {
+                            height: 6px; background: root.overlay; border-radius: 3px;
+                            Rectangle { x: 0; width: parent.width * max(0, min(100, root.data.input-level)) / 100; height: parent.height; background: root.data.input-muted ? root.muted : root.fg; border-radius: 3px; animate width { duration: 80ms; } }
+                        }
+                        for d in root.data.inputs: DeviceRow {
+                            device: d; icon: @image-url("input.svg"); fg: root.fg; muted: root.muted; surface: root.surface;
+                            chosen => { if (!d.default) { root.action("input " + d.id); } }
+                        }
+                        if root.data.inputs.length == 0: Text { text: "No input device"; color: root.muted; font-size: 12px; height: 24px; vertical-alignment: center; }
+                        Rectangle { height: 1px; background: root.overlay; }
+                        SectionHeader { label: "SOURCES"; value: ""; fg: root.fg; muted: root.muted; }
+                        for s in root.data.sessions: Rectangle {
+                            height: 66px; background: root.surface; border-radius: 3px;
+                            VerticalLayout {
+                                padding: 12px; spacing: 8px;
+                                HorizontalLayout {
+                                    spacing: 12px; height: 18px;
+                                    Image { source: @image-url("source.svg"); colorize: s.muted ? root.muted : root.fg; width: 16px; height: 16px; vertical-alignment: center; }
+                                    Text { text: s.name; color: s.muted ? root.muted : root.fg; font-size: 14px; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                                    Text { text: s.muted ? "muted" : "\{s.volume}%"; color: root.muted; font-size: 12px; vertical-alignment: center; }
+                                }
+                                Slider {
+                                    value: s.volume; fill: s.muted ? root.muted : root.fg; track: root.overlay; knob: root.fg;
+                                    grabbed(held) => { root.dragging = held; }
+                                    changed(level) => { root.action("session \{level} " + s.id); }
+                                }
+                            }
+                        }
+                        if root.data.sessions.length == 0: Text { text: "No application is playing audio"; color: root.muted; font-size: 12px; height: 24px; vertical-alignment: center; }
+                    }
+                }
+                if root.provider-error != "": Text { text: root.provider-error; color: root.fg; font-size: 11px; wrap: word-wrap; max-height: 44px; overflow: elide; }
+                Text { text: "← → volume   m mute   0 silence"; color: root.muted; font-size: 10px; height: 14px; overflow: elide; }
             }
         }
     }

@@ -203,6 +203,26 @@ const DEFAULTS: &[(&str, &str)] = &[
         include_str!("../config/applets/volume/view.slint"),
     ),
     (
+        "applets/volume/speaker.svg",
+        include_str!("../config/applets/volume/speaker.svg"),
+    ),
+    (
+        "applets/volume/speaker-muted.svg",
+        include_str!("../config/applets/volume/speaker-muted.svg"),
+    ),
+    (
+        "applets/volume/output.svg",
+        include_str!("../config/applets/volume/output.svg"),
+    ),
+    (
+        "applets/volume/input.svg",
+        include_str!("../config/applets/volume/input.svg"),
+    ),
+    (
+        "applets/volume/source.svg",
+        include_str!("../config/applets/volume/source.svg"),
+    ),
+    (
         "applets/_template/applet.toml",
         include_str!("../config/applets/_template/applet.toml"),
     ),

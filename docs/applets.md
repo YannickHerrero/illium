@@ -17,8 +17,11 @@ folder holding an `applet.toml`, or the configuration is rejected.
 Winarchy ships `weather`, `wifi`, `calendar`, `volume` and `_template`; they
 are installed with the other defaults and never overwritten. `calendar` uses
 `attach = "clock"`: it has no icon and opens when the clock is clicked;
-`volume` attaches to the volume module the same way and takes keyboard focus
-so the arrows adjust the level. `wifi` lists the nearby networks: `j`/`k` or
+`volume` attaches to the volume module the same way: an audio panel with the
+output level and devices, the input level, a live input meter and devices, and
+one slider per application playing sound. Clicking a device makes it the
+default; the switch in the header mutes the output, as do `m` and the arrows
+adjust the level while the popup has focus. `wifi` lists the nearby networks: `j`/`k` or
 the arrows move, Enter connects (asking for the key of an unknown secured
 network, stored as a WPA2 profile), `d` disconnects, `f` forgets the saved
 profile and `r` rescans. The key is passed as the provider's argument (never logged by Winarchy). Profile
@@ -76,10 +79,18 @@ Built-in providers avoid a process for fast cadences:
   grid of `{ day, current, today }` cells.
 - `builtin:system`: `cpu`, `memory_available_gb`, `memory_total_gb`,
   `memory_load`, `battery` (-1 without one), `plugged`, `processors`.
-- `builtin:volume`: `volume` (percent) and `muted` of the default output
-  device. It is the only built-in provider that acts on the view's action:
-  `set <percent>`, `up`, `down` (5% steps) and `toggle-mute`. Setting a
-  level above zero also unmutes.
+- `builtin:volume`: `volume` (percent), `muted` and `output_name` of the
+  default output, `outputs` and `inputs` as `{ id, name, default }` lists of
+  the active devices, `input_volume`, `input_muted`, `input_level` (peak of the
+  default input at call time, in percent) and `sessions`, up to 16
+  `{ id, name, volume, muted }` entries for the applications using the default
+  output. It is the only built-in provider that acts on the view's action:
+  `set <percent>`, `up`, `down` (5% steps), `toggle-mute`, `input-set <percent>`,
+  `input-toggle-mute`, `output <id>`, `input <id>` (default device for every
+  role, through the same undocumented COM interface the third-party switchers
+  use) and `session <percent> <id>`. Setting a level above zero also unmutes;
+  `refresh` only reads. The bar reads the same endpoint for its speaker icon,
+  crossed out while muted.
 
 ### Wi-Fi panel
 
@@ -121,6 +132,8 @@ include all traffic on that adapter, not just Internet/application payload.
 with `no-frame: true`. Winarchy sets these properties when they exist:
 
 - `busy`: boolean, true while the external provider is running.
+- `open`: boolean, true while the popup is shown; the volume view runs a
+  200 ms `Timer` on it to poll its built-in provider for the input meter.
 - `provider-error`: string, the latest provider/JSON error (empty after success).
 - `data`: your own `struct`; JSON keys map to fields (`month_name` also matches
   `month-name`). Keys the struct does not declare are ignored; type mismatches

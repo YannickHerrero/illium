@@ -179,6 +179,8 @@ pub struct Shell {
     wallpaper_loader: crate::wallpaper::loader::Loader,
     wallpaper_pending: Option<wallpaper::Pending>,
     pub wallpaper_error: Option<String>,
+    /// Bar icons of the volume module: sound on, then muted.
+    volume_icons: [slint::Image; 2],
 }
 fn scan(path: &std::path::Path, out: &mut Vec<App>) {
     for path in crate::files::shortcuts(path, 8192, 16) {
@@ -252,6 +254,12 @@ impl Shell {
             wallpaper_loader: crate::wallpaper::loader::Loader::default(),
             wallpaper_pending: None,
             wallpaper_error: None,
+            volume_icons: [
+                slint::Image::load_from_svg_data(include_bytes!("../../ui/icons/volume.svg"))
+                    .map_err(|e| e.to_string())?,
+                slint::Image::load_from_svg_data(include_bytes!("../../ui/icons/volume-muted.svg"))
+                    .map_err(|e| e.to_string())?,
+            ],
             tx,
         })
     }
@@ -763,6 +771,18 @@ impl Shell {
                     icon: slint::Image::default(),
                     level: i32::from(percent),
                     charging: plugged,
+                });
+            }
+            if modules.iter().any(|m| m == "volume")
+                && let Some((_, muted)) = super::audio::volume_state()
+            {
+                out.push(StatusItem {
+                    kind: "volume".into(),
+                    value: "".into(),
+                    has_icon: true,
+                    icon: self.volume_icons[usize::from(muted)].clone(),
+                    level: 0,
+                    charging: false,
                 });
             }
             // Keep the configured order across built-ins and applets.
