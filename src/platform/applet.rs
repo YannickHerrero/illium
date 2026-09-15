@@ -8,7 +8,58 @@ use crate::{
 };
 use slint::ComponentHandle;
 use slint_interpreter::{ComponentDefinition, ComponentInstance, Value};
-use std::time::{Duration, Instant};
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
+#[cfg(test)]
+mod scheduling_tests {
+    use super::*;
+    fn runtime() -> Runtime {
+        let (tx, _) = crate::queue::channel(8);
+        let mut runtime = Runtime::new(tx);
+        runtime.generation = 2;
+        runtime.entries.push(Entry {
+            applet: Applet {
+                name: "wifi".into(),
+                dir: std::path::PathBuf::new(),
+                manifest: toml::from_str("").unwrap(),
+            },
+            icon: None,
+            data: serde_json::json!({"ssid":"current"}),
+            error: None,
+            running: true,
+            pending_actions: VecDeque::new(),
+            due: Instant::now(),
+            interval: Duration::from_secs(30),
+            definition: None,
+            instance: None,
+        });
+        runtime
+    }
+    #[test]
+    fn busy_actions_are_bounded_and_ordered() {
+        let mut runtime = runtime();
+        runtime.action("wifi", None);
+        assert!(runtime.entries[0].pending_actions.is_empty());
+        for i in 0..12 {
+            runtime.action("wifi", Some(i.to_string()));
+        }
+        assert_eq!(runtime.entries[0].pending_actions.len(), 8);
+        assert_eq!(runtime.entries[0].pending_actions.front().unwrap(), "0");
+        assert_eq!(runtime.entries[0].pending_actions.back().unwrap(), "7");
+    }
+    #[test]
+    fn stale_provider_results_do_not_clear_a_new_worker() {
+        let mut runtime = runtime();
+        runtime.apply("wifi", 1, Ok(r#"{"ssid":"old"}"#.into()));
+        assert_eq!(runtime.entries[0].data["ssid"], "current");
+        assert!(runtime.entries[0].running);
+        runtime.apply("wifi", 2, Ok(r#"{"ssid":"new"}"#.into()));
+        assert_eq!(runtime.entries[0].data["ssid"], "new");
+        assert!(!runtime.entries[0].running);
+    }
+}
 fn set_colors(instance: &ComponentInstance, theme: &crate::config::Theme) {
     for (prop, value) in [
         ("bg", &theme.background),
@@ -30,6 +81,7 @@ pub struct Entry {
     pub data: serde_json::Value,
     pub error: Option<String>,
     running: bool,
+    pending_actions: VecDeque<String>,
     due: Instant,
     interval: Duration,
     definition: Option<ComponentDefinition>,
@@ -41,6 +93,7 @@ pub struct Runtime {
     pub open: Option<String>,
     pending: Option<Rect>,
     tx: EventSender,
+    generation: u64,
 }
 impl Runtime {
     pub fn new(tx: EventSender) -> Self {
@@ -49,11 +102,13 @@ impl Runtime {
             open: None,
             pending: None,
             tx,
+            generation: 0,
         }
     }
     /// Loads the applets the bar references; data of applets that stay is kept.
     pub fn load(&mut self, c: &Config) {
         self.close();
+        self.generation = self.generation.wrapping_add(1);
         let previous = std::mem::take(&mut self.entries);
         for loaded in applets::referenced(&c.home, &[&c.bar.left, &c.bar.center, &c.bar.right]) {
             let applet = match loaded {
@@ -74,6 +129,7 @@ impl Runtime {
                 data: old.map_or(serde_json::Value::Null, |o| o.data.clone()),
                 error: None,
                 running: false,
+                pending_actions: VecDeque::new(),
                 due: Instant::now(),
                 definition: None,
                 instance: None,
@@ -128,14 +184,28 @@ impl Runtime {
     }
     fn refresh(&mut self, index: usize, action: Option<String>) {
         let e = &mut self.entries[index];
+        if e.running {
+            if let Some(action) = action {
+                if e.pending_actions.len() < 8 {
+                    e.pending_actions.push_back(action);
+                } else {
+                    tracing::warn!(applet = %e.applet.name, "applet action queue full");
+                }
+            }
+            return;
+        }
         e.due = Instant::now() + e.interval;
         if let Some(provider) = &e.applet.manifest.provider {
             let result = builtin(provider, action.as_deref());
             let name = e.applet.name.clone();
-            self.apply(&name, result);
+            self.apply(&name, self.generation, result);
             return;
         }
         e.running = true;
+        if let Some(instance) = &e.instance {
+            let _ = instance.set_property("busy", Value::Bool(true));
+        }
+        let generation = self.generation;
         let name = e.applet.name.clone();
         let command = applets::command(&e.applet);
         let env = applets::environment(&e.applet);
@@ -143,15 +213,22 @@ impl Runtime {
         let tx = self.tx.clone();
         std::thread::spawn(move || {
             let result = run(&command, &env, &dir, action.as_deref());
-            let _ = tx.send(Event::AppletData(name, result));
+            let _ = tx.send(Event::AppletData(name, generation, result));
         });
     }
     /// Stores a provider result and pushes it to the open view.
-    pub fn apply(&mut self, name: &str, result: Result<String, String>) {
-        let Some(e) = self.entries.iter_mut().find(|e| e.applet.name == name) else {
+    pub fn apply(&mut self, name: &str, generation: u64, result: Result<String, String>) {
+        if generation != self.generation {
+            return;
+        }
+        let Some(index) = self.entries.iter().position(|e| e.applet.name == name) else {
             return;
         };
+        let e = &mut self.entries[index];
         e.running = false;
+        if let Some(instance) = &e.instance {
+            let _ = instance.set_property("busy", Value::Bool(false));
+        }
         match result.and_then(|text| {
             serde_json::from_str::<serde_json::Value>(&text)
                 .map_err(|err| format!("invalid JSON: {err}"))
@@ -170,6 +247,15 @@ impl Runtime {
                 tracing::warn!(applet = name, %err, "applet provider failed");
                 e.error = Some(err);
             }
+        }
+        if let Some(instance) = &e.instance {
+            let _ = instance.set_property(
+                "provider-error",
+                Value::String(e.error.clone().unwrap_or_default().into()),
+            );
+        }
+        if let Some(action) = e.pending_actions.pop_front() {
+            self.refresh(index, Some(action));
         }
     }
     /// Shows or hides the applet view under the bar module centered at logical `x`.
@@ -208,6 +294,7 @@ impl Runtime {
             }
         };
         set_colors(&instance, &c.theme);
+        let _ = instance.set_property("busy", Value::Bool(e.running));
         if e.data != serde_json::Value::Null {
             set_data(&instance, def, &e.data)?;
         }

@@ -42,7 +42,7 @@ pub enum Event {
     /// Left button pressed on the root window `isize`, anywhere on the desktop.
     Click(isize),
     /// An applet provider finished: applet name and its stdout or error.
-    AppletData(String, Result<String, String>),
+    AppletData(String, u64, Result<String, String>),
     /// An applet view asked for an action to be run by its provider.
     AppletAction(String, Option<String>),
     /// Escape pressed while a bar popup was open.
@@ -670,8 +670,8 @@ impl Manager {
                 self.shell.close_popup();
                 self.applets.close();
             }
-            Event::AppletData(name, result) => {
-                self.applets.apply(&name, result);
+            Event::AppletData(name, generation, result) => {
+                self.applets.apply(&name, generation, result);
                 self.shell.refresh(&self.model, &self.config, &self.applets);
             }
             Event::AppletAction(name, action) => self.applets.action(&name, action),

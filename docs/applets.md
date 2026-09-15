@@ -56,7 +56,9 @@ argument, when present, is the action requested by the view. A non-zero exit
 turns the bar label into `!` and the popup shows the error.
 
 Providers run off the UI thread, one at a time per applet, on the configured
-interval. They are ordinary commands from your configuration directory: treat
+interval. Actions arriving during a run are queued in order (up to eight); periodic
+refreshes do not start overlapping processes. Results from a previous configuration
+load are discarded. They are ordinary commands from your configuration directory: treat
 them with the same trust as `apps.toml`.
 
 Built-in providers avoid a process for fast cadences:
@@ -76,6 +78,8 @@ Built-in providers avoid a process for fast cadences:
 `view.slint` exports a component, `View` by preference, that inherits `Window`
 with `no-frame: true`. Winarchy sets these properties when they exist:
 
+- `busy`: boolean, true while the external provider is running.
+- `provider-error`: string, the latest provider/JSON error (empty after success).
 - `data`: your own `struct`; JSON keys map to fields (`month_name` also matches
   `month-name`). Keys the struct does not declare are ignored; type mismatches
   are reported in the popup.
