@@ -674,7 +674,7 @@ impl Manager {
             }
             Event::Escape => {
                 self.shell.close_popup();
-                self.applets.close();
+                self.applets.escape();
             }
             Event::AppletData(name, generation, result) => {
                 self.applets.apply(&name, generation, result);

@@ -54,7 +54,7 @@ function Parse-Networks([string[]]$lines, [string[]]$known, [string]$ssid) {
       $name = $Matches[1].Trim()
       if (-not $name) { $current = $null; continue }
       if (-not $networks.ContainsKey($name)) {
-        $networks[$name] = [ordered]@{ ssid = $name; signal = 0; secured = $true; known = ($known -ccontains $name); connected = ($name -ceq $ssid); available = $true }
+        $networks[$name] = [ordered]@{ ssid = $name; signal = 0; secured = $true; known = (($known -ccontains $name) -or ($name -ceq $ssid)); connected = ($name -ceq $ssid); available = $true }
       }
       $current = $networks[$name]
     }

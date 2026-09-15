@@ -81,6 +81,20 @@ Built-in providers avoid a process for fast cadences:
   `set <percent>`, `up`, `down` (5% steps) and `toggle-mute`. Setting a
   level above zero also unmutes.
 
+### Wi-Fi panel
+
+The 480×600 logical-pixel panel separates the connected-network header, traffic,
+interface details and scrollable saved/other networks. A lock means secured, not
+necessarily WPA2. Saved networks that are not visible remain listed as out of range.
+The active connection has a filled background; the keyboard selection has an outline.
+Mouse actions and the existing keyboard shortcuts are both available. Forgetting a
+profile requires confirmation. Passwords stay bound to the chosen SSID across data
+refreshes and are cleared on cancellation, submission and popup dismissal.
+
+To update an existing installation, back up its `applets/wifi` directory and copy the
+new manifest, provider, view and SVG files together **after** updating the daemon.
+Default configuration installation never overwrites existing applet files.
+
 ### Wi-Fi traffic sampling
 
 With `wifi_traffic = true`, the script remains responsible for discovery and actions.
@@ -121,6 +135,20 @@ Read-only Wi-Fi parser/action-encoding fixtures can be run on Windows with:
 Images in the view load relative to the folder: `@image-url("sun.svg")`.
 SVG and the usual raster formats are supported at run time; `colorize` tints
 monochrome icons with a theme color.
+
+Optional view callbacks let the applet clean up transient UI state:
+
+- `completed()`: invoked after a provider result, including failures.
+- `dismissed()`: invoked before hiding the popup (clear password input here).
+- `cancel() -> bool`: invoked for the global Escape key; return true to cancel an
+  inner dialog without closing the popup, false to let Winarchy close it.
+
+The opt-in native unit test `wifi_view_renders_and_pins_password_target` compiles and
+renders the real Slint view headlessly and exercises connection, password-target
+pinning, dismissal and forget confirmation without executing any network actions.
+Set `WINARCHY_WIFI_TEST_DIR` to the Windows-visible applet folder and optionally
+`WINARCHY_WIFI_RENDER_DIR` to an existing output folder for PPM snapshots, then run
+that test with `--ignored`. It includes light/dark, 150% DPI and long-list fixtures.
 
 ## Popup behaviour
 

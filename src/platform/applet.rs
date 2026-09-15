@@ -1,6 +1,8 @@
 //! Applet runtime: schedules data providers, holds their JSON, compiles the
 //! Slint views on demand and shows them as anchored popups.
 mod traffic;
+#[cfg(test)]
+mod view_tests;
 use super::{Event, EventSender, native, shell};
 use crate::{
     applets::{self, Applet},
@@ -253,6 +255,7 @@ impl Runtime {
         e.running = false;
         if let Some(instance) = &e.instance {
             let _ = instance.set_property("busy", Value::Bool(false));
+            let _ = instance.invoke("completed", &[]);
         }
         match result.and_then(|text| {
             serde_json::from_str::<serde_json::Value>(&text)
@@ -384,11 +387,26 @@ impl Runtime {
         self.open = Some(name.to_owned());
         Ok(())
     }
+    /// Let an applet cancel an inner dialog before Escape closes its window.
+    pub fn escape(&mut self) {
+        let handled = self
+            .open
+            .as_ref()
+            .and_then(|name| self.entries.iter().find(|e| e.applet.name == *name))
+            .and_then(|e| e.instance.as_ref())
+            .is_some_and(|instance| {
+                matches!(instance.invoke("cancel", &[]), Ok(Value::Bool(true)))
+            });
+        if !handled {
+            self.close();
+        }
+    }
     pub fn close(&mut self) {
         if let Some(name) = self.open.take()
             && let Some(e) = self.entries.iter().find(|e| e.applet.name == name)
             && let Some(instance) = &e.instance
         {
+            let _ = instance.invoke("dismissed", &[]);
             let _ = instance.hide();
         }
         self.pending = None;
