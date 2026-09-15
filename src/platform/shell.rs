@@ -138,7 +138,6 @@ fn sync<T: Clone + PartialEq + 'static>(model: &Rc<VecModel<T>>, rows: &[T]) {
 pub enum MetaMenu {
     Apps,
     System,
-    Wallpaper,
 }
 #[derive(Clone)]
 pub enum MetaEntry {
@@ -285,7 +284,7 @@ impl Shell {
         self.launcher.set_fg(color(&c.theme.text));
         self.launcher.set_accent(color(&c.theme.accent));
         self.launcher.set_overlay(color(&c.theme.overlay));
-        self.refresh_wallpaper(c.launcher.max_results);
+        self.refresh_wallpaper();
     }
     pub fn configure(&mut self, c: &Config, monitors: &[Rect]) -> Result<(), String> {
         self.pending = true;
@@ -301,7 +300,7 @@ impl Shell {
             self.wallpaper_sizes = sizes;
             self.wallpaper_key = None;
         }
-        self.refresh_wallpaper(c.launcher.max_results);
+        self.refresh_wallpaper();
         for b in self.bars.drain(..) {
             let _ = b.hide();
         }
@@ -610,7 +609,14 @@ impl Shell {
                 "Theme ›".into(),
                 MetaEntry::Run(crate::command::Command::ThemePicker),
             ),
-            ("Wallpaper ›".into(), MetaEntry::Menu(MetaMenu::Wallpaper)),
+            (
+                "Wallpaper ›".into(),
+                MetaEntry::Run(crate::command::Command::WallpaperPicker),
+            ),
+            (
+                "Solid background".into(),
+                MetaEntry::Run(crate::command::Command::Wallpaper(None)),
+            ),
         ]
     }
     /// Companion applications, also indexed by the launcher.
@@ -667,27 +673,6 @@ impl Shell {
         let dir = winarchy_theme::pack::wallpaper_dir(&self.home, &self.theme)?;
         winarchy_theme::pack::images(&dir)
     }
-    fn meta_wallpapers(&self) -> Vec<(String, MetaEntry)> {
-        let mut items = vec![(
-            format!(
-                "{} Solid background",
-                if self.wallpaper.is_none() { "●" } else { " " }
-            ),
-            MetaEntry::Run(crate::command::Command::Wallpaper(None)),
-        )];
-        for name in self.wallpaper_names().unwrap_or_default() {
-            let mark = if self.wallpaper.as_ref() == Some(&name) {
-                "●"
-            } else {
-                " "
-            };
-            items.push((
-                format!("{mark} {name}"),
-                MetaEntry::Run(crate::command::Command::Wallpaper(Some(name))),
-            ));
-        }
-        items
-    }
     /// Enters a submenu or returns the command to run for result `n`.
     pub fn meta_activate(&mut self, n: usize, max: usize) -> Option<crate::command::Command> {
         match self.meta_results.get(n).cloned()? {
@@ -696,7 +681,6 @@ impl Shell {
                 self.meta_items = match menu {
                     MetaMenu::Apps => Self::meta_apps(),
                     MetaMenu::System => Self::meta_system().unwrap_or_default(),
-                    MetaMenu::Wallpaper => self.meta_wallpapers(),
                 };
                 self.meta_menu = Some(menu);
                 self.launcher.set_query("".into());

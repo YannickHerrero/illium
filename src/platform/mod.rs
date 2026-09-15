@@ -400,11 +400,17 @@ impl Manager {
                 "wallpaper_pending": self.shell.pending_wallpaper(),
                 "wallpaper_error": self.shell.wallpaper_error,
                 "gap": self.config.wm.gap, "launcher": self.shell.visible,
-                "theme_picker": self.shell.picker.opened,
-                "theme_picker_selected": self.shell.picker.selected_id(),
-                "theme_picker_filter": self.shell.picker.filter(),
-                "theme_picker_loading": self.shell.picker.loading(),
-                "theme_picker_error": self.shell.picker.error,
+                "theme_picker": self.shell.picker.opened && self.shell.picker.wallpaper_theme.is_none(),
+                "wallpaper_picker": self.shell.picker.opened && self.shell.picker.wallpaper_theme.is_some(),
+                "wallpaper_picker_theme": self.shell.picker.wallpaper_theme,
+                "wallpaper_picker_selected": self.shell.picker.wallpaper_theme.as_ref().and(self.shell.picker.selected_id()),
+                "wallpaper_picker_loading": self.shell.picker.wallpaper_theme.is_some() && self.shell.picker.loading(),
+                "wallpaper_picker_filter": self.shell.picker.wallpaper_theme.as_ref().map(|_| self.shell.picker.filter()),
+                "wallpaper_picker_error": self.shell.picker.wallpaper_theme.as_ref().and(self.shell.picker.error.as_ref()),
+                "theme_picker_selected": self.shell.picker.wallpaper_theme.is_none().then(|| self.shell.picker.selected_id()).flatten(),
+                "theme_picker_filter": if self.shell.picker.wallpaper_theme.is_none() { self.shell.picker.filter() } else { "" },
+                "theme_picker_loading": self.shell.picker.wallpaper_theme.is_none() && self.shell.picker.loading(),
+                "theme_picker_error": self.shell.picker.wallpaper_theme.is_none().then_some(self.shell.picker.error.as_ref()).flatten(),
                 "monitors": self.monitors, "bar_count": self.shell.bars.len(),
                 "clients": self.model.clients.iter().map(|c| serde_json::json!({"id":c.id,"workspace":c.workspace,"floating":c.floating,"fullscreen":c.fullscreen,"title":native::title(c.id),"rect":native::rect(c.id)})).collect::<Vec<_>>()
             }).to_string()),
@@ -521,7 +527,7 @@ impl Manager {
             }
             Command::App(name) => apps::open(name),
             Command::Reload => self.reload()?,
-            Command::ThemePicker => {
+            Command::ThemePicker | Command::WallpaperPicker => {
                 if !self.shell.picker.opened {
                     let mut pid = 0;
                     unsafe { GetWindowThreadProcessId(native::hwnd(foreground), Some(&mut pid)); }
@@ -529,7 +535,12 @@ impl Manager {
                     self.shell.dismiss();
                     self.shell.close_popup();
                     self.applets.close();
-                    self.shell.picker.open(&self.config, self.full_area(), restore)?;
+                    if matches!(c, Command::WallpaperPicker) {
+                        let selected = self.shell.pending_wallpaper().or(self.shell.wallpaper.as_deref()).map(str::to_owned);
+                        self.shell.picker.open_wallpapers(&self.config, self.full_area(), restore, selected.as_deref())?;
+                    } else {
+                        self.shell.picker.open(&self.config, self.full_area(), restore)?;
+                    }
                 }
             }
             Command::WallpaperNext => self.shell.next_wallpaper()?,
@@ -558,9 +569,13 @@ impl Manager {
         }
         let restore = self.shell.picker.close();
         if let Outcome::Apply(name) = outcome
-            && let Err(error) = self.execute(Command::Theme(name))
+            && let Some(command) = self
+                .shell
+                .picker
+                .selection_command(name, &self.config.global.theme)
+            && let Err(error) = self.execute(command)
         {
-            tracing::warn!(%error, "selected theme could not be applied");
+            tracing::warn!(%error, "selected carousel item could not be applied");
             self.shell.picker.error = Some(error);
         }
         if let Some(id) = restore.filter(|id| native::visible(*id) && !native::minimized(*id)) {
@@ -773,9 +788,12 @@ impl Manager {
                 let monitor = self.full_area();
                 self.shell.picker.display_changed(monitor);
             }
-            Event::Wallpapers => self
-                .shell
-                .refresh_wallpaper(self.config.launcher.max_results),
+            Event::Wallpapers => {
+                self.shell.refresh_wallpaper();
+                if self.shell.picker.wallpaper_theme.is_some() {
+                    self.shell.picker.rescan();
+                }
+            }
             Event::Reload => {
                 if let Err(e) = self.reload_config(false) {
                     tracing::warn!(%e,"keeping previous configuration");
@@ -966,7 +984,7 @@ pub fn run(replace: bool) -> Result<(), String> {
                 monitors,
                 ..
             } = &mut *m;
-            shell.poll_wallpaper(config.launcher.max_results);
+            shell.poll_wallpaper();
             let outcome = shell.picker.poll();
             let pending = shell.pending;
             let ready = shell.arrange(config, monitors);

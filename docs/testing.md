@@ -41,7 +41,7 @@ Do not run the ignored tests concurrently: they share the current user's daemon 
 
 `ipc_desktop_smoke` creates disposable native windows and checks discovery, directional moves, floating and fullscreen geometry, workspace membership and visibility, launcher toggling, theme changes and reload behaviour through IPC. `crash_restores_hidden_windows` and `replacement_crash_restores_explorer` kill a daemon and check that the watchdog restores hidden windows and Explorer. `desktop_smoke` asserts real foreground changes and application launches and needs an unlocked, interactive desktop.
 
-## Theme picker checks
+## Theme and wallpaper picker checks
 
 Linux tests cover preview installation/discovery, filtering and labels, circular
 navigation, rectangular hit areas, geometry, antialiased raster masks, DPI,
@@ -53,7 +53,7 @@ picker and Slint software renderer with **no native window**. It creates its own
 temporary themes, drives the FocusScope callbacks, checks scrim alpha, cached
 image reuse, filtering, confirmation, unreadable assets and stale input, and
 asserts that browsing never writes the selected theme or wallpaper preferences.
-It is safe while your normal Winarchy session is running.
+The same test also exercises wallpaper mode: active filename selection, original labels, filtering, deferred confirmation, directory deletion, empty catalogs, cancellation on theme changes and reopening in theme mode. It is safe while your normal Winarchy session is running.
 
 Optional PNG snapshots of that test (not theme assets):
 

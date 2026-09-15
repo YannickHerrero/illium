@@ -4,7 +4,11 @@ The picker ports Omarchy's `shell/plugins/image-picker/ImagePicker.qml` and
 `ImagePickerModel.js` at revision `86a2e5830eae4d660a66df8cf37f0a35bf4fe8a2`
 (PR https://github.com/omacom/omarchy/pull/6231). See
 `docs/licenses/omarchy.md` for the upstream notice. This is a visual port, not a
-redesign; the wallpaper menu is outside its scope.
+redesign. Winarchy also reuses this labeled/filterable carousel for the active
+theme's wallpapers, displaying exact filenames and confirming through the
+existing wallpaper command. This deliberately uses the theme selector's variant,
+not Omarchy's label-free background-switcher invocation. No duplicate Slint
+surface, renderer or live wallpaper preview is introduced.
 
 ## Contract (default Omarchy style, logical pixels)
 

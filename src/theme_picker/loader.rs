@@ -48,6 +48,7 @@ impl<K: PartialEq, V> Cache<K, V> {
 #[derive(Clone)]
 pub enum Job {
     Scan(PathBuf),
+    Wallpapers(PathBuf, String),
     Render(Vec<Key>),
 }
 pub enum Output {
@@ -78,6 +79,7 @@ impl Default for Loader {
         let mut frames: Cache<Key, Frame> = Cache::default();
         Self::start(move |job, cancelled| match job {
             Job::Scan(home) => preview::catalog(&home).map(Output::Catalog),
+            Job::Wallpapers(home, theme) => preview::wallpapers(&home, &theme).map(Output::Catalog),
             Job::Render(keys) => {
                 if keys.len() > 33 {
                     return Err("preview request exceeds 33 visible cards".into());

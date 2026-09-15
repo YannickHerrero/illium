@@ -1,4 +1,4 @@
-//! The native/UI boundary of the theme picker. No theme application here.
+//! Shared theme/wallpaper carousel boundary. No preference application here.
 use super::{PreviewCard, ThemePicker, color, id, tool};
 use crate::{
     config::Config,
@@ -77,6 +77,8 @@ pub struct Picker {
     restore: Option<isize>,
     home: PathBuf,
     active: String,
+    pub wallpaper_theme: Option<String>,
+    invalidated: bool,
     monitor: Rect,
     colors: Colors,
     entries: Vec<Entry>,
@@ -132,6 +134,8 @@ impl Picker {
             restore: None,
             home: PathBuf::new(),
             active: String::new(),
+            wallpaper_theme: None,
+            invalidated: false,
             monitor: Rect {
                 x: 0,
                 y: 0,
@@ -156,13 +160,25 @@ impl Picker {
         monitor: Rect,
         restore: Option<isize>,
     ) -> Result<(), String> {
+        self.open_images(c, monitor, restore, None, c.global.theme.clone())
+    }
+    fn open_images(
+        &mut self,
+        c: &Config,
+        monitor: Rect,
+        restore: Option<isize>,
+        wallpaper_theme: Option<String>,
+        active: String,
+    ) -> Result<(), String> {
         if self.opened {
             return Ok(());
         }
         self.epoch.set(self.epoch.get().wrapping_add(1));
         self.restore = restore;
         self.home = c.home.clone();
-        self.active = c.global.theme.clone();
+        self.active = active;
+        self.wallpaper_theme = wallpaper_theme;
+        self.invalidated = false;
         self.monitor = monitor;
         self.colors = Colors::from_theme(&c.theme);
         self.ui.set_bg(color(&c.theme.background));
@@ -183,6 +199,36 @@ impl Picker {
         self.pending_window = true;
         self.rescan();
         Ok(())
+    }
+    pub fn open_wallpapers(
+        &mut self,
+        c: &Config,
+        monitor: Rect,
+        restore: Option<isize>,
+        selected: Option<&str>,
+    ) -> Result<(), String> {
+        self.open_images(
+            c,
+            monitor,
+            restore,
+            Some(c.global.theme.clone()),
+            selected.unwrap_or_default().to_owned(),
+        )
+    }
+    /// A filename from an old theme must never be applied to a new theme.
+    pub fn selection_command(
+        &self,
+        name: String,
+        current_theme: &str,
+    ) -> Option<crate::command::Command> {
+        use crate::command::Command;
+        match self.wallpaper_theme.as_deref() {
+            None => Some(Command::Theme(name)),
+            Some(theme) if theme == current_theme && !self.invalidated => {
+                Some(Command::Wallpaper(Some(name)))
+            }
+            Some(_) => None,
+        }
     }
     pub fn close(&mut self) -> Option<isize> {
         if !self.opened {
@@ -224,7 +270,11 @@ impl Picker {
     }
     pub fn apply_theme(&mut self, c: &Config) {
         self.home = c.home.clone();
-        self.active = c.global.theme.clone();
+        if let Some(theme) = &self.wallpaper_theme {
+            self.invalidated |= self.opened && theme != &c.global.theme;
+        } else {
+            self.active = c.global.theme.clone();
+        }
         self.colors = Colors::from_theme(&c.theme);
         self.ui.set_bg(color(&c.theme.background));
         self.ui.set_fg(color(&c.theme.text));
@@ -239,7 +289,11 @@ impl Picker {
         self.scanning = true;
         self.confirm_target = None;
         self.pending_cards = None;
-        self.serial = self.loader.request(Job::Scan(self.home.clone()));
+        let job = match &self.wallpaper_theme {
+            Some(theme) => Job::Wallpapers(self.home.clone(), theme.clone()),
+            None => Job::Scan(self.home.clone()),
+        };
+        self.serial = self.loader.request(job);
     }
     fn dimensions(&self) -> (f32, f32) {
         (self.ui.get_surface_width(), self.ui.get_surface_height())
@@ -263,6 +317,9 @@ impl Picker {
     pub fn input(&mut self, epoch: u64, input: Input) -> Outcome {
         if !self.opened || epoch != self.epoch.get() {
             return Outcome::None;
+        }
+        if self.invalidated {
+            return Outcome::Cancel;
         }
         if !matches!(input, Input::Action(Action::Confirm)) {
             self.confirm_target = None;
@@ -328,6 +385,9 @@ impl Picker {
         image
     }
     pub fn poll(&mut self) -> Outcome {
+        if self.opened && self.invalidated {
+            return Outcome::Cancel;
+        }
         let Some(completion) = self.loader.take_result() else {
             return Outcome::None;
         };
@@ -364,8 +424,15 @@ impl Picker {
                     })
                     .collect();
                 super::sync(&self.rows, &rows);
-                self.ui
-                    .set_selected_label(self.model.current_label().into());
+                let label = if self.wallpaper_theme.is_some() {
+                    self.model
+                        .selected_id()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| self.model.current_label())
+                } else {
+                    self.model.current_label()
+                };
+                self.ui.set_selected_label(label.into());
                 self.ui.set_filter_text(self.model.filter.clone().into());
                 self.ui.set_content_ready(!self.model.ids.is_empty());
                 *self.hit_cards.borrow_mut() = cards;
@@ -377,9 +444,9 @@ impl Picker {
                 }
             }
             Ok(Output::Unreadable(entry, error)) => {
-                tracing::warn!(theme=%entry.id,%error,"theme preview unavailable");
+                tracing::warn!(item=%entry.id,%error,"image preview unavailable");
                 self.error = Some(error);
-                // Never confirm the replacement of an unreadable selected theme.
+                // Never confirm the replacement of an unreadable selected image.
                 self.confirm_target = None;
                 self.entries.retain(|e| *e != entry);
                 self.model
@@ -387,7 +454,7 @@ impl Picker {
                 self.render();
             }
             Err(error) => {
-                tracing::warn!(%error,"theme picker failed");
+                tracing::warn!(%error,"image picker failed");
                 self.error = Some(error);
                 return Outcome::Cancel;
             }

@@ -125,13 +125,16 @@ The installer validates the palette and decodes the images, installs assets unde
 
 ## Wallpapers
 
-For an installed `my-theme.toml`, place images in `themes/my-theme/wallpapers/`. No manifest entries are needed. The first readable JPEG/PNG in alphabetical order is used on first activation. The menu **Alt+Shift+Space → Wallpaper** lists the active theme's images, marks the current one, and offers **Solid background**. **Ctrl+Alt+Shift+W** cycles through the same theme's images, wrapping around and skipping unreadable files. From a solid background it starts with the first image; without images it does nothing.
+For an installed `my-theme.toml`, place images in `themes/my-theme/wallpapers/`. No manifest entries are needed. The first readable JPEG/PNG in alphabetical order is used on first activation. The menu **Alt+Shift+Space → Wallpaper** opens the same visual carousel as the theme picker, starting on the current (or pending) image. Left/Right or Tab/Shift+Tab browse, typing filters filenames, and Enter or clicking the selected card applies that exact image through the existing wallpaper loader. Escape clears the filter, then cancels; clicking outside cancels. Browsing never changes the desktop or saved choices. **Alt+Shift+Space → Solid background** retains the explicit solid-color choice without adding an artificial image card. Without readable wallpapers, the carousel stays empty and can be cancelled. If the active theme changes while browsing wallpapers, the picker cancels rather than applying an old filename to the new theme. **Ctrl+Alt+Shift+W** cycles through the same theme's images, wrapping around and skipping unreadable files. From a solid background it starts with the first image; without images it does nothing.
 
 ```powershell
+winarchyctl wallpaper picker
 winarchyctl wallpaper next
 winarchyctl wallpaper set "A painting.jpg"
 winarchyctl wallpaper clear
 ```
+
+The wallpaper carousel shares the theme picker's surface, geometry, preview worker and bounded caches; it does not share or cancel the real wallpaper worker. Directory edits refresh its cards. Labels display original filenames. `status` exposes `wallpaper_picker`, `wallpaper_picker_theme`, `wallpaper_picker_selected`, `wallpaper_picker_filter`, `wallpaper_picker_loading` and `wallpaper_picker_error` separately from theme-picker diagnostics. An older running daemon must be upgraded/restarted before it recognizes `wallpaper picker`.
 
 The last explicit choice is saved per theme in `wallpapers.json`, independently of the palette and window-placement state. Switching away and back or restarting restores that choice, including an explicit solid background. If the chosen image disappears or cannot be decoded, Winarchy tries the other images and ultimately the theme's solid `background`. An unknown `wallpaper set` file is rejected immediately. For an existing file, the command acknowledges the request without waiting for image decoding. If decoding fails, the current image and saved choice are preserved; `winarchyctl status` exposes `wallpaper_pending` and `wallpaper_error` for completion/error tracking.
 

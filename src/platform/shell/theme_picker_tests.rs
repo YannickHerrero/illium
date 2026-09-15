@@ -243,4 +243,76 @@ fn headless_picker_renders_filters_and_never_applies_while_browsing() {
     picker.close();
     assert_eq!(fs::read(temp.0.join("winarchy.toml")).unwrap(), before);
     assert!(!temp.0.join("wallpapers.json").exists());
+
+    // The same production surface/worker now browses actual wallpapers. Exact
+    // filenames, theme scoping and deferred confirmation remain authoritative.
+    let dir = temp.0.join("themes/ocean/wallpapers");
+    fs::create_dir_all(&dir).unwrap();
+    for name in ["A painting.png", "Été - 2.png"] {
+        image::RgbaImage::from_pixel(160, 90, image::Rgba([40, 120, 180, 255]))
+            .save(dir.join(name))
+            .unwrap();
+    }
+    picker
+        .open_wallpapers(&config, monitor, Some(123), Some("Été - 2.png"))
+        .unwrap();
+    assert_eq!(settle(&mut picker), Outcome::None);
+    assert_eq!(picker.selected_id(), Some("Été - 2.png"));
+    assert_eq!(picker.ui.get_selected_label(), "Été - 2.png");
+    assert_eq!(picker.model.ids.len(), 2);
+    snapshot(&window, "wallpaper-picker");
+    let epoch = picker.epoch.get();
+    picker.input(epoch, Input::Action(Action::Next));
+    picker.input(epoch, Input::Action(Action::Confirm));
+    assert_eq!(settle(&mut picker), Outcome::Apply("A painting.png".into()));
+    assert_eq!(
+        picker.selection_command("A painting.png".into(), "ocean"),
+        Some(crate::command::Command::Wallpaper(Some(
+            "A painting.png".into()
+        )))
+    );
+    assert_eq!(
+        picker.selection_command("A painting.png".into(), "amber"),
+        None
+    );
+    picker.input(epoch, Input::Action(Action::Text("été".into())));
+    assert_eq!(settle(&mut picker), Outcome::None);
+    assert_eq!(picker.selected_id(), Some("Été - 2.png"));
+    // A removed selected image must not confirm its replacement on rescan.
+    fs::remove_file(dir.join("Été - 2.png")).unwrap();
+    picker.rescan();
+    picker.input(epoch, Input::Action(Action::Confirm));
+    assert_eq!(settle(&mut picker), Outcome::None);
+    picker.input(epoch, Input::Action(Action::Clear));
+    assert_eq!(settle(&mut picker), Outcome::None);
+    assert_eq!(picker.selected_id(), Some("A painting.png"));
+    let mut switched = config.clone();
+    switched.global.theme = "amber".into();
+    picker.apply_theme(&switched);
+    assert_eq!(
+        picker.input(epoch, Input::Action(Action::Confirm)),
+        Outcome::Cancel
+    );
+    assert_eq!(picker.poll(), Outcome::Cancel);
+    assert_eq!(picker.close(), Some(123));
+    picker
+        .open_wallpapers(&switched, monitor, None, None)
+        .unwrap();
+    assert_eq!(settle(&mut picker), Outcome::None);
+    assert!(
+        picker.model.ids.is_empty(),
+        "no placeholders or images from another theme"
+    );
+    assert_eq!(
+        picker.input(picker.epoch.get(), Input::Action(Action::Escape)),
+        Outcome::Cancel
+    );
+    picker.close();
+    picker.open(&config, monitor, None).unwrap();
+    assert_eq!(settle(&mut picker), Outcome::None);
+    assert!(picker.wallpaper_theme.is_none());
+    assert_eq!(picker.selected_id(), Some("ocean"));
+    picker.close();
+    assert_eq!(fs::read(temp.0.join("winarchy.toml")).unwrap(), before);
+    assert!(!temp.0.join("wallpapers.json").exists());
 }

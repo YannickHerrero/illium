@@ -35,6 +35,8 @@ pub enum Command {
     Theme(String),
     /// Open the visual theme picker; browsing does not change the active theme.
     ThemePicker,
+    /// Browse images of the active theme without applying until confirmation.
+    WallpaperPicker,
     WallpaperNext,
     /// None selects the solid theme background.
     Wallpaper(Option<String>),
@@ -94,6 +96,7 @@ impl FromStr for Command {
                 Self::App((*name).into())
             }
             ["config", "reload"] => Self::Reload,
+            ["wallpaper", "picker"] => Self::WallpaperPicker,
             ["wallpaper", "next"] => Self::WallpaperNext,
             ["wallpaper", "clear"] => Self::Wallpaper(None),
             ["theme", "picker"] => Self::ThemePicker,
@@ -144,6 +147,8 @@ mod tests {
     }
     #[test]
     fn wallpapers() {
+        assert_eq!("wallpaper picker".parse(), Ok(Command::WallpaperPicker));
+        assert!("wallpaper picker extra".parse::<Command>().is_err());
         assert_eq!("wallpaper next".parse(), Ok(Command::WallpaperNext));
         assert_eq!("wallpaper clear".parse(), Ok(Command::Wallpaper(None)));
         for command in [

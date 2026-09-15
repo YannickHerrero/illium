@@ -1,5 +1,5 @@
 //! UI-side wallpaper selection. Decode/resize and preloading belong to Loader.
-use super::{MetaMenu, Shell};
+use super::Shell;
 use crate::wallpaper::{
     Selections,
     loader::{Key, Prepared},
@@ -187,15 +187,8 @@ impl Shell {
             self.wallpaper_loader.prefetch(key.clone());
         }
     }
-    fn update_wallpaper_menu(&mut self, max: usize) {
-        if self.meta && self.meta_menu == Some(MetaMenu::Wallpaper) {
-            self.meta_items = self.meta_wallpapers();
-            let query = self.launcher.get_query();
-            self.search(&query, max);
-        }
-    }
     /// Called from the existing 10ms UI timer. Only the latest selection may apply.
-    pub fn poll_wallpaper(&mut self, max: usize) {
+    pub fn poll_wallpaper(&mut self) {
         let Some((key, result)) = self.wallpaper_loader.take_result() else {
             return;
         };
@@ -240,9 +233,8 @@ impl Shell {
                 }
             }
         }
-        self.update_wallpaper_menu(max);
     }
-    pub fn refresh_wallpaper(&mut self, max: usize) {
+    pub fn refresh_wallpaper(&mut self) {
         // Image directory notifications must not undo an accepted choice whose
         // pixels are still loading. An external selection edit/theme switch can.
         let continuing = self
@@ -268,7 +260,6 @@ impl Shell {
                 self.wallpaper_pending = None;
                 self.wallpaper_error = Some(e);
             }
-            self.update_wallpaper_menu(max);
             return;
         }
         let result = self.wallpaper_names().and_then(|names| {
@@ -280,7 +271,6 @@ impl Shell {
             self.wallpaper_error = Some(e);
             self.clear_wallpaper();
         }
-        self.update_wallpaper_menu(max);
     }
     /// On a cold load, acknowledge the request immediately; errors remain visible
     /// through status without destroying the previously displayed/saved choice.
