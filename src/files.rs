@@ -57,7 +57,7 @@ pub fn read_bounded(path: &Path, max: usize) -> Result<Vec<u8>, String> {
     })();
     result.map_err(|e| format!("{}: {e}", path.display()))
 }
-/// Palette-only edits must not rebuild the shell or restart applet providers.
+/// Palette/terminal-only edits must not rebuild the shell or restart applet providers.
 pub fn same_subsystems(
     home: &Path,
     before: &[(PathBuf, Vec<u8>)],
@@ -65,8 +65,9 @@ pub fn same_subsystems(
 ) -> bool {
     let global = home.join("winarchy.toml");
     let themes = home.join("themes");
+    let terminal = home.join("terminal.toml");
     let subsystem = |entry: &&(PathBuf, Vec<u8>)| {
-        entry.0 != global && entry.0.parent() != Some(themes.as_path())
+        entry.0 != global && entry.0 != terminal && entry.0.parent() != Some(themes.as_path())
     };
     before
         .iter()
@@ -174,6 +175,13 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+    #[test]
+    fn terminal_preferences_do_not_restart_shell_subsystems() {
+        let home = Path::new("home");
+        let before = vec![(home.join("terminal.toml"), b"font_size=14".to_vec())];
+        let after = vec![(home.join("terminal.toml"), b"font_size=18".to_vec())];
+        assert!(same_subsystems(home, &before, &after));
     }
     #[test]
     fn recognizes_palette_only_edits_but_not_applet_changes() {
