@@ -58,6 +58,13 @@ struct Window {
     last_mouse: Option<(usize, usize)>,
     surrogate: Option<u16>,
     config: Config,
+    startup_trace: Option<StartupTrace>,
+}
+// Opt-in, bounded metadata only: no virtual-key values, characters or PTY text.
+struct StartupTrace {
+    started: Instant,
+    paints: u8,
+    inputs: u8,
 }
 struct App {
     windows: HashMap<usize, Window>,
@@ -397,6 +404,7 @@ impl App {
                 last_mouse: None,
                 surrogate: None,
                 config: self.config.clone(),
+                startup_trace: None,
             },
         );
         self.next_id += 1;
@@ -411,6 +419,14 @@ impl App {
             .take()
             .ok_or("Maximum of 16 terminal windows reached")?;
         let window = self.windows.get_mut(&(hwnd.0 as usize)).unwrap();
+        if std::env::var_os("WINARCHY_TERMINAL_TRACE_STARTUP").is_some() {
+            window.startup_trace = Some(StartupTrace {
+                started: at,
+                paints: 0,
+                inputs: 0,
+            });
+            title(hwnd, "Winarchy Terminal — diagnostic");
+        }
         unsafe {
             let _ = ShowWindow(hwnd, SW_SHOW);
             let _ = SetForegroundWindow(hwnd);
@@ -497,6 +513,21 @@ impl Window {
         if sync_pending {
             self.schedule();
         }
+        let editor_ready = self.startup_trace.as_ref().is_some_and(|t| t.paints < 8)
+            && self.mode().contains(TermMode::BRACKETED_PASTE);
+        if let Some(trace) = &mut self.startup_trace
+            && trace.paints < 8
+        {
+            trace.paints += 1;
+            crate::log(&format!(
+                "startup id={} ms={:.2} paint={} editor_ready={} sync_pending={}",
+                self.id,
+                trace.started.elapsed().as_secs_f64() * 1000.,
+                trace.paints,
+                editor_ready,
+                sync_pending,
+            ));
+        }
         if let Err(e) = self.surface.draw(&frame) {
             crate::log(&format!("render: {e}"));
             title(
@@ -545,6 +576,27 @@ impl Window {
     fn message(&mut self, msg: &MSG, palette: &Palette, g: &Rc<Graphics>) -> bool {
         let m = mods();
         let mode = self.mode();
+        if matches!(
+            msg.message,
+            WM_KEYDOWN | WM_SYSKEYDOWN | WM_KEYUP | WM_SYSKEYUP | WM_CHAR | WM_SYSCHAR
+        ) && let Some(trace) = &mut self.startup_trace
+            && trace.inputs < 12
+        {
+            trace.inputs += 1;
+            crate::log(&format!(
+                "startup id={} ms={:.2} input_event={} message={:#x} ctrl={} alt={} shift={} editor_ready={} pending={} timer={}",
+                self.id,
+                trace.started.elapsed().as_secs_f64() * 1000.,
+                trace.inputs,
+                msg.message,
+                m.ctrl,
+                m.alt,
+                m.shift,
+                mode.contains(TermMode::BRACKETED_PASTE),
+                self.pending.load(Ordering::Acquire),
+                self.timer,
+            ));
+        }
         match msg.message {
             WM_TIMER if msg.wParam.0 == 1 => {
                 unsafe {

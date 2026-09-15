@@ -122,6 +122,21 @@ Diagnostics are in `terminal.log` with one rotated backup, approximately 1 MiB
 each. They contain opening times and errors, not terminal output or typed input.
 `show_ms` measures the resident's show operation, **not** key-to-photon latency.
 
+For a lost-first-key investigation, an isolated process can opt into bounded
+startup tracing without restarting the resident or closing its sessions:
+
+```powershell
+$env:WINARCHY_TERMINAL_TRACE_STARTUP = '1'
+.\winarchy-terminal.exe --standalone
+Remove-Item Env:WINARCHY_TERMINAL_TRACE_STARTUP
+```
+
+This records at most eight paint attempts and twelve keyboard-message metadata
+entries per window: elapsed time, message kind, modifier state, bracketed-paste
+(editor-ready) mode and scheduling flags. It never records key values, typed
+characters or terminal contents. Paint attempts do not prove pixels appeared.
+Setting this variable on a client does not enable tracing in an existing resident.
+
 Initial measurements on the development Windows machine, WSL already running:
 
 | Probe | Samples | Median | p95 |
@@ -157,6 +172,12 @@ Remaining validation/limitations:
   translation is not part of this WSL-only initial version.
 
 ## Reproduce validation
+
+The opt-in Windows library test `wsl_prompt_is_ready_before_any_user_input`
+waits for the configured Debian shell's line editor **without injecting a
+startup command**, then verifies that both `a` and `b` reach the expected cursor
+positions. It never presses Enter. This tests the Session/ConPTY path, not the
+native window's keyboard translation or presentation.
 
 ```powershell
 cargo test -p winarchy-terminal
