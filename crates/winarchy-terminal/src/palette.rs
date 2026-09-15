@@ -101,6 +101,9 @@ mod tests {
         t.ansi = None;
         t.brights = None;
         let p = Palette::new(&t);
+        assert_eq!(p.opacity, 0.85);
+        t.terminal_background_opacity = 1.0;
+        assert_eq!(Palette::new(&t).opacity, 1.0);
         assert_eq!(p.colors[16], Rgb { r: 0, g: 0, b: 0 });
         assert_eq!(
             p.colors[231],

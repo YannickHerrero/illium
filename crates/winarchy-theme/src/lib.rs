@@ -27,14 +27,14 @@ pub struct Theme {
     #[serde(default)]
     pub brights: Option<Vec<String>>,
     /// Background-only terminal opacity; text remains opaque.
-    #[serde(default = "opaque")]
+    #[serde(default = "default_terminal_opacity")]
     pub terminal_background_opacity: f32,
     /// Windows color mode to apply with this theme: "dark" or "light".
     #[serde(default)]
     pub mode: Option<String>,
 }
-fn opaque() -> f32 {
-    1.0
+fn default_terminal_opacity() -> f32 {
+    0.85
 }
 #[derive(Deserialize)]
 struct Global {
@@ -183,7 +183,7 @@ mod tests {
     fn terminal_opacity() {
         assert_eq!(
             Theme::parse(DEFAULT).unwrap().terminal_background_opacity,
-            1.0
+            0.85
         );
         for value in ["0.0", "0.85", "1.0"] {
             let t = Theme::parse(&format!(

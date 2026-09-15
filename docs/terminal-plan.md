@@ -29,7 +29,7 @@ once per frame; do not animate the cursor or poll while idle.
 Configuration: `%USERPROFILE%/.config/winarchy/terminal.toml` (respecting
 `WINARCHY_CONFIG_HOME`) for font, padding, scrollback and WSL distribution.
 Colors come from the existing selected palette; opacity is an optional theme
-field, defaulting to opaque. Preserve Ctrl+1..9 CSI-u and leave Alt+Enter to the
+field, defaulting to 85% opacity. Preserve Ctrl+1..9 CSI-u and leave Alt+Enter to the
 window manager. Test Unicode, alternate screen, bracketed paste, mouse modes,
 resize and selection. Explicit application truecolor is not recolored.
 

@@ -75,7 +75,7 @@ In the **theme**, not in terminal preferences:
 terminal_background_opacity = 0.85
 ```
 
-Default `1.0`; valid range `0.0..1.0`. The default background receives alpha;
+Default `0.85` (85% opacity); valid range `0.0..1.0`. The default background receives alpha;
 glyphs, cursor, selection and explicit application background cells stay
 opaque. No blur/acrylic. Upgrade all Winarchy binaries before adding this field:
 older schema readers reject it. See [themes](themes.md).
