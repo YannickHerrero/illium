@@ -7,7 +7,7 @@ description = "Minimal resident Windows terminal for WSL and Winarchy"
 repository = "https://github.com/YannickHerrero/winarchy"
 
 [dependencies]
-winarchy-theme = { path = "../winarchy-theme" }
+winarchy-theme = { path = "../winarchy-theme", default-features = false }
 alacritty_terminal = { version = "0.26", default-features = false }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"

@@ -1,7 +1,9 @@
 //! Theme palette read from `themes/<name>.toml` under the configuration home.
 //! No graphics dependency: the daemon and every application convert the
 //! `#rrggbb` strings to their own color type.
+#[cfg(feature = "assets")]
 pub mod pack;
+#[cfg(feature = "assets")]
 pub mod preview;
 use serde::Deserialize;
 use std::path::Path;
