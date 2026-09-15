@@ -98,7 +98,7 @@ pub fn load(home: &Path, name: &str) -> Result<Applet, String> {
         return Err(format!("applet {name}: popup size out of range"));
     }
     if let Some(p) = &manifest.provider
-        && !["builtin:clock", "builtin:system"].contains(&p.as_str())
+        && !["builtin:clock", "builtin:system", "builtin:volume"].contains(&p.as_str())
     {
         return Err(format!("applet {name}: unknown provider {p}"));
     }
@@ -280,6 +280,19 @@ mod tests {
         .unwrap();
         assert!(exists(&home, "sample") && !exists(&home, "other"));
         assert_eq!(folders(&home), vec!["sample".to_owned()]);
+        std::fs::write(
+            dir.join("applet.toml"),
+            "provider = \"builtin:clock\"\nattach = \"clock\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("applet.toml"),
+            "provider = \"builtin:volume\"\nattach = \"volume\"\n",
+        )
+        .unwrap();
+        assert!(load(&home, "sample").is_ok());
+        std::fs::write(dir.join("applet.toml"), "provider = \"builtin:other\"\n").unwrap();
+        assert!(load(&home, "sample").is_err());
         std::fs::write(
             dir.join("applet.toml"),
             "provider = \"builtin:clock\"\nattach = \"clock\"\n",
