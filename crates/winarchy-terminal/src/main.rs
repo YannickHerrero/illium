@@ -2,6 +2,8 @@
 #[cfg(windows)]
 mod native;
 #[cfg(windows)]
+mod resident;
+#[cfg(windows)]
 fn log(message: &str) {
     use std::io::Write;
     let home = winarchy_theme::config_home();
@@ -22,17 +24,19 @@ fn main() {
     #[cfg(windows)]
     {
         std::panic::set_hook(Box::new(|info| log(&format!("panic: {info}"))));
-        if let Err(e) = native::run(false, true, None, |_| {}) {
+        if let Err(e) = resident::run() {
             log(&e);
             let text: Vec<u16> = e.encode_utf16().chain([0]).collect();
-            unsafe {
-                windows::Win32::UI::WindowsAndMessaging::MessageBoxW(
-                    None,
-                    windows::core::PCWSTR(text.as_ptr()),
-                    windows::core::w!("Winarchy Terminal"),
-                    windows::Win32::UI::WindowsAndMessaging::MB_OK
-                        | windows::Win32::UI::WindowsAndMessaging::MB_ICONERROR,
-                );
+            if std::env::args().len() == 1 {
+                unsafe {
+                    windows::Win32::UI::WindowsAndMessaging::MessageBoxW(
+                        None,
+                        windows::core::PCWSTR(text.as_ptr()),
+                        windows::core::w!("Winarchy Terminal"),
+                        windows::Win32::UI::WindowsAndMessaging::MB_OK
+                            | windows::Win32::UI::WindowsAndMessaging::MB_ICONERROR,
+                    );
+                }
             }
             std::process::exit(1);
         }
