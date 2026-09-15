@@ -1,0 +1,226 @@
+//! All ConPTY operations (including resize/close) run outside the UI thread.
+//! Output is parsed in 16 KiB pieces, not queued without bound. Input is a
+//! bounded queue; resize has a single latest-value slot. No idle polling.
+use crate::{
+    config::Config,
+    model::{Model, Size},
+    palette::Palette,
+};
+use alacritty_terminal::event::{Event, WindowSize};
+use portable_pty::{CommandBuilder, PtySize};
+use std::{
+    io::{Read, Write},
+    sync::{
+        Arc, Condvar, Mutex,
+        mpsc::{self, SyncSender},
+    },
+};
+
+type Wake = Arc<dyn Fn() + Send + Sync>;
+#[derive(Default)]
+struct Control {
+    stop: bool,
+    size: Option<Size>,
+}
+type Signal = Arc<(Mutex<Control>, Condvar)>;
+fn stop(signal: &Signal) {
+    signal.0.lock().unwrap().stop = true;
+    signal.1.notify_one();
+}
+fn failed(model: &Arc<Mutex<Model>>, wake: &Wake, error: String) {
+    model.lock().unwrap().error = Some(error);
+    wake();
+}
+pub struct Session {
+    pub model: Arc<Mutex<Model>>,
+    pub palette: Arc<Mutex<Palette>>,
+    input: SyncSender<Vec<u8>>,
+    control: Signal,
+}
+impl Session {
+    pub fn start(config: Config, size: Size, palette: Palette, wake: Wake) -> Self {
+        let model = Arc::new(Mutex::new(Model::new(size, config.scrollback)));
+        let palette = Arc::new(Mutex::new(palette));
+        let control = Arc::new((Mutex::new(Control::default()), Condvar::new()));
+        let (input, rx) = mpsc::sync_channel::<Vec<u8>>(32);
+        let result = Self {
+            model: model.clone(),
+            palette: palette.clone(),
+            input: input.clone(),
+            control: control.clone(),
+        };
+        std::thread::spawn(move || {
+            let run = || -> Result<(), String> {
+                if control.0.lock().unwrap().stop {
+                    return Ok(());
+                }
+                let pair = portable_pty::native_pty_system()
+                    .openpty(pty_size(size))
+                    .map_err(|e| e.to_string())?;
+                let mut command = CommandBuilder::new("wsl.exe");
+                command.args(["--distribution", &config.distribution, "--cd", "~"]);
+                command.env("TERM", "xterm-256color");
+                command.env("COLORTERM", "truecolor");
+                // Explicitly bridge TERM/COLORTERM into Linux without a shell wrapper.
+                let mut env = std::env::var("WSLENV").unwrap_or_default();
+                for key in ["TERM/u", "COLORTERM/u"] {
+                    if !env.is_empty() {
+                        env.push(':');
+                    }
+                    env.push_str(key);
+                }
+                command.env("WSLENV", env);
+                let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
+                let mut writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+                let mut child = pair
+                    .slave
+                    .spawn_command(command)
+                    .map_err(|e| e.to_string())?;
+                drop(pair.slave);
+                let mut killer = child.clone_killer();
+                let exit_model = model.clone();
+                let exit_wake = wake.clone();
+                let exit_control = control.clone();
+                std::thread::spawn(move || {
+                    let _ = child.wait();
+                    exit_model.lock().unwrap().exited = true;
+                    stop(&exit_control);
+                    exit_wake();
+                });
+                let write_model = model.clone();
+                let write_wake = wake.clone();
+                std::thread::spawn(move || {
+                    while let Ok(bytes) = rx.recv() {
+                        if let Err(e) = writer.write_all(&bytes) {
+                            failed(&write_model, &write_wake, format!("PTY write: {e}"));
+                            break;
+                        }
+                    }
+                });
+                let read_model = model.clone();
+                let read_wake = wake.clone();
+                std::thread::spawn(move || {
+                    let mut bytes = [0; 16384];
+                    loop {
+                        let n = match reader.read(&mut bytes) {
+                            Ok(0) => break,
+                            Ok(n) => n,
+                            Err(_) => break,
+                        };
+                        let mut m = read_model.lock().unwrap();
+                        let events = m.feed(&bytes[..n]);
+                        use alacritty_terminal::grid::Dimensions;
+                        let size = WindowSize {
+                            num_lines: m.term.screen_lines() as u16,
+                            num_cols: m.term.columns() as u16,
+                            cell_width: 0,
+                            cell_height: 0,
+                        };
+                        drop(m);
+                        for event in events {
+                            let response = match event {
+                                Event::PtyWrite(s) => Some(s),
+                                Event::ColorRequest(i, format) => palette
+                                    .lock()
+                                    .unwrap()
+                                    .colors
+                                    .get(i)
+                                    .copied()
+                                    .map(|rgb| format(rgb)),
+                                Event::TextAreaSizeRequest(format) => Some(format(size)),
+                                _ => None, // No OSC52 clipboard access or untrusted window operations.
+                            };
+                            if let Some(response) = response {
+                                // Backpressure on the reader is safe; never block the UI.
+                                if input.send(response.into_bytes()).is_err() {
+                                    break;
+                                }
+                            }
+                        }
+                        read_wake();
+                    }
+                });
+                let mut c = control.0.lock().unwrap();
+                loop {
+                    if c.stop {
+                        break;
+                    }
+                    if let Some(size) = c.size.take() {
+                        drop(c);
+                        if let Err(e) = pair.master.resize(pty_size(size)) {
+                            failed(&model, &wake, format!("PTY resize: {e}"));
+                        }
+                        c = control.0.lock().unwrap();
+                    } else {
+                        c = control.1.wait(c).unwrap();
+                    }
+                }
+                drop(c);
+                let _ = killer.kill();
+                // ClosePseudoConsole can block while draining: this is a worker.
+                drop(pair.master);
+                Ok(())
+            };
+            if let Err(e) = run() {
+                failed(&model, &wake, format!("Unable to start WSL: {e}"));
+            }
+        });
+        result
+    }
+    pub fn send(&self, bytes: Vec<u8>) -> Result<(), &'static str> {
+        if bytes.len() > 65536 {
+            return Err("Input exceeds 64 KiB; paste smaller chunks");
+        }
+        self.input
+            .try_send(bytes)
+            .map_err(|_| "Terminal input queue is full or WSL is unavailable")
+    }
+    pub fn resize(&self, size: Size) {
+        self.model.lock().unwrap().term.resize(size);
+        self.control.0.lock().unwrap().size = Some(size);
+        self.control.1.notify_one();
+    }
+}
+impl Drop for Session {
+    fn drop(&mut self) {
+        stop(&self.control);
+    }
+}
+fn pty_size(size: Size) -> PtySize {
+    PtySize {
+        rows: size.rows as u16,
+        cols: size.cols as u16,
+        pixel_width: 0,
+        pixel_height: 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn missing_distribution_reports_error_without_blocking_caller() {
+        let (tx, rx) = mpsc::channel();
+        let config = Config {
+            distribution: "winarchy-test-no-such-distribution".into(),
+            ..Config::default()
+        };
+        let s = Session::start(
+            config,
+            Size::new(80, 24),
+            Palette::new(&winarchy_theme::Theme::default_theme()),
+            Arc::new(move || {
+                let _ = tx.send(());
+            }),
+        );
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        loop {
+            rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+                .unwrap();
+            let m = s.model.lock().unwrap();
+            if m.exited || m.error.is_some() {
+                break;
+            }
+        }
+    }
+}
