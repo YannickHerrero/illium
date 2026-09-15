@@ -27,6 +27,9 @@ use windows::{
     core::{Interface, PCWSTR, w},
 };
 use windows_numerics::Vector2;
+#[cfg(test)]
+#[path = "render_tests.rs"]
+mod tests;
 type Result<T> = windows::core::Result<T>;
 fn color(c: Rgb, a: f32) -> D2D1_COLOR_F {
     D2D1_COLOR_F {
@@ -351,8 +354,9 @@ impl Surface {
             if self.width == width && self.height == height && self.dpi == dpi as f32 {
                 return Ok(());
             }
+            // EndDraw already flushed the previous frame. Flush outside a
+            // BeginDraw/EndDraw pair poisons this context with WRONG_STATE.
             self.context.SetTarget(None);
-            self.context.Flush(None, None)?;
             self.swap.ResizeBuffers(
                 2,
                 width,
