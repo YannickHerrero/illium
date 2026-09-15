@@ -151,7 +151,6 @@ pub fn items(c: &Config, title: &str, modules: &[String]) -> Vec<(String, String
                     },
                 ))
             },
-            "battery" => battery_status().map(|(p, _)| format!("{p}%")),
             "cpu" => cpu(),
             "memory" => memory(),
             _ => None,

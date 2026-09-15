@@ -738,6 +738,8 @@ impl Shell {
                         value: label.into(),
                         has_icon: icon.is_some(),
                         icon: icon.unwrap_or_default(),
+                        level: 0,
+                        charging: false,
                     });
                 }
             }
@@ -747,6 +749,20 @@ impl Shell {
                     value: value.into(),
                     has_icon: false,
                     icon: slint::Image::default(),
+                    level: 0,
+                    charging: false,
+                });
+            }
+            if modules.iter().any(|m| m == "battery")
+                && let Some((percent, plugged)) = super::status::battery_status()
+            {
+                out.push(StatusItem {
+                    kind: "battery".into(),
+                    value: format!("{percent}%").into(),
+                    has_icon: false,
+                    icon: slint::Image::default(),
+                    level: i32::from(percent),
+                    charging: plugged,
                 });
             }
             // Keep the configured order across built-ins and applets.
