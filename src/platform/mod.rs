@@ -799,9 +799,9 @@ impl Manager {
             }
             Event::Wallpapers => {
                 self.shell.refresh_wallpaper();
-                if self.shell.picker.wallpaper_theme.is_some() {
-                    self.shell.picker.rescan();
-                }
+                // Invalidate preloaded wallpaper views even when closed or
+                // while the last-used surface was the theme selector.
+                self.shell.picker.rescan();
             }
             Event::Reload => {
                 if let Err(e) = self.reload_config(false) {
@@ -979,6 +979,7 @@ pub fn run(replace: bool) -> Result<(), String> {
     let guard = recovery.clone();
     let error = startup_error.clone();
     let mut session_started = false;
+    let mut preload_at = std::time::Instant::now() + std::time::Duration::from_secs(2);
     timer.start(
         slint::TimerMode::Repeated,
         std::time::Duration::from_millis(10),
@@ -999,6 +1000,15 @@ pub fn run(replace: bool) -> Result<(), String> {
             let ready = shell.arrange(config, monitors);
             m.finish_picker(outcome);
             m.applets.arrange();
+            if ready && std::time::Instant::now() >= preload_at {
+                preload_at = std::time::Instant::now() + std::time::Duration::from_millis(500);
+                if !m.shell.interactive() && m.shell.pending_wallpaper().is_none() {
+                    let monitor = m.full_area();
+                    let Manager { shell, config, .. } = &mut *m;
+                    let selected = shell.wallpaper.clone();
+                    shell.picker.preload(config, monitor, selected.as_deref());
+                }
+            }
             if ready && pending && !m.shell.interactive() {
                 m.focus_visible();
             }

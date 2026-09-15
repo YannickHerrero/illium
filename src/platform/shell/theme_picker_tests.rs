@@ -111,7 +111,22 @@ fn headless_picker_renders_filters_and_never_applies_while_browsing() {
         w: 1920,
         h: 1080,
     };
+    for _ in 0..2 {
+        picker.preload(&config, monitor, None);
+        let until = Instant::now() + Duration::from_secs(30);
+        while picker.warming.is_some() {
+            assert_eq!(picker.poll(), Outcome::None);
+            assert!(Instant::now() < until);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+    assert!(!picker.opened, "preload must not open or focus the picker");
+    assert_eq!(picker.rows.row_count(), 0);
+    assert_eq!(picker.views.len(), 2, "both initial contexts are warmed");
+    picker.preload(&config, monitor, None);
+    assert!(picker.warming.is_none(), "idle polling does not repeat completed work");
     picker.open(&config, monitor, None).unwrap();
+    assert!(picker.ui.get_content_ready(), "preloaded frames display without waiting for the worker");
     // Use a deterministic 96-DPI monitor, independently of the host's actual DPI.
     picker.ui.set_surface_width(1920.0);
     picker.ui.set_surface_height(1080.0);

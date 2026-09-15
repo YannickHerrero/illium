@@ -81,6 +81,13 @@ impl View {
     fn bytes(&self) -> usize { self.frames.iter().map(|f| f.bytes()).sum() }
 }
 
+struct Warmup {
+    key: ViewKey,
+    entries: Vec<Entry>,
+    model: Model,
+    cards: Vec<Card>,
+}
+
 pub struct Picker {
     ui: ThemePicker,
     rows: Rc<VecModel<PreviewCard>>,
@@ -95,6 +102,8 @@ pub struct Picker {
     // At most two initial views, with a shared 64 MiB bound. These retain CPU
     // frames, not an unbounded second set of Slint image buffers.
     views: VecDeque<View>,
+    warming: Option<Warmup>,
+    warm_attempted: VecDeque<ViewKey>,
     epoch: Rc<Cell<u64>>,
     pub opened: bool,
     pending_window: bool,
@@ -154,6 +163,8 @@ impl Picker {
             image_cache: VecDeque::new(),
             loader: Loader::default(),
             views: VecDeque::new(),
+            warming: None,
+            warm_attempted: VecDeque::new(),
             epoch,
             opened: false,
             pending_window: false,
@@ -201,6 +212,9 @@ impl Picker {
             return Ok(());
         }
         self.epoch.set(self.epoch.get().wrapping_add(1));
+        if let Some(warm) = self.warming.take() {
+            self.warm_attempted.retain(|key| *key != warm.key);
+        }
         self.restore = restore;
         self.home = c.home.clone();
         self.active = active;
@@ -322,6 +336,8 @@ impl Picker {
     }
     pub fn rescan(&mut self) {
         self.views.clear();
+        self.warm_attempted.clear();
+        if self.warming.take().is_some() { self.loader.cancel(); }
         self.scan();
     }
     fn scan(&mut self) {
@@ -353,13 +369,79 @@ impl Picker {
             key: key.clone(), entries: self.entries.clone(), model: self.model.clone(),
             cards: cards.to_vec(), frames: frames.to_vec(),
         };
+        self.store_view(view);
+    }
+    fn store_view(&mut self, view: View) {
         const LIMIT: usize = 64 * 1024 * 1024;
         if view.bytes() > LIMIT { return; }
-        self.views.retain(|v| v.key != key);
+        self.views.retain(|v| v.key != view.key);
         while self.views.len() >= 2 || self.views.iter().map(View::bytes).sum::<usize>() + view.bytes() > LIMIT {
             self.views.pop_front();
         }
         self.views.push_back(view);
+    }
+    /// Called only during shell idle time. Never creates/shows/focuses a window
+    /// or changes preferences. Uses the same bounded worker and view caches.
+    pub fn preload(&mut self, c: &Config, monitor: Rect, selected: Option<&str>) {
+        if self.opened { return; }
+        let theme_key = ViewKey {
+            home: c.home.clone(), wallpaper_theme: None, active: c.global.theme.clone(),
+            width: dpi::logical(monitor, monitor.w), height: dpi::logical(monitor, monitor.h),
+            physical_width: monitor.w, colors: Colors::from_theme(&c.theme),
+        };
+        let wallpaper_key = ViewKey {
+            wallpaper_theme: Some(c.global.theme.clone()), active: selected.unwrap_or_default().into(),
+            ..theme_key.clone()
+        };
+        let keys = [theme_key, wallpaper_key];
+        if let Some(warm) = &self.warming {
+            if keys.contains(&warm.key) { return; }
+            self.loader.cancel();
+            self.warming = None;
+        }
+        let Some(key) = keys.into_iter().find(|key| {
+            !self.views.iter().any(|v| &v.key == key) && !self.warm_attempted.contains(key)
+        }) else { return; };
+        self.warm_attempted.push_back(key.clone());
+        while self.warm_attempted.len() > 2 { self.warm_attempted.pop_front(); }
+        let job = match &key.wallpaper_theme {
+            Some(theme) => Job::Wallpapers(key.home.clone(), theme.clone()),
+            None => Job::Scan(key.home.clone()),
+        };
+        self.warming = Some(Warmup { key, entries: vec![], model: Model::default(), cards: vec![] });
+        self.serial = self.loader.request(job);
+    }
+    fn poll_warmup(&mut self, result: Result<Output, String>) {
+        let Some(mut warm) = self.warming.take() else { return; };
+        match result {
+            Ok(Output::Catalog(entries)) => {
+                warm.model = Model::new(entries.iter().map(|e| e.id.clone()).collect(), &warm.key.active);
+                warm.entries = entries;
+            }
+            Ok(Output::Unreadable(entry, _)) => {
+                warm.entries.retain(|e| *e != entry);
+                warm.model.replace(warm.entries.iter().map(|e| e.id.clone()).collect());
+            }
+            Ok(Output::Progress(_)) => {
+                self.warming = Some(warm);
+                return;
+            }
+            Ok(Output::Frames(frames)) => {
+                self.store_view(View { key: warm.key, entries: warm.entries, model: warm.model, cards: warm.cards, frames });
+                return;
+            }
+            Err(error) => {
+                tracing::debug!(%error, "picker preload skipped");
+                return;
+            }
+        }
+        warm.cards = warm.model.cards(warm.key.width, warm.key.height);
+        let dpi = (96.0 * warm.key.physical_width as f32 / warm.key.width).round() as u32;
+        let keys = warm.cards.iter().map(|card| Key {
+            entry: warm.entries[card.index].clone(), dpi, selected: card.selected, colors: warm.key.colors,
+        }).collect();
+        self.serial = self.loader.request(Job::Render(keys));
+        self.warming = Some(warm);
     }
     fn dimensions(&self) -> (f32, f32) {
         (self.ui.get_surface_width(), self.ui.get_surface_height())
@@ -499,7 +581,11 @@ impl Picker {
         let Some(completion) = self.loader.take_result() else {
             return Outcome::None;
         };
-        if !self.opened || completion.serial != self.serial {
+        if completion.serial != self.serial {
+            return Outcome::None;
+        }
+        if !self.opened {
+            self.poll_warmup(completion.result);
             return Outcome::None;
         }
         match completion.result {
