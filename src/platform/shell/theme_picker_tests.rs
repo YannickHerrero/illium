@@ -159,6 +159,11 @@ fn headless_picker_renders_filters_and_never_applies_while_browsing() {
         "warm redraw reuses the Slint image"
     );
     let epoch = picker.epoch.get();
+    picker.input(epoch, Input::Action(Action::Next));
+    assert_eq!(picker.input(epoch, Input::Click(960.0, 500.0)), Outcome::None);
+    assert_eq!(settle(&mut picker), Outcome::Apply("ocean".into()));
+    assert_eq!(picker.rows.row_data(2).unwrap().image, uploaded,
+        "clicking the old visible center must not publish the queued keyboard image");
     picker.input(epoch, Input::Action(Action::Text("o".into())));
     assert_eq!(settle(&mut picker), Outcome::None);
     snapshot(&window, "picker-filter-multiple");

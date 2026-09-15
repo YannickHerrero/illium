@@ -506,6 +506,9 @@ impl Picker {
             && (self.scanning || self.pending_cards.is_some())
         {
             self.confirm_target = Some(target.clone());
+            // A click can target the previous displayed selection while a
+            // different keyboard selection is still rendering.
+            if !self.scanning { self.render(); }
             return Outcome::None;
         }
         if result == Outcome::None && !self.scanning {
