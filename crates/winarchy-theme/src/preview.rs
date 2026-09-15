@@ -90,7 +90,7 @@ pub fn catalog(home: &Path) -> Result<Vec<Entry>, String> {
             return Err("themes directory exceeds 1024 entries".into());
         }
         let path = item.map_err(|e| e.to_string())?.path();
-        if !path.extension().is_some_and(|s| s == "toml") {
+        if path.extension().is_none_or(|s| s != "toml") {
             continue;
         }
         let Some(id) = path.file_stem().and_then(|s| s.to_str()) else {
