@@ -22,8 +22,9 @@ newly installed executable. The screenshot tool stays a short-lived process.
 The resident uses 25 to 45 MB and samples processes only while Tasks is
 shown; `winarchyctl quit` stops it with the daemon.
 
-They read the active theme from the configuration home when they are shown and
-are otherwise ordinary windows: Winarchy tiles them like any client, and a
+They have no title bar (the manager's border marks the focused one), read the
+active theme from the configuration home when they are shown and are otherwise
+ordinary windows: Winarchy tiles them like any client, and a
 rule on `winarchy-apps.exe` in `rules.toml` can float them instead. Their
 Slint markup is compiled into the executable; the interpreter is reserved
 for applets. A crash in an application never touches the window manager, and
