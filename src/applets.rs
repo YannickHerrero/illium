@@ -23,6 +23,9 @@ pub struct Manifest {
     pub script: Option<String>,
     /// `builtin:clock`, `builtin:system` or `builtin:volume` instead of a command.
     pub provider: Option<String>,
+    /// Add native Wi-Fi traffic fields using the provider's `interface_guid`.
+    #[serde(default)]
+    pub wifi_traffic: bool,
     #[serde(default = "default_interval")]
     pub interval: String,
     #[serde(default)]

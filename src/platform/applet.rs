@@ -1,5 +1,6 @@
 //! Applet runtime: schedules data providers, holds their JSON, compiles the
 //! Slint views on demand and shows them as anchored popups.
+mod traffic;
 use super::{Event, EventSender, native, shell};
 use crate::{
     applets::{self, Applet},
@@ -29,6 +30,7 @@ mod scheduling_tests {
             data: serde_json::json!({"ssid":"current"}),
             error: None,
             running: true,
+            traffic: None,
             pending_actions: VecDeque::new(),
             due: Instant::now(),
             interval: Duration::from_secs(30),
@@ -81,6 +83,7 @@ pub struct Entry {
     pub data: serde_json::Value,
     pub error: Option<String>,
     running: bool,
+    traffic: Option<traffic::Monitor>,
     pending_actions: VecDeque<String>,
     due: Instant,
     interval: Duration,
@@ -129,6 +132,7 @@ impl Runtime {
                 data: old.map_or(serde_json::Value::Null, |o| o.data.clone()),
                 error: None,
                 running: false,
+                traffic: applet.manifest.wifi_traffic.then(traffic::Monitor::default),
                 pending_actions: VecDeque::new(),
                 due: Instant::now(),
                 definition: None,
@@ -172,6 +176,15 @@ impl Runtime {
     pub fn tick(&mut self) {
         let now = Instant::now();
         for i in 0..self.entries.len() {
+            let e = &mut self.entries[i];
+            if let Some(traffic) = &mut e.traffic {
+                traffic.poll(
+                    &e.applet.name,
+                    self.generation,
+                    self.open.as_deref() == Some(&e.applet.name),
+                    &self.tx,
+                );
+            }
             if !self.entries[i].running && self.entries[i].due <= now {
                 self.refresh(i, None);
             }
@@ -235,6 +248,15 @@ impl Runtime {
         }) {
             Ok(data) => {
                 e.data = data;
+                if let Some(traffic) = &mut e.traffic {
+                    let interface = if e.data["connected"].as_bool() == Some(true) {
+                        e.data["interface_guid"].as_str().unwrap_or_default()
+                    } else {
+                        ""
+                    };
+                    traffic.select(interface);
+                    traffic.merge(&mut e.data);
+                }
                 e.error = None;
                 if let Some(instance) = &e.instance
                     && let Some(def) = &e.definition
@@ -258,6 +280,30 @@ impl Runtime {
             self.refresh(index, Some(action));
         }
     }
+    pub fn apply_traffic(
+        &mut self,
+        name: &str,
+        generation: u64,
+        interface: &str,
+        result: Result<crate::traffic::Sample, String>,
+    ) {
+        if generation != self.generation {
+            return;
+        }
+        let Some(e) = self.entries.iter_mut().find(|e| e.applet.name == name) else {
+            return;
+        };
+        let Some(traffic) = &mut e.traffic else {
+            return;
+        };
+        traffic.finish(interface, result);
+        traffic.merge(&mut e.data);
+        if let (Some(instance), Some(def)) = (&e.instance, &e.definition)
+            && let Err(error) = set_data(instance, def, &e.data)
+        {
+            tracing::warn!(%error, "traffic view update failed");
+        }
+    }
     /// Shows or hides the applet view under the bar module centered at logical `x`.
     pub fn toggle(&mut self, c: &Config, monitor: Rect, name: &str, x: i32) -> Result<(), String> {
         if self.open.as_deref() == Some(name) {
@@ -273,6 +319,13 @@ impl Runtime {
         }
         if e.definition.is_none() {
             e.definition = Some(compile(&e.applet)?);
+        }
+        if let Some(traffic) = &mut e.traffic {
+            traffic.due = Instant::now();
+            if let Some(data) = e.data.as_object_mut() {
+                data.insert("receiving".into(), serde_json::json!("—"));
+                data.insert("sending".into(), serde_json::json!("—"));
+            }
         }
         let def = e.definition.as_ref().expect("compiled above");
         let instance = match &e.instance {

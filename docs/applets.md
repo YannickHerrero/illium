@@ -43,6 +43,7 @@ applets/weather/
 | `popup` | `{ width = 360, height = 240 }` | Popup size in logical pixels |
 | `script` | `<name>.ps1` | PowerShell script run hidden with `-NoProfile -ExecutionPolicy Bypass` |
 | `command` | none | Full command line instead of `script` |
+| `wifi_traffic` | `false` | Merge native Wi-Fi traffic counters using the script's `connected` and `interface_guid` fields; independent of script cadence |
 | `provider` | none | `builtin:clock`, `builtin:system` or `builtin:volume` instead of a process |
 | `focusable` | `false` | Let the popup take keyboard focus |
 | `attach` | none | Built-in module (`clock`, `battery`, `cpu`, `memory`, `volume`, `window-title`) whose click opens this applet; it then has no icon and is loaded whenever that module is in a section |
@@ -72,6 +73,21 @@ Built-in providers avoid a process for fast cadences:
   device. It is the only built-in provider that acts on the view's action:
   `set <percent>`, `up`, `down` (5% steps) and `toggle-mute`. Setting a
   level above zero also unmutes.
+
+### Wi-Fi traffic sampling
+
+With `wifi_traffic = true`, the script remains responsible for discovery and actions.
+Winarchy reads counters for exactly its connected interface GUID through `GetIfEntry2`
+on a background thread, at most once per second with the popup open and once every
+30 seconds otherwise. Ethernet/VPN interfaces are rejected. No additional PowerShell
+process or network probe is needed for those samples.
+
+Added string fields: `receiving`, `sending`, `downloaded`, `uploaded`, `traffic_period`.
+Rates use elapsed monotonic time and decimal byte units; they are `—` until two recent
+samples are available. Totals cover the current interface's monitoring period, not
+Windows' historical usage or a persistent daily counter. Reloading applets, changing
+interfaces, counter resets or unavailable counters restart that period. The counters
+include all traffic on that adapter, not just Internet/application payload.
 
 ### The view
 

@@ -43,6 +43,12 @@ pub enum Event {
     Click(isize),
     /// An applet provider finished: applet name and its stdout or error.
     AppletData(String, u64, Result<String, String>),
+    AppletTraffic {
+        name: String,
+        generation: u64,
+        interface: String,
+        result: Result<crate::traffic::Sample, String>,
+    },
     /// An applet view asked for an action to be run by its provider.
     AppletAction(String, Option<String>),
     /// Escape pressed while a bar popup was open.
@@ -673,6 +679,15 @@ impl Manager {
             Event::AppletData(name, generation, result) => {
                 self.applets.apply(&name, generation, result);
                 self.shell.refresh(&self.model, &self.config, &self.applets);
+            }
+            Event::AppletTraffic {
+                name,
+                generation,
+                interface,
+                result,
+            } => {
+                self.applets
+                    .apply_traffic(&name, generation, &interface, result);
             }
             Event::AppletAction(name, action) => self.applets.action(&name, action),
             Event::Mouse(id) => {
