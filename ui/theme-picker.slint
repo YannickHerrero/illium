@@ -1,5 +1,8 @@
 // Omarchy ImagePicker.qml port; see docs/licenses/omarchy.md and the pinned
 // contract in docs/theme-picker-reference.md. No extra controls or animations.
+import "fonts/LiberationSans-Regular.ttf";
+import "fonts/LiberationSans-Bold.ttf";
+
 export struct PreviewCard {
     image: image,
     x: length, y: length,
@@ -19,12 +22,14 @@ component OutlinedLabel inherits Rectangle {
         x: offset.dx; y: offset.dy;
         width: root.width; height: root.height;
         text: root.label; color: root.outline;
+        font-family: "Liberation Sans";
         font-size: root.size; font-weight: root.weight;
         horizontal-alignment: center; overflow: elide;
     }
     main := Text {
         width: root.width;
         text: root.label; color: root.fg;
+        font-family: "Liberation Sans";
         font-size: root.size; font-weight: root.weight;
         horizontal-alignment: center; overflow: elide;
     }

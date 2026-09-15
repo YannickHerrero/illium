@@ -22,8 +22,12 @@ redesign; the wallpaper menu is outside its scope.
 - Label: centered, 768px wide, 16px below carousel, 24px semibold; right elision.
   Filter: 8px below label, 14px, .85 opacity, hidden when empty. Both have a
   background-colored .7-alpha outline. No permanent input box or caret.
-  The QML does not set a font family: record the resolved Qt default font when
-  comparing screenshots; matching fonts must be installed on both systems.
+  The QML does not set a font family. Omarchy's GTK Qt platform theme and
+  `default/fontconfig/conf.avail/50-omarchy.conf` resolve the default sans family
+  to Liberation Sans. The picker embeds unmodified Liberation Sans 2.1.5 Regular
+  and Bold from Debian `fonts-liberation` 1:2.1.5-3 (SIL OFL 1.1; notice in
+  `docs/licenses/liberation-fonts.md`). Only picker labels explicitly use this
+  family. Record the resolved reference font when comparing custom installations.
 - No animation, arrows, counter, badges, help, buttons, hover selection, wheel
   navigation, drag navigation, shadows, rounded corners or empty placeholders.
 
