@@ -13,6 +13,7 @@ mod session;
 mod session_tests;
 mod shell;
 mod status;
+mod terminal;
 use crate::{
     command::Command,
     config::Config,
@@ -159,7 +160,7 @@ impl Manager {
             restore,
         });
         tracing::info!(id, workspace, "window added");
-        if apps::wants_focus(&exe) {
+        if apps::wants_focus(&exe) || terminal::wants_focus(&exe) {
             self.model.focused = Some(id);
             native::focus(id, false);
         }
@@ -355,7 +356,12 @@ impl Manager {
         let bindings = input::parse(&config.keys)?;
         self.shell.configure(&config, &self.monitors)?;
         input::update(bindings);
+        let terminal_changed =
+            config.apps.apps.get("terminal") != self.config.apps.apps.get("terminal");
         self.config = config;
+        if terminal_changed {
+            terminal::prewarm(self.config.apps.apps.get("terminal"));
+        }
         self.applets.load(&self.config);
         let shell_ms = started.elapsed().as_millis();
         if let Some(mode) = &self.config.theme.mode {
@@ -515,7 +521,9 @@ impl Manager {
                 return self.execute(Command::LaunchTarget { target, shortcut: false });
             }
             Command::LaunchTarget { target, shortcut } => {
-                if shortcut { native::shortcut(&target)?; } else { native::spawn(&target)?; }
+                if shortcut { native::shortcut(&target)?; }
+                else if terminal::bundled(&target) { terminal::open(); }
+                else { native::spawn(&target)?; }
             }
             Command::Launcher => {
                 self.shell.picker.close();
@@ -557,6 +565,7 @@ impl Manager {
             Command::Explorer(start) => session::explorer(start)?,
             Command::Quit => {
                 apps::stop_resident();
+                terminal::stop_idle();
                 slint::quit_event_loop().map_err(|e| e.to_string())?;
             }
         }
@@ -1010,6 +1019,7 @@ pub fn run(replace: bool) -> Result<(), String> {
                     Ok(()) => {
                         tracing::info!("Winarchy ready");
                         apps::start_resident();
+                        terminal::prewarm(m.config.apps.apps.get("terminal"));
                     }
                     Err(e) => {
                         tracing::error!(%e,"session initialization failed");
