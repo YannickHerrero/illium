@@ -1,0 +1,86 @@
+// Omarchy ImagePicker.qml port; see docs/licenses/omarchy.md and the pinned
+// contract in docs/theme-picker-reference.md. No extra controls or animations.
+export struct PreviewCard {
+    image: image,
+    x: length, y: length,
+    width: length, height: length,
+}
+
+// The software renderer does not implement Text.stroke. Qt Text.Outline's
+// one-logical-pixel outline is reproduced by the four offset glyph runs.
+component OutlinedLabel inherits Rectangle {
+    in property <string> label;
+    in property <color> fg;
+    in property <color> outline;
+    in property <length> size;
+    in property <int> weight: 400;
+    height: main.preferred-height;
+    for offset in [{dx: -1px, dy: 0px}, {dx: 1px, dy: 0px}, {dx: 0px, dy: -1px}, {dx: 0px, dy: 1px}]: Text {
+        x: offset.dx; y: offset.dy;
+        width: root.width; height: root.height;
+        text: root.label; color: root.outline;
+        font-size: root.size; font-weight: root.weight;
+        horizontal-alignment: center; overflow: elide;
+    }
+    main := Text {
+        width: root.width;
+        text: root.label; color: root.fg;
+        font-size: root.size; font-weight: root.weight;
+        horizontal-alignment: center; overflow: elide;
+    }
+}
+
+export component ThemePicker inherits Window {
+    no-frame: true;
+    in property <length> surface-width;
+    in property <length> surface-height;
+    width: surface-width; height: surface-height;
+    in property <color> bg;
+    in property <color> fg;
+    in property <[PreviewCard]> cards;
+    in property <string> selected-label;
+    in property <string> filter-text;
+    in property <bool> content-ready;
+    in-out property <bool> pointing;
+    callback key(string, bool, bool, bool, bool);
+    callback click(length, length);
+    callback pointer-moved(length, length);
+    callback dismiss();
+    background: bg.with-alpha(0.5);
+    forward-focus: keys;
+    keys := FocusScope {
+        width: root.width; height: root.height;
+        key-pressed(event) => {
+            root.key(event.text, event.modifiers.control, event.modifiers.shift, event.modifiers.alt, event.modifiers.meta);
+            return accept;
+        }
+        key-released(event) => { return accept; }
+    }
+    for card in root.cards: Image {
+        visible: root.content-ready;
+        x: card.x; y: card.y; width: card.width; height: card.height;
+        source: card.image;
+        image-fit: fill;
+    }
+    name := OutlinedLabel {
+        visible: root.content-ready;
+        x: (root.width - 768px) / 2;
+        y: (root.height - 609px) / 2 + 30px + 475px + 16px;
+        width: 768px;
+        label: root.selected-label; fg: root.fg; outline: root.bg.with-alpha(0.7);
+        size: 24px; weight: 600;
+    }
+    OutlinedLabel {
+        visible: root.content-ready && root.filter-text != "";
+        x: name.x; y: name.y + name.height + 8px; width: 768px;
+        label: root.filter-text; fg: root.fg; outline: root.bg.with-alpha(0.7);
+        size: 14px; opacity: 0.85;
+    }
+    TouchArea {
+        width: root.width; height: root.height;
+        mouse-cursor: root.pointing ? pointer : default;
+        moved => { root.pointer-moved(self.mouse-x, self.mouse-y); }
+        clicked => { root.click(self.mouse-x, self.mouse-y); }
+    }
+    public function focus-picker() { keys.focus(); }
+}

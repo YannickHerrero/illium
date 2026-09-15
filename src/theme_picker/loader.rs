@@ -53,6 +53,7 @@ pub enum Job {
 pub enum Output {
     Catalog(Vec<Entry>),
     Frames(Vec<Arc<Frame>>),
+    Unreadable(Entry, String),
 }
 pub struct Completion {
     pub serial: u64,
@@ -93,7 +94,10 @@ impl Default for Loader {
                         let thumbnail = if let Some(image) = thumbnails.get(&key.entry) {
                             image
                         } else {
-                            let image = Arc::new(render::thumbnail(&key.entry)?);
+                            let image = match render::thumbnail(&key.entry) {
+                                Ok(image) => Arc::new(image),
+                                Err(error) => return Ok(Output::Unreadable(key.entry, error)),
+                            };
                             thumbnails.insert(
                                 key.entry.clone(),
                                 image.clone(),
