@@ -556,6 +556,10 @@ impl Window {
             }
             WM_KEYDOWN | WM_SYSKEYDOWN => {
                 let vk = msg.wParam.0 as u16;
+                // Let TranslateMessage compose AltGr characters such as @,#,{.
+                if m.alt_gr(pressed(VK_RMENU.0)) {
+                    return false;
+                }
                 if vk == 13 && m.alt {
                     return true;
                 }
@@ -628,7 +632,7 @@ impl Window {
                 if let Some(c) = c {
                     let mut bytes = Vec::new();
                     // Right Alt + Ctrl is AltGr: never prefix its composed text.
-                    if m.alt && !pressed(VK_RMENU.0) {
+                    if m.alt && !m.alt_gr(pressed(VK_RMENU.0)) {
                         bytes.push(27);
                     }
                     bytes.extend_from_slice(c.encode_utf8(&mut [0; 4]).as_bytes());

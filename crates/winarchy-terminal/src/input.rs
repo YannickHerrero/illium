@@ -8,6 +8,10 @@ pub struct Mods {
     pub ctrl: bool,
 }
 impl Mods {
+    /// Windows represents AltGr as synthetic Ctrl plus right Alt.
+    pub fn alt_gr(self, right_alt: bool) -> bool {
+        self.ctrl && self.alt && right_alt
+    }
     fn parameter(self) -> u8 {
         1 + u8::from(self.shift) + 2 * u8::from(self.alt) + 4 * u8::from(self.ctrl)
     }
@@ -164,6 +168,23 @@ mod tests {
             b"\x1b[1;5A"
         );
         assert!(key(0x41, Mods::default(), TermMode::empty()).is_none());
+    }
+    #[test]
+    fn altgr_is_not_a_ctrl_digit_shortcut() {
+        let m = Mods {
+            ctrl: true,
+            alt: true,
+            shift: false,
+        };
+        assert!(m.alt_gr(true));
+        assert!(!m.alt_gr(false));
+        assert!(
+            !Mods {
+                alt: true,
+                ..Mods::default()
+            }
+            .alt_gr(true)
+        );
     }
     #[test]
     fn paste_and_mouse() {
