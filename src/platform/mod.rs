@@ -680,6 +680,9 @@ impl Manager {
                 self.focus_visible();
             }
             Event::Module(kind, x, monitor) => {
+                if self.shell.picker.opened {
+                    self.finish_picker(crate::theme_picker::Outcome::Cancel);
+                }
                 let target = self.applets.attached(&kind).unwrap_or_else(|| kind.clone());
                 if self
                     .just_closed
