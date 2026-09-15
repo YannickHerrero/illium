@@ -1,6 +1,7 @@
 //! Production picker exercised with Slint's software renderer and no HWND.
 //! No changes to the running desktop, current configuration or active theme.
 use super::*;
+use slint::Model as _;
 use slint::platform::{
     Platform, WindowAdapter, WindowEvent,
     software_renderer::{MinimalSoftwareWindow, PremultipliedRgbaColor, RepaintBufferType},
@@ -130,7 +131,18 @@ fn headless_picker_renders_filters_and_never_applies_while_browsing() {
         pixels[(400 * 1920 + 900) as usize].alpha > 250,
         "central card stays opaque"
     );
+    let uploaded = picker.rows.row_data(2).unwrap().image;
+    picker.render();
+    assert_eq!(settle(&mut picker), Outcome::None);
+    assert_eq!(picker.rows.row_data(2).unwrap().image, uploaded, "warm redraw reuses the Slint image");
     let epoch = picker.epoch.get();
+    picker.input(epoch, Input::Action(Action::Text("o".into())));
+    assert_eq!(settle(&mut picker), Outcome::None);
+    snapshot(&window, "picker-filter-multiple");
+    picker.input(epoch, Input::Action(Action::Clear));
+    assert_eq!(settle(&mut picker), Outcome::None);
+    picker.ui.set_selected_label("A very long theme name — with accents éàç — repeated to test right elision across the full preview width — and more text".into());
+    snapshot(&window, "picker-long-label");
     // Drive the real FocusScope/callback/queue path, not just the pure model.
     for c in "tokyo n".chars() {
         window.dispatch_event(WindowEvent::KeyPressed {

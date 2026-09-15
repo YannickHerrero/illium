@@ -13,8 +13,10 @@ use crate::{
 use slint::{ComponentHandle, ModelRc, VecModel};
 use std::{
     cell::{Cell, RefCell},
+    collections::VecDeque,
     path::PathBuf,
     rc::Rc,
+    sync::{Arc, Weak},
 };
 use winarchy_theme::preview::Entry;
 use windows::Win32::UI::WindowsAndMessaging::HWND_TOPMOST;
@@ -60,6 +62,14 @@ fn key(text: &str, control: bool, shift: bool, alt: bool, meta: bool) -> Option<
 
 pub struct Picker {
     ui: ThemePicker,
+    rows: Rc<VecModel<PreviewCard>>,
+    // Slint buffers are separate from the worker's CPU buffers. Retain uploads
+    // across navigation, with their own 64 MiB bound and no strong worker refs.
+    image_cache: VecDeque<(
+        Weak<crate::theme_picker::render::Frame>,
+        slint::Image,
+        usize,
+    )>,
     loader: Loader,
     epoch: Rc<Cell<u64>>,
     pub opened: bool,
@@ -82,6 +92,8 @@ pub struct Picker {
 impl Picker {
     pub fn new(tx: EventSender) -> Result<Self, String> {
         let ui = ThemePicker::new().map_err(|e| e.to_string())?;
+        let rows = Rc::new(VecModel::default());
+        ui.set_cards(ModelRc::from(rows.clone()));
         let epoch = Rc::new(Cell::new(0));
         let t = tx.clone();
         let e = epoch.clone();
@@ -111,6 +123,8 @@ impl Picker {
         });
         Ok(Self {
             ui,
+            rows,
+            image_cache: VecDeque::new(),
             loader: Loader::default(),
             epoch,
             opened: false,
@@ -157,7 +171,7 @@ impl Picker {
         self.ui.set_surface_height(dpi::logical(monitor, monitor.h));
         self.ui.set_content_ready(false);
         self.ui.set_pointing(false);
-        self.ui.set_cards(ModelRc::default());
+        self.rows.set_vec(vec![]);
         self.hit_cards.borrow_mut().clear();
         self.model = Model::default();
         self.shown = Model::default();
@@ -182,7 +196,7 @@ impl Picker {
         self.scanning = false;
         self.confirm_pending = false;
         let _ = self.ui.hide();
-        self.ui.set_cards(ModelRc::default());
+        self.rows.set_vec(vec![]);
         self.hit_cards.borrow_mut().clear();
         self.restore.take()
     }
@@ -276,6 +290,40 @@ impl Picker {
         }
         result
     }
+    fn image(&mut self, frame: &Arc<crate::theme_picker::render::Frame>) -> slint::Image {
+        let weak = Arc::downgrade(frame);
+        if let Some(index) = self
+            .image_cache
+            .iter()
+            .position(|(f, _, _)| f.ptr_eq(&weak))
+        {
+            let row = self.image_cache.remove(index).unwrap();
+            let image = row.1.clone();
+            self.image_cache.push_back(row);
+            return image;
+        }
+        self.image_cache
+            .retain(|(frame, _, _)| frame.strong_count() > 0);
+        let buffer = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
+            &frame.pixels,
+            frame.width,
+            frame.height,
+        );
+        let image = slint::Image::from_rgba8_premultiplied(buffer);
+        const LIMIT: usize = 64 * 1024 * 1024;
+        if frame.bytes() <= LIMIT {
+            let mut bytes: usize = self.image_cache.iter().map(|(_, _, b)| b).sum();
+            while bytes + frame.bytes() > LIMIT {
+                let Some((_, _, size)) = self.image_cache.pop_front() else {
+                    break;
+                };
+                bytes -= size;
+            }
+            self.image_cache
+                .push_back((weak, image.clone(), frame.bytes()));
+        }
+        image
+    }
     pub fn poll(&mut self) -> Outcome {
         let Some(completion) = self.loader.take_result() else {
             return Outcome::None;
@@ -304,23 +352,15 @@ impl Picker {
                 let rows: Vec<_> = cards
                     .iter()
                     .zip(frames)
-                    .map(|(card, frame)| {
-                        let buffer =
-                            slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
-                                &frame.pixels,
-                                frame.width,
-                                frame.height,
-                            );
-                        PreviewCard {
-                            image: slint::Image::from_rgba8_premultiplied(buffer),
-                            x: card.x - PAD,
-                            y: card.y - PAD,
-                            width: card.width + 2.0 * PAD,
-                            height: card.height + 2.0 * PAD,
-                        }
+                    .map(|(card, frame)| PreviewCard {
+                        image: self.image(&frame),
+                        x: card.x - PAD,
+                        y: card.y - PAD,
+                        width: card.width + 2.0 * PAD,
+                        height: card.height + 2.0 * PAD,
                     })
                     .collect();
-                self.ui.set_cards(ModelRc::new(VecModel::from(rows)));
+                super::sync(&self.rows, &rows);
                 self.ui
                     .set_selected_label(self.model.current_label().into());
                 self.ui.set_filter_text(self.model.filter.clone().into());
