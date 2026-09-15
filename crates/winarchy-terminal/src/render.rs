@@ -418,6 +418,9 @@ impl Surface {
         }
     }
     pub fn draw(&mut self, frame: &Frame) -> Result<()> {
+        self.draw_frame(frame, true)
+    }
+    fn draw_frame(&mut self, frame: &Frame, present: bool) -> Result<()> {
         unsafe {
             // Resolve layouts before BeginDraw: an allocation/font failure cannot
             // leave the render target in the drawing state.
@@ -509,8 +512,10 @@ impl Surface {
             }
             self.context.EndDraw(None, None)?;
             // No extra vsync wait on the UI thread; DWM composes the latest frame.
-            self.swap.Present(0, DXGI_PRESENT(0)).ok()?;
-            self.graphics.composition.Commit()?;
+            if present {
+                self.swap.Present(0, DXGI_PRESENT(0)).ok()?;
+                self.graphics.composition.Commit()?;
+            }
             Ok(())
         }
     }

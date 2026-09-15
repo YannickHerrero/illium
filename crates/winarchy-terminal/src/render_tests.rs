@@ -57,6 +57,48 @@ fn hidden_gpu_surface_survives_resize_and_font_changes() {
         surface.fonts = g.fonts(&config).unwrap();
         surface.draw(&Frame::new(Some(&model), &p)).unwrap();
         assert_eq!(surface.cell_at(-50, -50), (0, 0));
+        // Read the actual GPU texture: a screenshot over an arbitrary desktop
+        // cannot establish that only the background receives alpha.
+        surface
+            .draw_frame(&Frame::new(Some(&model), &p), false)
+            .unwrap();
+        let texture: ID3D11Texture2D = surface.swap.GetBuffer(0).unwrap();
+        let mut desc = D3D11_TEXTURE2D_DESC::default();
+        texture.GetDesc(&mut desc);
+        desc.Usage = D3D11_USAGE_STAGING;
+        desc.BindFlags = 0;
+        desc.MiscFlags = 0;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ.0 as u32;
+        let mut staging = None;
+        g.d3d
+            .CreateTexture2D(&desc, None, Some(&mut staging))
+            .unwrap();
+        let staging = staging.unwrap();
+        let context = g.d3d.GetImmediateContext().unwrap();
+        context.CopyResource(&staging, &texture);
+        let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+        context
+            .Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))
+            .unwrap();
+        let pixels = std::slice::from_raw_parts(
+            mapped.pData.cast::<u8>(),
+            mapped.RowPitch as usize * desc.Height as usize,
+        );
+        assert!(
+            pixels[3].abs_diff(217) <= 1,
+            "background alpha must be 0.85, got {}",
+            pixels[3]
+        );
+        let mut opaque = 0;
+        for row in 0..desc.Height as usize {
+            for col in 0..desc.Width as usize {
+                if pixels[row * mapped.RowPitch as usize + col * 4 + 3] == 255 {
+                    opaque += 1;
+                }
+            }
+        }
+        assert!(opaque > 20, "text/cursor must retain opaque pixels");
+        context.Unmap(&staging, 0);
         drop(surface);
         drop(g);
         DestroyWindow(hwnd).unwrap();
