@@ -1,7 +1,23 @@
 //! Companion applications: shown through the resident `winarchy-apps serve`
 //! process when it answers, started as their own process otherwise.
-use std::time::Duration;
+use std::{
+    sync::Mutex,
+    time::{Duration, Instant},
+};
 const PREFIX: &str = "winarchy-apps";
+/// When a show request last went out: the resident process is not the
+/// foreground process, so Windows refuses it the foreground; the daemon
+/// focuses the window itself when it appears shortly after a request.
+static REQUESTED: Mutex<Option<Instant>> = Mutex::new(None);
+/// Whether a window of `exe` appearing now was asked for by the user.
+pub fn wants_focus(exe: &str) -> bool {
+    exe.to_lowercase().ends_with("winarchy-apps.exe")
+        && REQUESTED
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take_if(|at| at.elapsed() < Duration::from_secs(3))
+            .is_some()
+}
 /// Command line running application `name` of the `winarchy-apps.exe` next to the daemon.
 pub fn command(name: &str) -> Result<String, String> {
     let tool = std::env::current_exe()

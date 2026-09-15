@@ -148,6 +148,10 @@ impl Manager {
             restore,
         });
         tracing::info!(id, workspace, "window added");
+        if apps::wants_focus(&exe) {
+            self.model.focused = Some(id);
+            native::focus(id, false);
+        }
         true
     }
     fn snapshot(&self) -> State {
