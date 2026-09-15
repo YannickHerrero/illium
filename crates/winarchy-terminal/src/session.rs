@@ -276,6 +276,63 @@ mod tests {
         wait("CSI:1b5b34393b3575", false);
     }
     #[test]
+    #[ignore = "starts a disposable Debian Zsh; requires configured interactive shell"]
+    fn wsl_prompt_is_ready_before_any_user_input() {
+        use alacritty_terminal::term::TermMode;
+        let (tx, rx) = mpsc::channel();
+        let s = Session::start(
+            Config::default(),
+            Size::new(100, 24),
+            Palette::new(&winarchy_theme::Theme::default_theme()),
+            Arc::new(move || {
+                let _ = tx.send(());
+            }),
+        );
+        let start = std::time::Instant::now();
+        loop {
+            let model = s.model.lock().unwrap();
+            assert!(model.error.is_none(), "{:?}", model.error);
+            assert!(!model.exited, "shell exited before its prompt");
+            if model.term.mode().contains(TermMode::BRACKETED_PASTE) {
+                eprintln!(
+                    "line editor ready without input after {:?}",
+                    start.elapsed()
+                );
+                break;
+            }
+            assert!(
+                start.elapsed() < std::time::Duration::from_secs(10),
+                "line editor did not become ready without keyboard input"
+            );
+            drop(model);
+            let _ = rx.recv_timeout(std::time::Duration::from_millis(50));
+        }
+        // Do not execute a command or write personal history. Verify both
+        // characters at the editor's initial cursor, not just eventual output.
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let point = s.model.lock().unwrap().term.grid().cursor.point;
+        eprintln!("idle cursor before input: {point:?}");
+        for (offset, byte) in b"ab".iter().copied().enumerate() {
+            s.send(vec![byte]).unwrap();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            loop {
+                let model = s.model.lock().unwrap();
+                let col = alacritty_terminal::index::Column(point.column.0 + offset);
+                if model.term.grid()[point.line][col].c == char::from(byte) {
+                    break;
+                }
+                assert!(model.error.is_none(), "{:?}", model.error);
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "typed character {offset} was not echoed at its expected position; current cursor: {:?}",
+                    model.term.grid().cursor.point,
+                );
+                drop(model);
+                let _ = rx.recv_timeout(std::time::Duration::from_millis(50));
+            }
+        }
+    }
+    #[test]
     fn missing_distribution_reports_error_without_blocking_caller() {
         let (tx, rx) = mpsc::channel();
         let config = Config {
