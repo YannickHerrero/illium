@@ -80,6 +80,22 @@ impl Palette {
 mod tests {
     use super::*;
     #[test]
+    fn application_palette_overrides_and_reset() {
+        let mut m = crate::model::Model::new(crate::model::Size::new(10, 2), 0);
+        let p = Palette::new(&Theme::default_theme());
+        m.feed(b"\x1b]4;1;#123456\x1b\\");
+        assert_eq!(
+            p.resolve(Color::Indexed(1), m.term.colors()),
+            Rgb {
+                r: 0x12,
+                g: 0x34,
+                b: 0x56
+            }
+        );
+        m.feed(b"\x1b]104;1\x1b\\");
+        assert_eq!(p.resolve(Color::Indexed(1), m.term.colors()), p.colors[1]);
+    }
+    #[test]
     fn legacy_and_cube() {
         let mut t = Theme::default_theme();
         t.ansi = None;

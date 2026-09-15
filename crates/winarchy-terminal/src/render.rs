@@ -209,6 +209,7 @@ impl Frame {
         };
         let content = model.term.renderable_content();
         frame.background = p.resolve(Color::Named(NamedColor::Background), content.colors);
+        frame.cursor_color = p.resolve(Color::Named(NamedColor::Cursor), content.colors);
         let cursor = content.cursor;
         let cursor_row = cursor.point.line.0 + content.display_offset as i32;
         if cursor_row >= 0 && cursor.shape != CursorShape::Hidden {

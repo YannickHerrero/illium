@@ -116,6 +116,7 @@ impl Session {
                             cell_width: 0,
                             cell_height: 0,
                         };
+                        let overrides = *m.term.colors();
                         drop(m);
                         for event in events {
                             let response = match event {
@@ -126,7 +127,7 @@ impl Session {
                                     .colors
                                     .get(i)
                                     .copied()
-                                    .map(|rgb| format(rgb)),
+                                    .map(|rgb| format(overrides[i].unwrap_or(rgb))),
                                 Event::TextAreaSizeRequest(format) => Some(format(size)),
                                 _ => None, // No OSC52 clipboard access or untrusted window operations.
                             };
@@ -171,6 +172,14 @@ impl Session {
         let mut model = self.model.lock().unwrap();
         let events = model.expire_sync();
         let pending = model.sync_pending();
+        let overrides = *model.term.colors();
+        use alacritty_terminal::grid::Dimensions;
+        let size = WindowSize {
+            num_lines: model.term.screen_lines() as u16,
+            num_cols: model.term.columns() as u16,
+            cell_width: 0,
+            cell_height: 0,
+        };
         drop(model);
         for event in events {
             let response = match event {
@@ -182,7 +191,8 @@ impl Session {
                     .colors
                     .get(i)
                     .copied()
-                    .map(|rgb| format(rgb)),
+                    .map(|rgb| format(overrides[i].unwrap_or(rgb))),
+                Event::TextAreaSizeRequest(format) => Some(format(size)),
                 _ => None,
             };
             if let Some(s) = response {
