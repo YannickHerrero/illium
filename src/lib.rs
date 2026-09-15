@@ -12,5 +12,6 @@ pub mod platform;
 pub mod queue;
 pub mod request;
 pub mod state;
+pub mod theme_picker;
 pub mod traffic;
 pub mod wallpaper;
