@@ -13,6 +13,87 @@ use windows::{
 };
 const CF_DIB: u32 = 8;
 const VK_ESCAPE: usize = 0x1b;
+/// A warmed capture thread in the existing resident process.
+pub struct Resident {
+    sender: std::sync::mpsc::SyncSender<()>,
+    busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+impl Resident {
+    pub fn new() -> Result<Self, String> {
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        let busy = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let worker_busy = busy.clone();
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        std::thread::Builder::new()
+            .name("screenshot".into())
+            .spawn(move || {
+                let ready = prepare();
+                let failed = ready.is_err();
+                let _ = ready_tx.send(ready);
+                if failed {
+                    return;
+                }
+                while rx.recv().is_ok() {
+                    if let Err(error) = capture() {
+                        crate::log::write(&format!("shot: {error}"));
+                    }
+                    worker_busy.store(false, std::sync::atomic::Ordering::Release);
+                }
+            })
+            .map_err(|e| e.to_string())?;
+        ready_rx.recv().map_err(|e| e.to_string())??;
+        Ok(Self { sender: tx, busy })
+    }
+    pub fn show(&self) -> Result<(), String> {
+        if self.busy.swap(true, std::sync::atomic::Ordering::AcqRel) {
+            return Ok(());
+        }
+        match self.sender.try_send(()) {
+            Ok(()) | Err(std::sync::mpsc::TrySendError::Full(())) => Ok(()),
+            Err(std::sync::mpsc::TrySendError::Disconnected(())) => {
+                self.busy.store(false, std::sync::atomic::Ordering::Release);
+                Err("screenshot worker stopped".into())
+            }
+        }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::Resident;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    };
+
+    #[test]
+    fn requests_coalesce_until_capture_finishes() {
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let resident = Resident {
+            sender,
+            busy: Arc::new(AtomicBool::new(false)),
+        };
+        resident.show().unwrap();
+        receiver.try_recv().unwrap();
+        resident.show().unwrap();
+        assert!(receiver.try_recv().is_err());
+        resident.busy.store(false, Ordering::Release);
+        resident.show().unwrap();
+        receiver.try_recv().unwrap();
+    }
+
+    #[test]
+    fn disconnected_worker_allows_fallback() {
+        let (sender, receiver) = mpsc::sync_channel(1);
+        drop(receiver);
+        let resident = Resident {
+            sender,
+            busy: Arc::new(AtomicBool::new(false)),
+        };
+        assert!(resident.show().is_err());
+        assert!(resident.show().is_err());
+    }
+}
 struct State {
     size: (i32, i32),
     screen: HDC,
@@ -21,6 +102,30 @@ struct State {
     start: Option<POINT>,
     current: POINT,
     cancelled: bool,
+}
+unsafe fn free_snapshot(dc: HDC) {
+    if !dc.is_invalid() {
+        unsafe {
+            let bitmap = GetCurrentObject(dc, OBJ_BITMAP);
+            let _ = DeleteDC(dc);
+            let _ = DeleteObject(bitmap);
+        }
+    }
+}
+impl Drop for State {
+    fn drop(&mut self) {
+        unsafe {
+            free_snapshot(self.frozen);
+            free_snapshot(self.dimmed);
+            ReleaseDC(None, self.screen);
+        }
+    }
+}
+struct ClearState;
+impl Drop for ClearState {
+    fn drop(&mut self) {
+        STATE.set(None);
+    }
 }
 thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
@@ -55,8 +160,13 @@ unsafe fn snapshot(
     unsafe {
         let dc = CreateCompatibleDC(Some(screen));
         let bitmap = CreateCompatibleBitmap(screen, w, h);
+        if dc.is_invalid() || bitmap.is_invalid() {
+            let _ = DeleteDC(dc);
+            let _ = DeleteObject(bitmap.into());
+            return Err(err("screen buffer allocation"));
+        }
         SelectObject(dc, bitmap.into());
-        BitBlt(
+        if let Err(error) = BitBlt(
             dc,
             0,
             0,
@@ -66,8 +176,10 @@ unsafe fn snapshot(
             origin.x,
             origin.y,
             ROP_CODE(SRCCOPY.0 | CAPTUREBLT.0),
-        )
-        .map_err(|e| format!("screen copy failed: {e}"))?;
+        ) {
+            free_snapshot(dc);
+            return Err(format!("screen copy failed: {error}"));
+        }
         if dim {
             let black = CreateCompatibleDC(Some(screen));
             let pixel = CreateCompatibleBitmap(screen, 1, 1);
@@ -95,7 +207,11 @@ unsafe fn copy_to_clipboard(h: HWND, s: &State, r: RECT) -> Result<(), String> {
         let previous = SelectObject(dc, bitmap.into());
         let copied = BitBlt(dc, 0, 0, w, hgt, Some(s.frozen), r.left, r.top, SRCCOPY);
         SelectObject(dc, previous);
-        copied.map_err(|e| format!("selection copy failed: {e}"))?;
+        if let Err(e) = copied {
+            let _ = DeleteObject(bitmap.into());
+            let _ = DeleteDC(dc);
+            return Err(format!("selection copy failed: {e}"));
+        }
         let header = std::mem::size_of::<BITMAPINFOHEADER>();
         let pixels = (w as usize) * 4 * (hgt as usize);
         let mut info = BITMAPINFO {
@@ -110,10 +226,15 @@ unsafe fn copy_to_clipboard(h: HWND, s: &State, r: RECT) -> Result<(), String> {
             },
             ..Default::default()
         };
-        let global = GlobalAlloc(GMEM_MOVEABLE, header + pixels)
-            .map_err(|e| format!("clipboard memory failed: {e}"))?;
+        let global = GlobalAlloc(GMEM_MOVEABLE, header + pixels).map_err(|e| {
+            let _ = DeleteObject(bitmap.into());
+            let _ = DeleteDC(dc);
+            format!("clipboard memory failed: {e}")
+        })?;
         let base = GlobalLock(global).cast::<u8>();
         if base.is_null() {
+            let _ = DeleteObject(bitmap.into());
+            let _ = DeleteDC(dc);
             let _ = GlobalFree(Some(global));
             return Err("clipboard memory lock failed".into());
         }
@@ -138,7 +259,10 @@ unsafe fn copy_to_clipboard(h: HWND, s: &State, r: RECT) -> Result<(), String> {
             let _ = GlobalFree(Some(global));
             return Err(format!("pixel read failed: {lines} of {hgt} lines"));
         }
-        OpenClipboard(Some(h)).map_err(|e| format!("clipboard busy: {e}"))?;
+        OpenClipboard(Some(h)).map_err(|e| {
+            let _ = GlobalFree(Some(global));
+            format!("clipboard busy: {e}")
+        })?;
         let result = EmptyClipboard().map_err(|e| e.to_string()).and_then(|()| {
             SetClipboardData(CF_DIB, Some(HANDLE(global.0)))
                 .map(|_| ())
@@ -274,9 +398,36 @@ unsafe extern "system" fn procedure(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LR
         }
     }
 }
-pub fn run() -> Result<(), String> {
+fn prepare() -> Result<(), String> {
     unsafe {
-        let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        let _ = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        let class = wide("WinarchyShot");
+        let instance = GetModuleHandleW(None).map_err(|e| e.to_string())?;
+        if RegisterClassW(&WNDCLASSW {
+            lpfnWndProc: Some(procedure),
+            hInstance: instance.into(),
+            lpszClassName: PCWSTR(class.as_ptr()),
+            hCursor: LoadCursorW(None, IDC_CROSS).unwrap_or_default(),
+            ..Default::default()
+        }) == 0
+        {
+            return Err(err("register screenshot window"));
+        }
+        // Initialize the thread's message queue without showing or capturing anything.
+        let _ = PeekMessageW(&mut MSG::default(), None, 0, 0, PM_NOREMOVE);
+    }
+    Ok(())
+}
+pub fn run() -> Result<(), String> {
+    prepare()?;
+    if capture()? {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+fn capture() -> Result<bool, String> {
+    let started = std::time::Instant::now();
+    unsafe {
         let origin = POINT {
             x: GetSystemMetrics(SM_XVIRTUALSCREEN),
             y: GetSystemMetrics(SM_YVIRTUALSCREEN),
@@ -289,26 +440,22 @@ pub fn run() -> Result<(), String> {
             return Err("no display".into());
         }
         let screen = GetDC(None);
-        let frozen = snapshot(screen, origin, size, false)?;
-        let dimmed = snapshot(screen, origin, size, true)?;
-        STATE.set(Some(State {
+        let mut state = State {
             size,
             screen,
-            frozen,
-            dimmed,
+            frozen: HDC::default(),
+            dimmed: HDC::default(),
             start: None,
             current: POINT::default(),
             cancelled: false,
-        }));
+        };
+        state.frozen = snapshot(screen, origin, size, false)?;
+        // Dim the frozen image, not a second potentially different desktop frame.
+        state.dimmed = snapshot(state.frozen, POINT::default(), size, true)?;
+        STATE.set(Some(state));
+        let _clear = ClearState;
         let class = wide("WinarchyShot");
         let instance = GetModuleHandleW(None).map_err(|e| e.to_string())?;
-        RegisterClassW(&WNDCLASSW {
-            lpfnWndProc: Some(procedure),
-            hInstance: instance.into(),
-            lpszClassName: PCWSTR(class.as_ptr()),
-            hCursor: LoadCursorW(None, IDC_CROSS).unwrap_or_default(),
-            ..Default::default()
-        });
         let window = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
             PCWSTR(class.as_ptr()),
@@ -325,24 +472,28 @@ pub fn run() -> Result<(), String> {
         )
         .map_err(|e| err(&format!("overlay window failed: {e}")))?;
         let _ = SetForegroundWindow(window);
+        crate::log::write(&format!(
+            "shot: overlay ready in {} ms",
+            started.elapsed().as_millis()
+        ));
         let mut msg = MSG::default();
-        while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+        loop {
+            let result = GetMessageW(&mut msg, None, 0, 0).0;
+            if result <= 0 {
+                if result == -1 {
+                    let _ = DestroyWindow(window);
+                    return Err(err("screenshot message loop"));
+                }
+                break;
+            }
             let _ = TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
         let _ = DestroyWindow(window);
         let cancelled = STATE.with_borrow_mut(|state| {
             let s = state.take();
-            if let Some(s) = &s {
-                let _ = DeleteDC(s.frozen);
-                let _ = DeleteDC(s.dimmed);
-                ReleaseDC(None, s.screen);
-            }
             s.is_none_or(|s| s.cancelled)
         });
-        if cancelled {
-            std::process::exit(1);
-        }
-        Ok(())
+        Ok(cancelled)
     }
 }

@@ -18,7 +18,13 @@ process when it does not answer, restarting it for the next time. `q` hides
 the window and keeps its state (directory, sort, filter); the next show reads
 the theme again. Showing a window takes 10 to 60 ms in the resident, against
 0.5 s for a fresh process and 2 to 3 s when Defender has not yet scanned a
-newly installed executable. The screenshot tool stays a short-lived process.
+newly installed executable. The screenshot tool also uses the resident: a dedicated
+thread prepares its window class, cursor and message queue at startup, without
+showing an overlay or capturing the desktop. `app shot` captures the current
+screen on demand; repeated requests during a selection are ignored. Completing
+or cancelling a selection releases its screen buffers and keeps the worker ready.
+A failed resident request falls back to the standalone screenshot process.
+`winarchy-apps.log` records the capture-to-overlay preparation time in milliseconds.
 The resident uses 25 to 45 MB and samples processes only while Tasks is
 shown; `winarchyctl quit` stops it with the daemon.
 
@@ -96,3 +102,13 @@ directory left open, or the profile the first time.
 
 `shot` freezes the virtual screen dimmed; drag a rectangle to copy it to the
 clipboard as a bitmap. Escape or a right click cancels.
+
+Manual Windows check after restarting Winarchy: confirm no overlay appears at
+startup, then time the first Win+Shift+S and subsequent invocations. Compare the
+`shot: overlay ready` log entries (capture/preparation only, not process startup).
+Test Escape, right click, focus loss, repeated shortcuts during selection and
+clipboard paste after confirmation. Change monitor layout/DPI and repeat; the
+next capture must reflect the new desktop. Repeated captures should not grow
+GDI handles or retained screen buffers, and Files/Tasks must still work after
+cancellation. Stop the resident and check that the next shortcut still works
+through the standalone fallback.

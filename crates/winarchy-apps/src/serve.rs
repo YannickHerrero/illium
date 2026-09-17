@@ -4,11 +4,12 @@
 //! database. `q` hides the window and keeps its state.
 use std::path::PathBuf;
 pub const ENDPOINT_PREFIX: &str = "winarchy-apps";
-/// `show files [dir]`, `show tasks`, `ping`, `quit`.
+/// `show files [dir]`, `show tasks`, `show shot`, `ping`, `quit`.
 #[derive(Debug, PartialEq)]
 enum Request {
     ShowFiles(Option<PathBuf>),
     ShowTasks,
+    ShowShot,
     Ping,
     Quit,
 }
@@ -27,6 +28,7 @@ fn parse(line: &str) -> Result<Request, String> {
             ("files", "") => Ok(Request::ShowFiles(None)),
             ("files", dir) => Ok(Request::ShowFiles(Some(PathBuf::from(dir)))),
             ("tasks", "") => Ok(Request::ShowTasks),
+            ("shot", "") => Ok(Request::ShowShot),
             _ => Err(format!("unknown application: {rest}")),
         },
         _ => Err(format!("unknown request: {line}")),
@@ -41,6 +43,7 @@ mod resident {
     struct Apps {
         files: crate::files::App,
         tasks: crate::tasks::App,
+        shot: crate::shot::Resident,
     }
     thread_local! {
         /// Lives on the UI thread; pipe requests reach it through the event loop.
@@ -58,6 +61,13 @@ mod resident {
                     .ok_or("applications not ready")?
                     .files
                     .show(dir.filter(|d| d.is_dir()))
+                    .map(|()| "ok".into())
+            }),
+            Request::ShowShot => APPS.with_borrow(|apps| {
+                apps.as_ref()
+                    .ok_or("applications not ready")?
+                    .shot
+                    .show()
                     .map(|()| "ok".into())
             }),
             Request::ShowTasks => APPS.with_borrow(|apps| {
@@ -91,6 +101,7 @@ mod resident {
         APPS.set(Some(Apps {
             files: crate::files::App::new(true)?,
             tasks: crate::tasks::App::new(true)?,
+            shot: crate::shot::Resident::new()?,
         }));
         std::thread::spawn(move || {
             winarchy_ipc::server::accept_loop(&file, dispatch, crate::log::write);
@@ -114,7 +125,8 @@ mod tests {
                 "C:\\Users\\me\\my dir"
             ))))
         );
-        assert!(parse("show shot").is_err());
+        assert_eq!(parse("show shot"), Ok(Request::ShowShot));
+        assert!(parse("show shot extra").is_err());
         assert!(parse("open files").is_err());
         assert!(parse("").is_err());
     }

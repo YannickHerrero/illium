@@ -31,7 +31,11 @@ fn pipe() -> Result<String, String> {
     ))
 }
 fn request(line: &str, timeout: Duration) -> Result<(), String> {
-    let reply = winarchy_ipc::client::client_at(&pipe()?, line, timeout)?;
+    let reply = if line.starts_with("show ") {
+        winarchy_ipc::client::client_at_foreground(&pipe()?, line, timeout)?
+    } else {
+        winarchy_ipc::client::client_at(&pipe()?, line, timeout)?
+    };
     if reply.ok { Ok(()) } else { Err(reply.message) }
 }
 /// Starts the resident process; a second instance exits on its own.
@@ -47,12 +51,10 @@ pub fn stop_resident() {
 /// fallback spawn, runs on its own thread.
 pub fn open(name: String) {
     std::thread::spawn(move || {
-        if name != "shot" && request(&format!("show {name}"), Duration::from_secs(2)).is_ok() {
+        if request(&format!("show {name}"), Duration::from_secs(2)).is_ok() {
             return;
         }
-        if name != "shot" {
-            start_resident();
-        }
+        start_resident();
         if let Err(e) = command(&name).and_then(|c| super::native::spawn(&c)) {
             tracing::warn!(app = %name, %e, "application not started");
         }

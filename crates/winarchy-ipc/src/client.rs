@@ -22,6 +22,18 @@ pub fn client(command: &str) -> Result<Reply, String> {
 }
 /// Sends `command` to the server behind `name`, giving up after `timeout`.
 pub fn client_at(name: &str, command: &str, timeout: Duration) -> Result<Reply, String> {
+    exchange(name, command, timeout, false)
+}
+/// Like `client_at`, but allows the verified server to activate a requested UI.
+pub fn client_at_foreground(name: &str, command: &str, timeout: Duration) -> Result<Reply, String> {
+    exchange(name, command, timeout, true)
+}
+fn exchange(
+    name: &str,
+    command: &str,
+    timeout: Duration,
+    foreground: bool,
+) -> Result<Reply, String> {
     // No detached blocking worker: each pending operation has a cancellation deadline.
     let deadline = Instant::now() + timeout;
     let wide_name = wide(name);
@@ -41,6 +53,9 @@ pub fn client_at(name: &str, command: &str, timeout: Duration) -> Result<Reply, 
     unsafe { GetNamedPipeServerProcessId(HANDLE(file.as_raw_handle()), &mut pid) }
         .map_err(|e| e.to_string())?;
     crate::identity::verify_server(pid)?;
+    if foreground {
+        let _ = unsafe { windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow(pid) };
+    }
     let mut io = PipeIo {
         handle: HANDLE(file.as_raw_handle()),
         deadline,
