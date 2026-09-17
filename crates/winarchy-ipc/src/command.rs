@@ -38,6 +38,8 @@ pub enum Command {
     /// Browse images of the active theme without applying until confirmation.
     WallpaperPicker,
     WallpaperNext,
+    /// Open the keybindings viewer and editor.
+    Keybindings,
     /// None selects the solid theme background.
     Wallpaper(Option<String>),
     Explorer(bool),
@@ -92,6 +94,7 @@ impl FromStr for Command {
             ["spawn", app] => Self::Spawn((*app).into()),
             ["launcher", "toggle"] => Self::Launcher,
             ["meta", "toggle"] => Self::Meta,
+            ["keybindings", "toggle"] => Self::Keybindings,
             ["app", name] if name.chars().all(|c| c.is_ascii_lowercase()) => {
                 Self::App((*name).into())
             }
@@ -131,6 +134,8 @@ mod tests {
         );
         assert_eq!("app shot".parse(), Ok(Command::App("shot".into())));
         assert_eq!("theme picker".parse(), Ok(Command::ThemePicker));
+        assert_eq!("keybindings toggle".parse(), Ok(Command::Keybindings));
+        assert!("keybindings".parse::<Command>().is_err());
         assert!("theme picker extra".parse::<Command>().is_err());
         for s in [
             "workspace 0",
