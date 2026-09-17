@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Winarchy browser filtering fixture</title>
+<style>body { font: 20px system-ui; color-scheme: light dark; } .advert { background: red; padding: 20px; }</style>
+<h1>Native filtering fixture</h1>
+<p id="network">Waiting for scripts…</p>
+<div class="advert">FAIL: this advertising placeholder should disappear after navigation completes.</div>
+<script src="ads.js"></script>
+<script src="ads.js?allowed=1"></script>
+<script>
+window.addEventListener('load', () => {
+  document.querySelector('#network').textContent = !window.adLoaded && window.exceptionLoaded
+    ? 'PASS: ad blocked and exception allowed.' : 'FAIL (or blocking disabled): inspect Network in DevTools.';
+});
+</script>
+<p>Ctrl+L → :block → Enter should reload with blocking disabled; both checks should then fail. Repeat to re-enable.</p>
+<p><a href="/index.html?popup" target="_blank">New-window policy test (currently opens here)</a></p>
+<input placeholder="Ctrl+L must work even while this input has focus">

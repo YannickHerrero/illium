@@ -1,0 +1,4 @@
+! Local deterministic integration fixture; append to browser/custom.txt for testing.
+|http://127.0.0.1:8765/ads.js$script
+@@|http://127.0.0.1:8765/ads.js?allowed=1$script
+127.0.0.1##.advert

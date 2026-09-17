@@ -1,0 +1,16 @@
+[package]
+name = "winarchy-browser"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Minimal WebView2 browser with native ad filtering"
+
+[dependencies]
+adblock = "=0.13.3"
+url = "2"
+serde_json = "1"
+winarchy-theme = { path = "../winarchy-theme", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39.1"
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_HiDpi", "Win32_Graphics_Gdi"] }
