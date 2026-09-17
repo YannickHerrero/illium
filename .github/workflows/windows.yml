@@ -32,8 +32,10 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory dist/winarchy
-          Copy-Item target/release/winarchy.exe,target/release/winarchyctl.exe,target/release/winarchy-apps.exe,target/release/winarchy-terminal.exe,target/release/winarchy-dictate.exe,README.md,LICENSE dist/winarchy
+          Copy-Item target/release/winarchy.exe,target/release/winarchyctl.exe,target/release/winarchy-apps.exe,target/release/winarchy-terminal.exe,target/release/winarchy-dictate.exe,target/release/winarchy-browser.exe,README.md,LICENSE dist/winarchy
           Copy-Item -Recurse config,docs dist/winarchy
+          New-Item -ItemType Directory dist/winarchy/scripts
+          Copy-Item scripts/update-browser-filters.ps1,scripts/measure-browser.ps1 dist/winarchy/scripts
           Compress-Archive dist/winarchy/* dist/winarchy-windows-x64.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

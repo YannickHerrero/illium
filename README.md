@@ -15,7 +15,10 @@ A minimal, keyboard-first Windows 11 x64 tiling window manager and experimental 
 The default terminal alias uses [WezTerm](https://wezterm.org/) (`wezterm.exe` on PATH).
 An experimental, bundled [native WSL terminal](docs/terminal.md) is also available:
 `winarchy-terminal.exe`, with resident fast opening and live Winarchy themes, as is
-[hold-to-talk dictation](docs/dictate.md) through `winarchy-dictate.exe`. Build on Windows with Rust and Visual Studio's **Desktop development with C++** tools:
+[hold-to-talk dictation](docs/dictate.md) through `winarchy-dictate.exe`.
+The experimental [minimal browser](docs/browser.md), `winarchy-browser.exe`, hosts WebView2
+with native ad filtering and a themed `Ctrl+L` address editor (filter-list setup required).
+Build on Windows with Rust and Visual Studio's **Desktop development with C++** tools:
 
 ```powershell
 cargo build --release
