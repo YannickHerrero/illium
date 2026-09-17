@@ -4,7 +4,9 @@
 param(
     [Parameter(Mandatory=$true)][string]$Exe,
     [string]$TestUrl = 'http://127.0.0.1:8765/index.html',
-    [switch]$CheckTilingFocus
+    [switch]$CheckTilingFocus,
+    # Allows palette/navigation checks when the desktop cannot grant foreground focus.
+    [switch]$SkipFocusChecks
 )
 $ErrorActionPreference = 'Stop'
 Add-Type @'
@@ -45,6 +47,12 @@ $configDir = Join-Path $root 'config'
 $filters = Join-Path $configDir 'browser'
 New-Item -ItemType Directory -Force $filters | Out-Null
 Copy-Item "$PSScriptRoot/../tests/browser/custom.txt" $filters
+New-Item -ItemType Directory -Force (Join-Path $configDir 'themes') | Out-Null
+$themePath = Join-Path $configDir 'themes/test.toml'
+$theme = (Get-Content "$PSScriptRoot/../config/themes/catppuccin-mocha.toml" -Raw) + "`nbackground_opacity = 0.75`n"
+[IO.File]::WriteAllText($themePath, $theme)
+[IO.File]::WriteAllText((Join-Path $configDir 'winarchy.toml'), 'theme = "test"')
+$opacityPath = Join-Path $configDir 'background-opacity.state'
 @{
     history = @(@{ url='https://rust-lang.org/'; title='Rust language' })
     bookmarks = @(@{ url='https://bookmarked.example/'; title='Bookmarked page' })
@@ -78,7 +86,14 @@ try {
     if (![BrowserTest]::IsWindowVisible($edit)) { throw 'Home input is not visible' }
     if ([BrowserTest]::IsWindowVisible([BrowserTest]::GetDlgItem($window, 103))) { throw 'Home explanatory heading should be hidden' }
     [uint32]$key=0; [byte]$alpha=0; [uint32]$flags=0
-    if (![BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -or $alpha -ne 217) { throw 'Home alpha is not 85%' }
+    if (![BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -or $alpha -ne 191) { throw 'Home alpha did not use the theme 75%' }
+    [IO.File]::WriteAllText($opacityPath, "theme = 'test'`nopacity = 0.60`n")
+    Wait-For { [BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -and $alpha -eq 153 } 'Home did not follow live 60% override'
+    [IO.File]::WriteAllText($themePath, $theme.Replace('= 0.75', '= 2.0'))
+    Start-Sleep -Milliseconds 300
+    if (![BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -or $alpha -ne 153) { throw 'Invalid theme changed the last valid opacity' }
+    [IO.File]::WriteAllText($themePath, $theme)
+    if (!$SkipFocusChecks) {
     # Focus a suggestion, then type: the first character must go into search,
     # not list-box type-ahead. These are window-local messages, not global input.
     [void][BrowserTest]::PostMessage($list,0x0201,[IntPtr]1,[IntPtr]0x00080008)
@@ -96,6 +111,7 @@ try {
     # Queued Unicode input targeting the home container is forwarded as well.
     [void][BrowserTest]::PostMessage($window,0x0102,[IntPtr]0x00E9,[IntPtr]1)
     Wait-For { [void][BrowserTest]::GetText($edit,0x000D,[IntPtr]256,$text); $text.ToString().EndsWith([string][char]0x00E9) } 'Unicode input was lost'
+    }
     [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, 'bkmd')
     Wait-For { [BrowserTest]::SendMessage($list,0x018B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 1 } 'Fuzzy bookmark match missing'
     [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, 'zzzzzzzz')
@@ -107,6 +123,9 @@ try {
     Wait-For { ((Get-Content $library -Raw | ConvertFrom-Json).history.url) -contains $TestUrl } 'Successful visit was not recorded'
     if ([BrowserTest]::IsWindowVisible($edit)) { throw 'Home input still visible on the page' }
     if ([BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags)) { throw 'Page should no longer be layered/translucent' }
+    [IO.File]::WriteAllText($opacityPath, "theme = 'test'`nopacity = 0.45`n")
+    Start-Sleep -Milliseconds 400
+    if ([BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags)) { throw 'Live opacity made a web page translucent' }
     # Invoke the same queued action as Ctrl+D without injecting keys into the user's desktop.
     [void][BrowserTest]::PostMessage($window,0x8005,[IntPtr]::Zero,[IntPtr]::Zero)
     Wait-For { ((Get-Content $library -Raw | ConvertFrom-Json).bookmarks.url) -contains $TestUrl } 'Bookmark was not saved'
@@ -122,6 +141,11 @@ try {
     Start-Sleep -Milliseconds 200
     [void][BrowserTest]::PostMessage($edit,0x0100,[IntPtr]13,[IntPtr]::Zero)
     Wait-For { [BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) } 'Home did not return'
+    Wait-For { [BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -and $alpha -eq 115 } 'Returning home lost the override set while browsing'
+    Remove-Item $opacityPath
+    Wait-For { [BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -and $alpha -eq 191 } 'Clearing override did not restore theme opacity'
+    $process.Refresh()
+    if ($process.MainWindowHandle -ne $window) { throw 'Opacity update recreated the browser window' }
     [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, 'https')
     Wait-For { [BrowserTest]::SendMessage($list,0x018B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 2 } 'Home must search the bookmark and history together'
     Write-Host "PASS: home opacity, fuzzy suggestions, navigation, opaque page, history and bookmark persistence. Logs: $root"

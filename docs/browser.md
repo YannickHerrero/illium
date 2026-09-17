@@ -110,7 +110,7 @@ powershell -ExecutionPolicy Bypass -File scripts/test-browser-desktop.ps1 `
   -Exe "$PWD/target/release/winarchy-browser.exe"
 ```
 
-It uses disposable configuration and profile directories, checks home opacity, unified fuzzy matching, navigation, opaque page rendering mode, history and add-only bookmark persistence, and closes only its own process. With an updated Winarchy running, add `-CheckTilingFocus` to check foreground focus and cursor centering after tiling (do not move the mouse during this check). It invokes the queued bookmark action directly, without injecting global keystrokes; manually verify the actual `Ctrl+D` accelerator as well. It retains its temporary logs for diagnosis.
+It uses disposable configuration and profile directories, checks theme-owned home opacity, live overrides/reset, invalid-theme retention, unified fuzzy matching, navigation, opaque pages even during opacity updates, history and add-only bookmark persistence, and closes only its own process. `-SkipFocusChecks` skips the first-character/Unicode focus-routing checks when foreground focus is unavailable; opacity and navigation checks still run. With an updated Winarchy running, add `-CheckTilingFocus` to check foreground focus and cursor centering after tiling (do not move the mouse during this check). It invokes the queued bookmark action directly, without injecting global keystrokes; manually verify the actual `Ctrl+D` accelerator as well. It retains its temporary logs for diagnosis.
 
 For resident lifecycle and latency/memory checks, close and stop any existing resident first, then run:
 
