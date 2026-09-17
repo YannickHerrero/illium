@@ -20,6 +20,10 @@ The default alias uses WezTerm. Alternatively, opt into the bundled
 in `apps.toml`; keep all Winarchy executables together. No separate terminal
 installation is needed for that option.
 
+[Hold-to-talk dictation](dictate.md) is another optional companion: keep
+`winarchy-dictate.exe` beside the daemon and bind `dictate` to a key. It
+downloads its speech model on first use.
+
 For the default alias, install WezTerm separately, for example `winget install wez.wezterm`. Restart the terminal after changing PATH, or configure an absolute executable path in `apps.toml`. Winarchy does not silently download or install applications.
 
 ## Developing from WSL
@@ -33,7 +37,8 @@ The application is a Windows binary, **not** a Linux/Wayland window manager. Thr
 cargo install cargo-xwin --locked
 rustup target add x86_64-pc-windows-msvc
 cargo xwin build --workspace --release --target x86_64-pc-windows-msvc --locked
-# Copy winarchy.exe, winarchyctl.exe and winarchy-apps.exe from target/x86_64-pc-windows-msvc/release
+# Copy winarchy.exe, winarchyctl.exe, winarchy-apps.exe and the optional winarchy-terminal.exe
+# and winarchy-dictate.exe from target/x86_64-pc-windows-msvc/release
 # to %LOCALAPPDATA%\Programs\Winarchy.
 ```
 
