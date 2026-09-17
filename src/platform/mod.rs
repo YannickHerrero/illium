@@ -1,6 +1,7 @@
 mod applet;
 mod apps;
 mod audio;
+mod browser;
 mod dictate;
 mod dpi;
 use winarchy_ipc::identity;
@@ -393,7 +394,17 @@ impl Manager {
         input::update(bindings);
         let terminal_changed =
             config.apps.apps.get("terminal") != self.config.apps.apps.get("terminal");
+        let browser_changed =
+            config.apps.apps.get("browser") != self.config.apps.apps.get("browser");
         self.config = config;
+        if browser_changed {
+            let target = self.config.apps.apps.get("browser");
+            if target.is_some_and(|s| browser::bundled(s)) {
+                browser::prewarm(target);
+            } else {
+                browser::stop_idle();
+            }
+        }
         if terminal_changed {
             terminal::prewarm(self.config.apps.apps.get("terminal"));
         }
@@ -559,6 +570,7 @@ impl Manager {
             Command::LaunchTarget { target, shortcut } => {
                 if shortcut { native::shortcut(&target)?; }
                 else if terminal::bundled(&target) { terminal::open(); }
+                else if browser::bundled(&target) { browser::open(); }
                 else { native::spawn(&target)?; }
             }
             Command::Launcher => {
@@ -615,6 +627,7 @@ impl Manager {
             Command::Quit => {
                 apps::stop_resident();
                 terminal::stop_idle();
+                browser::stop_idle();
                 dictate::stop_resident();
                 slint::quit_event_loop().map_err(|e| e.to_string())?;
             }
@@ -1158,6 +1171,7 @@ pub fn run(replace: bool) -> Result<(), String> {
                         tracing::info!("Winarchy ready");
                         apps::start_resident();
                         terminal::prewarm(m.config.apps.apps.get("terminal"));
+                        browser::prewarm(m.config.apps.apps.get("browser"));
                     }
                     Err(e) => {
                         tracing::error!(%e,"session initialization failed");
