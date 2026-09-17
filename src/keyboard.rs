@@ -5,46 +5,134 @@ pub struct Binding {
     pub modifiers: u8,
     pub command: Command,
 }
+pub const ALT: u8 = 1;
+pub const CTRL: u8 = 2;
+pub const SHIFT: u8 = 4;
+pub const SUPER: u8 = 8;
+const NAMED: [(&str, u32); 8] = [
+    ("Space", 32),
+    ("Enter", 13),
+    ("Left", 37),
+    ("Up", 38),
+    ("Right", 39),
+    ("Down", 40),
+    ("Escape", 27),
+    ("Tab", 9),
+];
+/// Left/right Shift, Ctrl, Alt and the Windows keys.
+pub fn is_modifier(vk: u32) -> bool {
+    matches!(vk, 0x10..=0x12 | 0xa0..=0xa5 | 0x5b | 0x5c)
+}
+/// Virtual key of a printable punctuation character on the active keyboard
+/// layout, so `"Alt+Shift+?"` means the physical key that types `?` here.
+#[cfg(windows)]
+fn layout_key(c: char) -> Option<u32> {
+    let code =
+        unsafe { windows::Win32::UI::Input::KeyboardAndMouse::VkKeyScanW(u16::try_from(c).ok()?) };
+    (code != -1).then(|| u32::from(code as u16 & 0xff))
+}
+#[cfg(windows)]
+fn layout_char(vk: u32) -> Option<char> {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{MAPVK_VK_TO_CHAR, MapVirtualKeyW};
+    let c = unsafe { MapVirtualKeyW(vk, MAPVK_VK_TO_CHAR) } & 0x7fff;
+    char::from_u32(c).filter(|c| !c.is_control() && *c != ' ')
+}
+/// US layout stand-in: the tests run without a keyboard.
+#[cfg(not(windows))]
+const US_OEM: [(char, u32); 11] = [
+    (';', 0xba),
+    ('=', 0xbb),
+    (',', 0xbc),
+    ('-', 0xbd),
+    ('.', 0xbe),
+    ('/', 0xbf),
+    ('?', 0xbf),
+    ('`', 0xc0),
+    ('[', 0xdb),
+    ('\\', 0xdc),
+    (']', 0xdd),
+];
+#[cfg(not(windows))]
+fn layout_key(c: char) -> Option<u32> {
+    US_OEM.iter().find(|(k, _)| *k == c).map(|(_, vk)| *vk)
+}
+#[cfg(not(windows))]
+fn layout_char(vk: u32) -> Option<char> {
+    US_OEM.iter().find(|(_, k)| *k == vk).map(|(c, _)| *c)
+}
+/// Splits `"Ctrl+Alt+K"` into its virtual key and modifier mask.
+pub fn chord(key: &str) -> Result<(u32, u8), String> {
+    let mut modifiers = 0;
+    let mut vk = None;
+    for part in key.split('+') {
+        let lower = part.to_ascii_lowercase();
+        let modifier = match lower.as_str() {
+            "alt" => Some(ALT),
+            "ctrl" => Some(CTRL),
+            "shift" => Some(SHIFT),
+            "super" => Some(SUPER),
+            _ => None,
+        };
+        if let Some(m) = modifier {
+            if modifiers & m != 0 {
+                return Err(format!("duplicate modifier: {key}"));
+            }
+            modifiers |= m;
+            continue;
+        }
+        if vk.is_some() {
+            return Err(format!("multiple keys in chord: {key}"));
+        }
+        let named = NAMED
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case(&lower))
+            .map(|(_, vk)| *vk);
+        let mut chars = part.chars();
+        vk = Some(match (named, chars.next(), chars.next()) {
+            (Some(vk), _, _) => vk,
+            (None, Some(c), None) if c.is_ascii_alphanumeric() => c.to_ascii_uppercase() as u32,
+            (None, Some(c), None) if c.is_ascii_punctuation() => {
+                layout_key(c).ok_or_else(|| format!("unsupported key: {key}"))?
+            }
+            _ => return Err(format!("unsupported key: {key}")),
+        });
+    }
+    let key_code = vk.ok_or_else(|| format!("missing key: {key}"))?;
+    Ok((key_code, modifiers))
+}
+/// Configuration spelling of a virtual key, or None when it cannot be bound.
+pub fn key_name(vk: u32) -> Option<String> {
+    if let Some((name, _)) = NAMED.iter().find(|(_, code)| *code == vk) {
+        return Some((*name).into());
+    }
+    if (0x30..=0x39).contains(&vk) || (0x41..=0x5a).contains(&vk) {
+        return char::from_u32(vk).map(String::from);
+    }
+    layout_char(vk)
+        .filter(|c| c.is_ascii_punctuation())
+        .map(String::from)
+}
+/// Inverse of [`chord`], in the canonical modifier order.
+pub fn format(vk: u32, modifiers: u8) -> Option<String> {
+    let name = key_name(vk)?;
+    let mut parts = Vec::new();
+    for (bit, label) in [
+        (CTRL, "Ctrl"),
+        (ALT, "Alt"),
+        (SHIFT, "Shift"),
+        (SUPER, "Super"),
+    ] {
+        if modifiers & bit != 0 {
+            parts.push(label.to_owned());
+        }
+    }
+    parts.push(name);
+    Some(parts.join("+"))
+}
 pub fn parse(keys: &Keys) -> Result<Vec<Binding>, String> {
     let mut result = Vec::new();
     for (key, command) in &keys.keybindings {
-        let mut modifiers = 0;
-        let mut vk = None;
-        for part in key.split('+') {
-            let part = part.to_ascii_lowercase();
-            let modifier = match part.as_str() {
-                "alt" => Some(1),
-                "ctrl" => Some(2),
-                "shift" => Some(4),
-                "super" => Some(8),
-                _ => None,
-            };
-            if let Some(m) = modifier {
-                if modifiers & m != 0 {
-                    return Err(format!("duplicate modifier: {key}"));
-                }
-                modifiers |= m;
-                continue;
-            }
-            if vk.is_some() {
-                return Err(format!("multiple keys in chord: {key}"));
-            }
-            vk = Some(match part.as_str() {
-                "space" => 32,
-                "enter" => 13,
-                "left" => 37,
-                "up" => 38,
-                "right" => 39,
-                "down" => 40,
-                "escape" => 27,
-                "tab" => 9,
-                s if s.len() == 1 && s.as_bytes()[0].is_ascii_alphanumeric() => {
-                    s.to_ascii_uppercase().as_bytes()[0] as u32
-                }
-                _ => return Err(format!("unsupported key: {key}")),
-            });
-        }
-        let key_code = vk.ok_or_else(|| format!("missing key: {key}"))?;
+        let (key_code, modifiers) = chord(key)?;
         if result
             .iter()
             .any(|b: &Binding| b.key == key_code && b.modifiers == modifiers)
@@ -67,7 +155,7 @@ mod tests {
         let keys: Keys =
             toml::from_str(include_str!("../config/defaults/keybindings.toml")).unwrap();
         let bs = parse(&keys).unwrap();
-        assert_eq!(bs.len(), 49);
+        assert_eq!(bs.len(), 50);
         assert!(
             bs.iter()
                 .any(|b| b.command == Command::ThemePicker && b.key == 32 && b.modifiers == 7)
@@ -75,6 +163,10 @@ mod tests {
         assert!(
             bs.iter()
                 .any(|b| b.command == Command::WallpaperPicker && b.key == 87 && b.modifiers == 7)
+        );
+        assert!(
+            bs.iter()
+                .any(|b| b.command == Command::Keybindings && b.modifiers == ALT | SHIFT)
         );
         assert!(
             bs.iter()
@@ -90,7 +182,16 @@ mod tests {
     }
     #[test]
     fn reject_ambiguous_chords() {
-        for chord in ["Alt+Alt+Q", "Alt+A+B", "Ctrl+Alt+Delete", "Alt", "Alt+", ""] {
+        for chord in [
+            "Alt+Alt+Q",
+            "Alt+A+B",
+            "Ctrl+Alt+Delete",
+            "Alt",
+            "Alt+",
+            "",
+            "Alt+F1",
+            "Alt+é",
+        ] {
             let keys = Keys {
                 keybindings: [(chord.into(), "quit".into())].into(),
             };
@@ -111,5 +212,27 @@ mod tests {
             .into(),
         };
         assert!(parse(&keys).is_err());
+    }
+    #[test]
+    fn format_roundtrips_every_default() {
+        let keys: Keys =
+            toml::from_str(include_str!("../config/defaults/keybindings.toml")).unwrap();
+        for key in keys.keybindings.keys() {
+            let (vk, modifiers) = chord(key).unwrap();
+            let spelled = format(vk, modifiers).unwrap();
+            assert_eq!(
+                chord(&spelled).unwrap(),
+                (vk, modifiers),
+                "{key} -> {spelled}"
+            );
+        }
+        assert_eq!(
+            format(0x41, CTRL | ALT | SHIFT | SUPER).unwrap(),
+            "Ctrl+Alt+Shift+Super+A"
+        );
+        assert_eq!(format(13, ALT).unwrap(), "Alt+Enter");
+        assert_eq!(format(0x70, ALT), None);
+        assert!(is_modifier(0xa4));
+        assert!(!is_modifier(0x41));
     }
 }

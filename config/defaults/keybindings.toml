@@ -1,6 +1,7 @@
 [keybindings]
 "Alt+Space" = "launcher toggle"
 "Alt+Shift+Space" = "meta toggle"
+"Alt+Shift+?" = "keybindings toggle"
 "Ctrl+Alt+Shift+Space" = "theme picker"
 "Ctrl+Alt+Shift+W" = "wallpaper picker"
 "Alt+Enter" = "spawn terminal"
