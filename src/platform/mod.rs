@@ -63,6 +63,11 @@ pub enum Event {
     Escape,
     /// Backspace on an empty launcher query: leave a submenu.
     Back,
+    /// Keybindings editor input, tagged with its opening generation.
+    Keybindings(u64, shell::keybindings::Input),
+    /// A key seen by the hook while the editor records a chord: virtual key,
+    /// modifier mask and whether it went down.
+    Capture(u32, u8, bool),
 }
 struct Manager {
     config: Config,
@@ -365,6 +370,7 @@ impl Manager {
             terminal::prewarm(self.config.apps.apps.get("terminal"));
         }
         self.applets.load(&self.config);
+        self.shell.editor.refresh(&self.config);
         let shell_ms = started.elapsed().as_millis();
         if let Some(mode) = &self.config.theme.mode {
             native::color_mode(mode == "light");
@@ -535,13 +541,25 @@ impl Manager {
                 self.shell.picker.close();
                 self.shell.toggle_meta(&self.config, self.area())?;
             }
+            Command::Keybindings => {
+                if self.shell.editor.opened {
+                    self.finish_editor(shell::keybindings::Outcome::Close);
+                } else {
+                    let restore = self.restore_target(foreground);
+                    self.shell.dismiss();
+                    self.shell.close_popup();
+                    self.applets.close();
+                    self.finish_picker(crate::theme_picker::Outcome::Cancel);
+                    let monitor = self.full_area();
+                    self.shell.editor.open(&self.config, monitor, restore);
+                }
+            }
             Command::App(name) => apps::open(name),
             Command::Reload => self.reload()?,
             Command::ThemePicker | Command::WallpaperPicker => {
                 if !self.shell.picker.opened {
-                    let mut pid = 0;
-                    unsafe { GetWindowThreadProcessId(native::hwnd(foreground), Some(&mut pid)); }
-                    let restore = if pid != std::process::id() && foreground != 0 { Some(foreground) } else { self.model.focused };
+                    let restore = self.restore_target(foreground);
+                    self.finish_editor(shell::keybindings::Outcome::Close);
                     self.shell.dismiss();
                     self.shell.close_popup();
                     self.applets.close();
@@ -573,6 +591,26 @@ impl Manager {
         }
         Ok("ok".into())
     }
+    /// Window to refocus when a full-screen surface closes: the foreground
+    /// window unless it belongs to Winarchy itself.
+    fn restore_target(&self, foreground: isize) -> Option<isize> {
+        let mut pid = 0;
+        unsafe {
+            GetWindowThreadProcessId(native::hwnd(foreground), Some(&mut pid));
+        }
+        if pid != std::process::id() && foreground != 0 {
+            Some(foreground)
+        } else {
+            self.model.focused
+        }
+    }
+    fn restore_focus(&mut self, restore: Option<isize>) {
+        if let Some(id) = restore.filter(|id| native::visible(*id) && !native::minimized(*id)) {
+            native::focus(id, false);
+        } else {
+            self.focus_visible();
+        }
+    }
     fn finish_picker(&mut self, outcome: crate::theme_picker::Outcome) {
         use crate::theme_picker::Outcome;
         if outcome == Outcome::None {
@@ -589,16 +627,49 @@ impl Manager {
             tracing::warn!(%error, "selected carousel item could not be applied");
             self.shell.picker.error = Some(error);
         }
-        if let Some(id) = restore.filter(|id| native::visible(*id) && !native::minimized(*id)) {
-            native::focus(id, false);
-        } else {
-            self.focus_visible();
+        self.restore_focus(restore);
+    }
+    fn finish_editor(&mut self, outcome: shell::keybindings::Outcome) {
+        use shell::keybindings::Outcome;
+        match outcome {
+            Outcome::None => {}
+            Outcome::Close => {
+                if self.shell.editor.opened {
+                    let restore = self.shell.editor.close();
+                    self.restore_focus(restore);
+                }
+            }
+            Outcome::Apply(apply) => {
+                if let Err(e) = self.apply_keybinding(apply) {
+                    tracing::warn!(%e, "keybinding not applied");
+                    self.shell.editor.fail(e);
+                }
+            }
         }
+    }
+    /// Rewrites the user's file and reloads; a rejected reload restores the
+    /// previous text so the running configuration and the file stay in step.
+    fn apply_keybinding(&mut self, apply: shell::keybindings::Apply) -> Result<(), String> {
+        let path = self.config.home.join("keybindings.toml");
+        let old = crate::files::read_config(&path)?;
+        let text = std::str::from_utf8(&old).map_err(|e| e.to_string())?;
+        let remove: Vec<&str> = apply.remove.iter().map(String::as_str).collect();
+        let new = crate::keybindings::rewrite(text, &remove, &apply.chord, &apply.command)?;
+        std::fs::write(&path, new).map_err(|e| e.to_string())?;
+        if let Err(e) = self.reload_config(false) {
+            let _ = std::fs::write(path, old);
+            return Err(e);
+        }
+        Ok(())
     }
     fn event(&mut self, event: Event) {
         self.dispatch(event);
         input::POPUP_OPEN.store(
             self.shell.popup_open.is_some() || self.applets.open.is_some(),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        input::CAPTURE.store(
+            self.shell.editor.capturing(),
             std::sync::atomic::Ordering::Relaxed,
         );
     }
@@ -675,6 +746,14 @@ impl Manager {
                 self.finish_picker(outcome);
             }
             Event::ThemePreviews => self.shell.picker.rescan(),
+            Event::Keybindings(epoch, input) => {
+                let outcome = self.shell.editor.input(epoch, input);
+                self.finish_editor(outcome);
+            }
+            Event::Capture(vk, modifiers, down) => {
+                let outcome = self.shell.editor.capture(vk, modifiers, down);
+                self.finish_editor(outcome);
+            }
             Event::Search(q) => self.shell.search(&q, self.config.launcher.max_results),
             Event::Launch(n) if self.shell.meta => {
                 let max = self.config.launcher.max_results;
@@ -710,6 +789,7 @@ impl Manager {
                 if self.shell.picker.opened {
                     self.finish_picker(crate::theme_picker::Outcome::Cancel);
                 }
+                self.finish_editor(shell::keybindings::Outcome::Close);
                 let target = self.applets.attached(&kind).unwrap_or_else(|| kind.clone());
                 if self
                     .just_closed
@@ -810,6 +890,7 @@ impl Manager {
                 // WM_SETTINGCHANGE can change DPI without changing physical bounds.
                 let monitor = self.full_area();
                 self.shell.picker.display_changed(monitor);
+                self.shell.editor.display_changed(monitor);
             }
             Event::Wallpapers => {
                 self.shell.refresh_wallpaper();

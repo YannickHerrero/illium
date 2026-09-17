@@ -144,10 +144,12 @@ pub enum MetaEntry {
     Menu(MetaMenu),
     Run(crate::command::Command),
 }
+pub(super) mod keybindings;
 pub(super) mod theme_picker;
 mod wallpaper;
 pub struct Shell {
     pub picker: theme_picker::Picker,
+    pub editor: keybindings::Editor,
     pub backgrounds: Vec<Background>,
     pub bars: Vec<Bar>,
     /// Bars show the wallpaper through; toggled by clicking an empty bar area.
@@ -229,6 +231,7 @@ impl Shell {
         let popup = Popup::new().map_err(|e| e.to_string())?;
         Ok(Self {
             picker: theme_picker::Picker::new(tx.clone())?,
+            editor: keybindings::Editor::new(tx.clone())?,
             backgrounds: vec![],
             bars: vec![],
             bar_transparent: false,
@@ -268,6 +271,7 @@ impl Shell {
     /// Update existing surfaces in place; application index, geometry and UI state stay intact.
     pub fn apply_theme(&mut self, c: &Config) {
         self.picker.apply_theme(c);
+        self.editor.apply_theme(c);
         self.home = c.home.clone();
         self.theme = c.global.theme.clone();
         self.popup.set_bg(color(&c.theme.background));
@@ -292,6 +296,7 @@ impl Shell {
     pub fn configure(&mut self, c: &Config, monitors: &[Rect]) -> Result<(), String> {
         self.pending = true;
         self.picker.apply_theme(c);
+        self.editor.apply_theme(c);
         self.descriptions = c.launcher.show_descriptions;
         self.home = c.home.clone();
         self.theme = c.global.theme.clone();
@@ -480,6 +485,7 @@ impl Shell {
             self.popup_pending = None;
         }
         self.picker.arrange();
+        self.editor.arrange();
         true
     }
     pub fn toggle_bar_background(&mut self) {
@@ -587,7 +593,7 @@ impl Shell {
             ))));
     }
     pub fn interactive(&self) -> bool {
-        self.visible || self.picker.opened
+        self.visible || self.picker.opened || self.editor.opened
     }
     pub fn dismiss(&mut self) {
         let _ = self.launcher.hide();
@@ -619,6 +625,10 @@ impl Shell {
         vec![
             ("Apps ›".into(), MetaEntry::Menu(MetaMenu::Apps)),
             ("System ›".into(), MetaEntry::Menu(MetaMenu::System)),
+            (
+                "Keybindings ›".into(),
+                MetaEntry::Run(crate::command::Command::Keybindings),
+            ),
             (
                 "Theme ›".into(),
                 MetaEntry::Run(crate::command::Command::ThemePicker),

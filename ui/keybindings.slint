@@ -1,0 +1,198 @@
+// Keybindings viewer and editor: a searchable list over a dimmed desktop, and
+// a capture dialog inside the same window. Keys pressed while the dialog is
+// open never reach this window: the keyboard hook reports them to the daemon.
+export struct KeyRow { chord: string, description: string, changed: bool, unbound: bool }
+
+component Button inherits Rectangle {
+    in property <string> label;
+    in property <color> fg;
+    in property <color> border;
+    callback clicked();
+    width: 76px; height: 28px;
+    border-width: 1px; border-color: root.border; border-radius: 3px;
+    Text { text: root.label; color: root.fg; font-size: 12px; horizontal-alignment: center; vertical-alignment: center; }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+export component KeybindingsEditor inherits Window {
+    title: "Winarchy Keybindings";
+    no-frame: true;
+    in property <length> surface-width;
+    in property <length> surface-height;
+    width: surface-width; height: surface-height;
+    in property <color> bg;
+    in property <color> surface;
+    in property <color> overlay;
+    in property <color> fg;
+    in property <color> muted;
+    in property <color> accent;
+    in property <color> warning;
+    in property <[KeyRow]> rows;
+    in-out property <int> selected: 0;
+    in-out property <string> query;
+    in property <bool> capture-open;
+    in property <string> capture-title;
+    /// Captured chord, or empty while nothing complete was pressed.
+    in property <string> capture-chord;
+    /// Modifiers held or the captured chord, one chip each.
+    in property <[string]> capture-chips;
+    in property <string> capture-message;
+    in property <bool> capture-warning;
+    in property <string> capture-hint;
+    callback search(string);
+    callback change(int);
+    callback reset(int);
+    callback dismiss();
+    property <length> row-height: 46px;
+    background: bg.with-alpha(0.5);
+    forward-focus: keys;
+    changed selected => { list.keep-visible(); }
+    // Declared first so the panel's own touch areas stay above it.
+    TouchArea { clicked => { root.dismiss(); } }
+    keys := FocusScope {
+        width: root.width; height: root.height;
+        key-pressed(event) => {
+            if (event.text == Key.Escape) { root.dismiss(); return accept; }
+            if (event.text == Key.DownArrow) { root.selected = min(root.selected + 1, root.rows.length - 1); return accept; }
+            if (event.text == Key.UpArrow) { root.selected = max(0, root.selected - 1); return accept; }
+            if (event.text == Key.Return) { root.change(root.selected); return accept; }
+            return reject;
+        }
+        panel := Rectangle {
+            width: min(980px, root.width - 80px);
+            height: root.height - 120px;
+            x: (root.width - self.width) / 2;
+            y: (root.height - self.height) / 2;
+            background: root.bg;
+            border-width: 1px; border-color: root.overlay;
+            TouchArea { }
+            VerticalLayout {
+                padding: 20px; spacing: 12px;
+                HorizontalLayout {
+                    spacing: 16px; height: 32px;
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        if root.query == "": Text {
+                            x: 4px; text: "Search keybindings…"; color: root.muted; font-size: 16px;
+                            vertical-alignment: center; height: parent.height;
+                        }
+                        input := TextInput {
+                            x: 4px; width: parent.width - 8px; height: parent.height;
+                            text <=> root.query;
+                            color: root.fg; font-size: 16px;
+                            selection-background-color: root.accent;
+                            selection-foreground-color: root.bg;
+                            single-line: true;
+                            vertical-alignment: center;
+                            edited => { root.selected = 0; root.search(self.text); }
+                            accepted => { root.change(root.selected); }
+                            // TextInput consumes the arrows as cursor moves before
+                            // the enclosing FocusScope can see them.
+                            key-pressed(event) => {
+                                if (event.text == Key.DownArrow) { root.selected = min(root.selected + 1, root.rows.length - 1); return accept; }
+                                if (event.text == Key.UpArrow) { root.selected = max(0, root.selected - 1); return accept; }
+                                return reject;
+                            }
+                        }
+                    }
+                    Text { text: "Enter to change · Esc to close"; color: root.muted; font-size: 12px; vertical-alignment: center; }
+                }
+                list := Rectangle {
+                    vertical-stretch: 1;
+                    changed height => { keep-visible(); }
+                    function keep-visible() {
+                        if (root.selected * root.row-height < -flick.viewport-y) {
+                            flick.viewport-y = -root.selected * root.row-height;
+                        } else if ((root.selected + 1) * root.row-height > -flick.viewport-y + self.height) {
+                            flick.viewport-y = self.height - (root.selected + 1) * root.row-height;
+                        }
+                    }
+                    flick := Flickable {
+                        width: 100%; height: 100%;
+                        VerticalLayout {
+                            alignment: start;
+                            for row[index] in root.rows: Rectangle {
+                                height: root.row-height;
+                                background: root.selected == index ? root.surface : transparent;
+                                TouchArea { clicked => { root.selected = index; } }
+                                HorizontalLayout {
+                                    padding-left: 16px; padding-right: 12px; spacing: 12px;
+                                    HorizontalLayout {
+                                        width: 290px; spacing: 8px; alignment: start;
+                                        Text {
+                                            text: row.chord;
+                                            color: row.unbound ? root.muted : root.selected == index ? root.accent : root.fg;
+                                            font-family: "Consolas"; font-size: 13px; font-weight: 700;
+                                            vertical-alignment: center;
+                                        }
+                                        if row.changed: Text { text: "· changed"; color: root.muted; font-size: 11px; vertical-alignment: center; }
+                                    }
+                                    Text {
+                                        text: row.description; color: root.selected == index ? root.accent : root.fg;
+                                        font-family: "Consolas"; font-size: 13px;
+                                        vertical-alignment: center; overflow: elide; horizontal-stretch: 1;
+                                    }
+                                    if row.changed: Button {
+                                        y: (parent.height - self.height) / 2;
+                                        label: "Reset"; fg: root.muted; border: root.overlay;
+                                        clicked => { root.reset(index); }
+                                    }
+                                    Button {
+                                        y: (parent.height - self.height) / 2;
+                                        label: "Change";
+                                        fg: root.selected == index ? root.fg : root.muted;
+                                        border: root.selected == index ? root.accent : root.overlay;
+                                        clicked => { root.change(index); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if root.capture-open: Rectangle {
+                background: root.bg.with-alpha(0.7);
+                TouchArea { }
+                Rectangle {
+                    width: min(560px, panel.width - 40px);
+                    height: dialog.preferred-height;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    background: root.bg;
+                    border-width: 1px; border-color: root.fg;
+                    dialog := VerticalLayout {
+                        padding: 24px; spacing: 14px;
+                        Text { text: root.capture-title; color: root.muted; font-size: 12px; horizontal-alignment: center; }
+                        Text { text: "Press desired key combination and then press ENTER."; color: root.fg; font-family: "Consolas"; font-size: 13px; horizontal-alignment: center; }
+                        Rectangle {
+                            height: 40px;
+                            border-width: 1px; border-color: root.overlay;
+                            Text {
+                                text: root.capture-chord; color: root.fg; font-family: "Consolas"; font-size: 14px;
+                                horizontal-alignment: center; vertical-alignment: center;
+                            }
+                        }
+                        HorizontalLayout {
+                            alignment: center; spacing: 6px; height: 26px;
+                            for chip[i] in root.capture-chips: HorizontalLayout {
+                                spacing: 6px;
+                                if i > 0: Text { text: "+"; color: root.muted; vertical-alignment: center; }
+                                Rectangle {
+                                    width: chip-text.preferred-width + 16px;
+                                    background: root.surface; border-radius: 3px;
+                                    chip-text := Text { text: chip; color: root.fg; font-family: "Consolas"; font-size: 12px; vertical-alignment: center; horizontal-alignment: center; }
+                                }
+                            }
+                        }
+                        if root.capture-message != "": Text {
+                            text: root.capture-message; color: root.capture-warning ? root.warning : root.muted;
+                            font-size: 12px; horizontal-alignment: center; wrap: word-wrap;
+                        }
+                        Text { text: root.capture-hint; color: root.muted; font-size: 11px; horizontal-alignment: center; }
+                    }
+                }
+            }
+        }
+    }
+    public function focus-search() { input.focus(); }
+}
