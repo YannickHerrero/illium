@@ -41,7 +41,7 @@ Initial Windows smoke measurements with EasyList/EasyPrivacy, not a benchmark: a
 
 ## Home, history and bookmarks
 
-Launching without an argument (including `Alt+B`), or submitting an empty address / `about:blank`, shows a native home surface. A solid Winarchy theme color fills the window, with the URL/search field centered and focused, without an explanatory heading above it. The home window uses 85% opacity (alpha 217/255, also applying to its native controls). Web pages return to full opacity. An explicit web URL on the command line bypasses home.
+Launching without an argument (including `Alt+B`), or submitting an empty address / `about:blank`, shows a native home surface. A solid Winarchy theme color fills the window, with the URL/search field centered and focused, without an explanatory heading above it. The home window uses the theme's `background_opacity` (85% by default, also applying to its native controls), including live Ctrl+Alt+Shift+Y/U adjustments. Web pages always stay fully opaque, even when opacity changes while browsing. An explicit web URL on the command line bypasses home.
 
 While the home window is foreground, typing redirects focus and the first character to the search field even after selecting a suggestion. Editing shortcuts such as Ctrl+V work too. Other applications' input and Alt/Windows shortcuts are not intercepted; this does not apply to web pages.
 

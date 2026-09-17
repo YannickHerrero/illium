@@ -60,6 +60,7 @@ This does **not** stop Explorer. Defaults are installed without overwriting exis
 | Alt+Shift+? | Keybindings viewer and editor |
 | Ctrl+Alt+Shift+Space | Visual theme picker (requires previews or wallpapers; see [Themes](docs/themes.md)) |
 | Ctrl+Alt+Shift+W | Visual wallpaper picker for the active theme |
+| Ctrl+Alt+Shift+Y / U | Decrease / increase application background opacity by 5 points (web pages stay opaque) |
 | Alt+E | File manager |
 | Alt+Shift+Escape | Task manager |
 | Alt+H/J/K/L or arrows | Focus left/down/up/right |

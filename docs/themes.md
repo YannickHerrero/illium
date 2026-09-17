@@ -30,11 +30,37 @@ Themes may also provide `ansi` and `brights`, each an array of exactly eight `"#
 
 The built-in themes include the [official Catppuccin terminal palettes](https://github.com/catppuccin/wezterm/tree/main/dist). Existing installed files are not overwritten: upgrade Winarchy before adding these fields to local themes, as older versions reject unknown fields.
 
-`terminal_background_opacity` is optional (default `0.85`), a finite number from
-`0.0` to `1.0`. It controls only the native terminal's background, never the
-text, cursor or selection. For example `terminal_background_opacity = 0.85`.
-It does not change shell surfaces or configure WezTerm. Upgrade all Winarchy
-binaries before installing this field: older readers reject unknown fields.
+`background_opacity` is optional (default `0.85`), a finite number from `0.0`
+to `1.0`. It controls the native terminal, Files and Tasks window backgrounds
+without fading their text. Terminal cursor, selection and explicit application
+background cells, and Files/Tasks selection and status surfaces remain opaque.
+The browser's native home uses the same value (including its native controls);
+**web pages always remain opaque**. Shell surfaces and external applications
+such as WezTerm are unchanged. For example:
+
+```toml
+background_opacity = 0.85
+```
+
+The old `terminal_background_opacity` spelling remains accepted as an alias,
+now with the same shared scope. Do not specify both names. Upgrade all Winarchy
+binaries before using the new spelling: older readers reject unknown fields.
+
+### Adjust opacity live
+
+- **Ctrl+Alt+Shift+Y**: decrease by 5 percentage points.
+- **Ctrl+Alt+Shift+U**: increase by 5 percentage points.
+- CLI equivalents: `winarchyctl opacity decrease` / `winarchyctl opacity increase`.
+
+Interactive adjustments are bounded to **5–100%** and apply to all open, hidden
+and subsequently opened companion windows, without restarting sessions or moving
+focus. The daemon writes a temporary `background-opacity.state` snapshot, never
+the installed theme. A different selected theme, daemon restart or clean shutdown
+clears it. Ordinary config reloads keep it. Invalid palette edits retain the last
+valid appearance in running applications.
+
+Existing `keybindings.toml` files are not overwritten during upgrades: add the
+two bindings from [configuration](configuration.md#keybindingstoml) if missing.
 
 Select with `winarchyctl theme set my-theme`. Names cannot contain slashes, backslashes or dots. Editing the active palette triggers the directory watcher.
 
