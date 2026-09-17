@@ -745,56 +745,58 @@ impl Shell {
             vec![]
         };
         let title = m.focused.map(native::title).unwrap_or_default();
+        // One item per configured entry, in configured order, so a module such
+        // as the separator may appear several times in a section.
         let items = |modules: &[String]| {
             let mut out = Vec::new();
             for name in modules {
-                if let Some((label, icon)) = applets.item(name) {
-                    out.push(StatusItem {
+                let item = if let Some((label, icon)) = applets.item(name) {
+                    StatusItem {
                         kind: name.clone().into(),
                         value: label.into(),
                         has_icon: icon.is_some(),
                         icon: icon.unwrap_or_default(),
                         level: 0,
                         charging: false,
-                    });
-                }
+                    }
+                } else if name == "battery" {
+                    let Some((percent, plugged)) = super::status::battery_status() else {
+                        continue;
+                    };
+                    StatusItem {
+                        kind: "battery".into(),
+                        value: format!("{percent}%").into(),
+                        has_icon: false,
+                        icon: slint::Image::default(),
+                        level: i32::from(percent),
+                        charging: plugged,
+                    }
+                } else if name == "volume" {
+                    let Some((_, muted)) = super::audio::volume_state() else {
+                        continue;
+                    };
+                    StatusItem {
+                        kind: "volume".into(),
+                        value: "".into(),
+                        has_icon: true,
+                        icon: self.volume_icons[usize::from(muted)].clone(),
+                        level: 0,
+                        charging: false,
+                    }
+                } else if let Some(value) = super::status::item(c, &title, name) {
+                    StatusItem {
+                        kind: name.clone().into(),
+                        value: value.into(),
+                        has_icon: false,
+                        icon: slint::Image::default(),
+                        level: 0,
+                        charging: false,
+                    }
+                } else {
+                    continue;
+                };
+                out.push(item);
             }
-            for (kind, value) in super::status::items(c, &title, modules) {
-                out.push(StatusItem {
-                    kind: kind.into(),
-                    value: value.into(),
-                    has_icon: false,
-                    icon: slint::Image::default(),
-                    level: 0,
-                    charging: false,
-                });
-            }
-            if modules.iter().any(|m| m == "battery")
-                && let Some((percent, plugged)) = super::status::battery_status()
-            {
-                out.push(StatusItem {
-                    kind: "battery".into(),
-                    value: format!("{percent}%").into(),
-                    has_icon: false,
-                    icon: slint::Image::default(),
-                    level: i32::from(percent),
-                    charging: plugged,
-                });
-            }
-            if modules.iter().any(|m| m == "volume")
-                && let Some((_, muted)) = super::audio::volume_state()
-            {
-                out.push(StatusItem {
-                    kind: "volume".into(),
-                    value: "".into(),
-                    has_icon: true,
-                    icon: self.volume_icons[usize::from(muted)].clone(),
-                    level: 0,
-                    charging: false,
-                });
-            }
-            // Keep the configured order across built-ins and applets.
-            out.sort_by_key(|i| modules.iter().position(|m| *m == i.kind.as_str()));
             out
         };
         let left = items(&c.bar.left);

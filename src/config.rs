@@ -100,7 +100,7 @@ pub struct Config {
     pub theme: Theme,
 }
 /// Bar module names handled by the daemon itself; anything else is an applet.
-pub const BUILTIN_MODULES: [&str; 7] = [
+pub const BUILTIN_MODULES: [&str; 8] = [
     "workspaces",
     "window-title",
     "volume",
@@ -108,6 +108,7 @@ pub const BUILTIN_MODULES: [&str; 7] = [
     "clock",
     "cpu",
     "memory",
+    "separator",
 ];
 const DEFAULTS: &[(&str, &str)] = &[
     (
@@ -424,6 +425,31 @@ mod tests {
         Config::install(&p).unwrap();
         assert!(Config::load(&p).is_err());
         assert_eq!(c.wm.gap, 16);
+        std::fs::remove_dir_all(p).unwrap();
+    }
+    #[test]
+    fn separators_repeat_but_unknown_modules_do_not_load() {
+        let p = std::env::temp_dir().join(format!("winarchy-separators-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&p);
+        Config::install(&p).unwrap();
+        let bar = |right: &str| {
+            let text = include_str!("../config/defaults/bar.toml")
+                .replace(
+                    "center = [\"clock\"]",
+                    "center = [\"separator\", \"clock\"]",
+                )
+                .replace(
+                    "right = [\"battery\", \"cpu\", \"memory\", \"volume\", \"wifi\"]",
+                    right,
+                );
+            std::fs::write(p.join("bar.toml"), text).unwrap();
+        };
+        bar("right = [\"battery\", \"separator\", \"cpu\", \"separator\", \"memory\"]");
+        let c = Config::load(&p).unwrap();
+        assert_eq!(c.bar.center, ["separator", "clock"]);
+        assert_eq!(c.bar.right.iter().filter(|m| *m == "separator").count(), 2);
+        bar("right = [\"divider\"]");
+        assert!(Config::load(&p).is_err());
         std::fs::remove_dir_all(p).unwrap();
     }
     #[test]

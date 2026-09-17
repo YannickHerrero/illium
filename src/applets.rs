@@ -103,7 +103,8 @@ pub fn load(home: &Path, name: &str) -> Result<Applet, String> {
         return Err(format!("applet {name}: unknown provider {p}"));
     }
     if let Some(module) = &manifest.attach
-        && (!crate::config::BUILTIN_MODULES.contains(&module.as_str()) || module == "workspaces")
+        && (!crate::config::BUILTIN_MODULES.contains(&module.as_str())
+            || ["workspaces", "separator"].contains(&module.as_str()))
     {
         return Err(format!("applet {name}: attach must name a built-in module"));
     }

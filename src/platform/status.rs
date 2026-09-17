@@ -73,35 +73,29 @@ pub fn battery_status() -> Option<(u8, bool)> {
     unsafe { GetSystemPowerStatus(&mut p) }.ok()?;
     (p.BatteryLifePercent <= 100).then_some((p.BatteryLifePercent, p.ACLineStatus == 1))
 }
-/// Module name and rendered value for each module that has something to show.
-pub fn items(c: &Config, title: &str, modules: &[String]) -> Vec<(String, String)> {
-    let mut out = Vec::new();
-    for module in modules {
-        let value = match module.as_str() {
-            "window-title" => Some(title.to_owned()),
-            "clock" => unsafe {
-                let t = GetLocalTime();
-                Some(crate::clock::format(
-                    &c.bar.clock_format,
-                    crate::clock::Moment {
-                        weekday: t.wDayOfWeek as u8,
-                        day: t.wDay as u8,
-                        month: t.wMonth as u8,
-                        hour: t.wHour as u8,
-                        minute: t.wMinute as u8,
-                        second: t.wSecond as u8,
-                    },
-                ))
-            },
-            "cpu" => cpu(),
-            "memory" => memory(),
-            _ => None,
-        };
-        if let Some(value) = value {
-            out.push((module.clone(), value));
-        }
+/// Rendered text of a built-in module, when it has something to show.
+pub fn item(c: &Config, title: &str, module: &str) -> Option<String> {
+    match module {
+        "window-title" => Some(title.to_owned()),
+        "clock" => unsafe {
+            let t = GetLocalTime();
+            Some(crate::clock::format(
+                &c.bar.clock_format,
+                crate::clock::Moment {
+                    weekday: t.wDayOfWeek as u8,
+                    day: t.wDay as u8,
+                    month: t.wMonth as u8,
+                    hour: t.wHour as u8,
+                    minute: t.wMinute as u8,
+                    second: t.wSecond as u8,
+                },
+            ))
+        },
+        "cpu" => cpu(),
+        "memory" => memory(),
+        "separator" => Some(String::new()),
+        _ => None,
     }
-    out
 }
 /// Popup content for a built-in module, when it has more to say than its label.
 pub fn details(c: &Config, kind: &str) -> Option<(String, Vec<String>)> {

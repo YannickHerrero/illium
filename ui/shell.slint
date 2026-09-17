@@ -26,9 +26,16 @@ component StatusModule inherits Rectangle {
     /// Horizontal center of the module in window coordinates, for anchoring a popup.
     callback clicked(length);
     property <bool> has-icon: item.has-icon || item.kind == "cpu" || item.kind == "memory";
+    property <bool> separator: item.kind == "separator";
     width: layout.preferred-width;
     layout := HorizontalLayout {
         spacing: 6px;
+        // A purely visual dot between neighbouring modules; it may be listed several times.
+        if separator: Rectangle {
+            width: 4px; height: 4px; border-radius: 2px;
+            y: (parent.height - self.height) / 2;
+            background: muted;
+        }
         // Battery drawn from its level: outline, terminal, fill and a bolt while charging.
         if item.kind == "battery": Rectangle {
             width: 16px; height: 14px;
@@ -54,9 +61,10 @@ component StatusModule inherits Rectangle {
                 : item.icon;
             colorize: muted;
         }
-        Text { text: item.value; color: fg; vertical-alignment: center; }
+        if !separator: Text { text: item.value; color: fg; vertical-alignment: center; }
     }
-    TouchArea { clicked => { root.clicked(root.x + root.width / 2); } }
+    // A separator is not clickable: the press reaches the bar background like an empty area.
+    TouchArea { enabled: !root.separator; clicked => { root.clicked(root.x + root.width / 2); } }
 }
 export component Bar inherits Window {
     no-frame: true;
