@@ -21,7 +21,14 @@ serve`) whenever a `dictate` binding exists, and stops it with `winarchyctl quit
 Without the executable the binding logs a warning and does nothing else;
 Winarchy itself never depends on it.
 
-The first start downloads the model, **Parakeet TDT 0.6B v3 (int8, about 456 MB)**,
+The resident starts small and loads the model only when asked: on the first
+press, or through `winarchy-dictate.exe --load`. Loaded, it holds about 700 MB
+of RAM; `--unload` frees it again, and `--status` reports `loaded` or `idle`
+through its exit code (0 or 2, anything else meaning the resident is not
+running). The [Dictation applet](https://github.com/YannickHerrero/winarchy-applet-collection)
+of the applet collection puts that switch in the bar.
+
+The first load downloads the model, **Parakeet TDT 0.6B v3 (int8, about 456 MB)**,
 from `blob.handy.computer` with the `curl.exe` and `tar.exe` shipped with Windows,
 verifies its SHA-256 against the value pinned in the source and unpacks it under
 `%LOCALAPPDATA%\Winarchy\models\`. Nothing else is ever sent or fetched. The
@@ -35,8 +42,9 @@ indicator shows the download; a mismatching checksum aborts and deletes the file
 2. Key up: the microphone closes. Holds shorter than 300 ms are discarded.
    Longer than 60 s keep only the first minute.
 3. `Transcribing…` while Parakeet runs on the CPU. Measured on the development
-   machine: about 1.4 s for 8 s of French speech, 3 s to load the model once at
-   startup. The model stays in memory afterwards (a few hundred MB).
+   machine: about 1.4 s for 8 s of French speech, and 3 s of `Loading the model…`
+   the first time when the model was not in memory. It stays loaded afterwards
+   until `--unload`.
 4. The text goes to the clipboard, an injected Ctrl+V pastes it, and the
    previous clipboard **text** is restored 300 ms later unless the clipboard
    changed meanwhile. Other clipboard formats (images, files) are not restored.
@@ -59,7 +67,8 @@ from the command line for testing.
 
 Diagnostics (durations and errors, never audio or text) go to `dictate.log` in
 the configuration home, rotated at 1 MiB. `winarchy-dictate.exe --status`
-pings the resident, `--start` and `--stop` drive it, `--quit` stops it.
+reports whether the model is loaded, `--load` and `--unload` switch it, `--start`
+and `--stop` drive a recording, `--quit` stops the resident.
 
 ## Building
 
