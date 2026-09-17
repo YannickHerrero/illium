@@ -5946,6 +5946,7 @@ name = "winarchy-browser"
 version = "0.1.0"
 dependencies = [
  "adblock",
+ "serde",
  "serde_json",
  "url",
  "webview2-com",

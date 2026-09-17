@@ -1,3 +1,5 @@
+pub mod library;
+
 use adblock::{Engine, request::Request};
 use std::{collections::BTreeSet, path::Path};
 use url::Url;
