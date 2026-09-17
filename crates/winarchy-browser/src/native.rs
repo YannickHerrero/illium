@@ -110,6 +110,17 @@ unsafe fn palette(show: bool) {
 }
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     match msg {
+        // Keep WS_THICKFRAME for resizing/tiling, but let the page occupy the
+        // entire frame instead of leaving Windows' non-client strip at the top.
+        WM_NCCALCSIZE if wp.0 != 0 => LRESULT(0),
+        WM_NCHITTEST => {
+            let hit = DefWindowProcW(hwnd, msg, wp, lp);
+            if hit.0 == HTCAPTION as isize {
+                LRESULT(HTCLIENT as isize)
+            } else {
+                hit
+            }
+        }
         WM_SIZE => {
             APP.with(|a| {
                 if let Some(a) = a.borrow().as_ref() {
