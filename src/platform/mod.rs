@@ -368,6 +368,9 @@ impl Manager {
             return Ok(()); // e.g. watcher notification after an IPC theme change
         }
         let config = Config::load(&self.config.home)?;
+        if config.global.theme != self.config.global.theme {
+            winarchy_theme::opacity::clear(&config.home)?;
+        }
         if !force && crate::files::same_subsystems(&config.home, &self.config_files, &files) {
             if config.global.theme != self.config.global.theme || config.theme != self.config.theme
             {
@@ -614,6 +617,17 @@ impl Manager {
             }
             Command::WallpaperNext => self.shell.next_wallpaper()?,
             Command::Wallpaper(name) => self.shell.set_wallpaper(name)?,
+            Command::BackgroundOpacity(increase) => {
+                let mut theme = self.config.theme.clone();
+                winarchy_theme::opacity::apply(
+                    &self.config.home, &self.config.global.theme, &mut theme,
+                );
+                let opacity = winarchy_theme::opacity::step(theme.background_opacity, increase);
+                winarchy_theme::opacity::set(
+                    &self.config.home, &self.config.global.theme, opacity,
+                )?;
+                return Ok(format!("background opacity: {:.0}%", opacity * 100.0));
+            }
             Command::Theme(name) => {
                 let path = self.config.home.join("winarchy.toml");
                 let old = crate::files::read_config(&path)?;
@@ -952,6 +966,9 @@ impl Manager {
 }
 impl Drop for Manager {
     fn drop(&mut self) {
+        if let Err(error) = winarchy_theme::opacity::clear(&self.config.home) {
+            tracing::warn!(%error, "could not clear temporary opacity");
+        }
         for c in &self.model.clients {
             if !session::owns(c.id, c.generation) {
                 continue;
@@ -1037,6 +1054,7 @@ pub fn run(replace: bool) -> Result<(), String> {
     }
     let home = Config::home();
     Config::install(&home)?;
+    winarchy_theme::opacity::clear(&home)?;
     let state_path = home.join("state.json");
     let config_files = crate::files::snapshot(&home)?;
     let config = Config::load(&home)?;

@@ -5,6 +5,9 @@
 pub mod pack;
 #[cfg(feature = "assets")]
 pub mod preview;
+pub mod opacity;
+#[cfg(feature = "live")]
+pub mod live;
 use serde::Deserialize;
 use std::path::Path;
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -142,18 +145,24 @@ impl Theme {
         let path = home.join("themes").join(format!("{name}.toml"));
         Self::parse(&read(&path)?).map_err(|e| format!("themes/{name}.toml: {e}"))
     }
+    /// Selected theme with the daemon's temporary application opacity override.
+    pub fn effective(home: &Path) -> Result<Self, String> {
+        let name = Self::selected(home)?;
+        let mut theme = Self::load(home, &name)?;
+        opacity::apply(home, &name, &mut theme);
+        Ok(theme)
+    }
     /// The selected theme, or the embedded default when the configuration is
     /// missing or broken: an application must still open with a readable palette.
     pub fn current(home: &Path) -> Self {
-        Self::selected(home)
-            .and_then(|name| Self::load(home, &name))
+        Self::effective(home)
             .unwrap_or_else(|_| Self::default_theme())
     }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn home() -> std::path::PathBuf {
+    pub(crate) fn home() -> std::path::PathBuf {
         let p = std::env::temp_dir().join(format!(
             "winarchy-theme-{}-{:?}",
             std::process::id(),

@@ -17,7 +17,7 @@ impl Snapshot {
     pub fn load(home: &Path) -> Result<Self, String> {
         Ok(Self {
             config: Config::load(home)?,
-            theme: Theme::load(home, &Theme::selected(home)?)?,
+            theme: Theme::effective(home)?,
         })
     }
 }
@@ -25,6 +25,7 @@ pub type Slot = Arc<Mutex<Option<Result<Snapshot, String>>>>;
 fn relevant(home: &Path, path: &Path) -> bool {
     path == home.join("winarchy.toml")
         || path == home.join("terminal.toml")
+        || path == home.join(winarchy_theme::opacity::FILE)
         || path == home.join("themes")
         || (path.parent() == Some(home.join("themes").as_path())
             && path
@@ -76,6 +77,7 @@ mod tests {
         let home = Path::new("config");
         for p in [
             "terminal.toml",
+            winarchy_theme::opacity::FILE,
             "winarchy.toml",
             "themes",
             "themes/test.toml",

@@ -33,6 +33,8 @@ pub enum Command {
     App(String),
     Reload,
     Theme(String),
+    /// Adjust shared application opacity by five points (true increases).
+    BackgroundOpacity(bool),
     /// Open the visual theme picker; browsing does not change the active theme.
     ThemePicker,
     /// Browse images of the active theme without applying until confirmation.
@@ -107,6 +109,8 @@ impl FromStr for Command {
             ["wallpaper", "next"] => Self::WallpaperNext,
             ["wallpaper", "clear"] => Self::Wallpaper(None),
             ["theme", "picker"] => Self::ThemePicker,
+            ["opacity", "increase"] => Self::BackgroundOpacity(true),
+            ["opacity", "decrease"] => Self::BackgroundOpacity(false),
             ["theme", "set", name] if !name.contains(['/', '\\', '.']) => {
                 Self::Theme((*name).into())
             }
@@ -138,6 +142,10 @@ mod tests {
         );
         assert_eq!("app shot".parse(), Ok(Command::App("shot".into())));
         assert_eq!("theme picker".parse(), Ok(Command::ThemePicker));
+        assert_eq!("opacity increase".parse(), Ok(Command::BackgroundOpacity(true)));
+        assert_eq!("opacity decrease".parse(), Ok(Command::BackgroundOpacity(false)));
+        assert!("opacity increase extra".parse::<Command>().is_err());
+        assert!("opacity set nan".parse::<Command>().is_err());
         assert_eq!("keybindings toggle".parse(), Ok(Command::Keybindings));
         assert_eq!("dictate".parse(), Ok(Command::Dictate));
         assert!("dictate toggle".parse::<Command>().is_err());
