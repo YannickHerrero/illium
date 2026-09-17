@@ -133,6 +133,7 @@ impl Editor {
         self.ui.set_surface_height(dpi::logical(monitor, monitor.h));
         self.ui.set_query("".into());
         self.ui.set_selected(0);
+        self.ui.set_ready(false);
         self.capture = None;
         self.refresh(c);
         if self.ui.show().is_err() {
@@ -161,6 +162,7 @@ impl Editor {
         native::position(id(self.ui.window()), self.monitor, Some(HWND_TOPMOST));
         native::focus(id(self.ui.window()), false);
         self.ui.invoke_focus_search();
+        self.ui.set_ready(true);
         self.pending_window = false;
     }
     pub fn display_changed(&mut self, monitor: Rect) {

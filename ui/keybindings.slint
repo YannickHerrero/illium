@@ -43,8 +43,11 @@ export component KeybindingsEditor inherits Window {
     callback change(int);
     callback reset(int);
     callback dismiss();
+    /// Set once the native window has its final size: the whole surface is
+    /// repainted then, instead of only the regions dirtied since the first frame.
+    in property <bool> ready;
     property <length> row-height: 46px;
-    background: bg.with-alpha(0.5);
+    background: root.ready ? bg.with-alpha(0.5) : transparent;
     forward-focus: keys;
     changed selected => { list.keep-visible(); }
     // Declared first so the panel's own touch areas stay above it.
@@ -59,6 +62,7 @@ export component KeybindingsEditor inherits Window {
             return reject;
         }
         panel := Rectangle {
+            visible: root.ready;
             width: min(980px, root.width - 80px);
             height: root.height - 120px;
             x: (root.width - self.width) / 2;
