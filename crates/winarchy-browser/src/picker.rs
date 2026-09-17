@@ -142,7 +142,7 @@ impl Picker {
         self.status("URL ou recherche DuckDuckGo · ↓ suggestions · Ctrl+D favori");
         self.refresh(parent);
         let _ = ShowWindow(self.edit, SW_SHOW);
-        let _ = ShowWindow(self.label, SW_SHOW);
+        let _ = ShowWindow(self.label, if home { SW_HIDE } else { SW_SHOW });
         let _ = SetFocus(Some(self.edit));
         SendMessageW(
             self.edit,

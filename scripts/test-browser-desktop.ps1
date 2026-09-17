@@ -76,6 +76,7 @@ try {
     $edit = [BrowserTest]::GetDlgItem($window, 101)
     $list = [BrowserTest]::GetDlgItem($window, 102)
     if (![BrowserTest]::IsWindowVisible($edit)) { throw 'Home input is not visible' }
+    if ([BrowserTest]::IsWindowVisible([BrowserTest]::GetDlgItem($window, 103))) { throw 'Home explanatory heading should be hidden' }
     [uint32]$key=0; [byte]$alpha=0; [uint32]$flags=0
     if (![BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -or $alpha -ne 217) { throw 'Home alpha is not 85%' }
     # Focus a suggestion, then type: the first character must go into search,
