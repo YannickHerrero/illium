@@ -125,6 +125,16 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         // Keep WS_THICKFRAME for resizing/tiling, but let the page occupy the
         // entire frame instead of leaving Windows' non-client strip at the top.
         WM_NCCALCSIZE if wp.0 != 0 => LRESULT(0),
+        // A layered (translucent home) window can fall back to classic frame
+        // painting when deactivated, despite its client area covering the frame.
+        // Keep activation bookkeeping, but suppress that non-client repaint.
+        // Winarchy's separate focus ring and resize hit-testing remain intact.
+        WM_NCACTIVATE if GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED.0 as isize != 0 => {
+            DefWindowProcW(hwnd, msg, wp, LPARAM(-1))
+        }
+        WM_NCPAINT if GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED.0 as isize != 0 => {
+            LRESULT(0)
+        }
         WM_NCHITTEST => {
             let hit = DefWindowProcW(hwnd, msg, wp, lp);
             if hit.0 == HTCAPTION as isize {
