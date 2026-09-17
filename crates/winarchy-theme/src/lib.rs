@@ -1,13 +1,13 @@
 //! Theme palette read from `themes/<name>.toml` under the configuration home.
 //! No graphics dependency: the daemon and every application convert the
 //! `#rrggbb` strings to their own color type.
+#[cfg(feature = "live")]
+pub mod live;
+pub mod opacity;
 #[cfg(feature = "assets")]
 pub mod pack;
 #[cfg(feature = "assets")]
 pub mod preview;
-pub mod opacity;
-#[cfg(feature = "live")]
-pub mod live;
 use serde::Deserialize;
 use std::path::Path;
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -30,7 +30,10 @@ pub struct Theme {
     #[serde(default)]
     pub brights: Option<Vec<String>>,
     /// Background opacity shared by Winarchy applications (web pages stay opaque).
-    #[serde(default = "default_background_opacity", alias = "terminal_background_opacity")]
+    #[serde(
+        default = "default_background_opacity",
+        alias = "terminal_background_opacity"
+    )]
     pub background_opacity: f32,
     /// Windows color mode to apply with this theme: "dark" or "light".
     #[serde(default)]
@@ -88,9 +91,7 @@ impl Theme {
         Self::parse(DEFAULT).expect("embedded theme is valid")
     }
     pub fn validate(&self) -> Result<(), String> {
-        if !self.background_opacity.is_finite()
-            || !(0.0..=1.0).contains(&self.background_opacity)
-        {
+        if !self.background_opacity.is_finite() || !(0.0..=1.0).contains(&self.background_opacity) {
             return Err("background_opacity must be finite and between 0 and 1".into());
         }
         if let Some(mode) = &self.mode
@@ -155,8 +156,7 @@ impl Theme {
     /// The selected theme, or the embedded default when the configuration is
     /// missing or broken: an application must still open with a readable palette.
     pub fn current(home: &Path) -> Self {
-        Self::effective(home)
-            .unwrap_or_else(|_| Self::default_theme())
+        Self::effective(home).unwrap_or_else(|_| Self::default_theme())
     }
 }
 #[cfg(test)]
@@ -200,9 +200,12 @@ mod tests {
                 assert!(Theme::parse(&format!("{DEFAULT}\n{key} = {value}\n")).is_err());
             }
         }
-        assert!(Theme::parse(&format!(
-            "{DEFAULT}\nbackground_opacity = 0.5\nterminal_background_opacity = 0.8\n"
-        )).is_err());
+        assert!(
+            Theme::parse(&format!(
+                "{DEFAULT}\nbackground_opacity = 0.5\nterminal_background_opacity = 0.8\n"
+            ))
+            .is_err()
+        );
     }
     #[test]
     fn terminal_palettes() {

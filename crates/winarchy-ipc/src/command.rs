@@ -142,8 +142,14 @@ mod tests {
         );
         assert_eq!("app shot".parse(), Ok(Command::App("shot".into())));
         assert_eq!("theme picker".parse(), Ok(Command::ThemePicker));
-        assert_eq!("opacity increase".parse(), Ok(Command::BackgroundOpacity(true)));
-        assert_eq!("opacity decrease".parse(), Ok(Command::BackgroundOpacity(false)));
+        assert_eq!(
+            "opacity increase".parse(),
+            Ok(Command::BackgroundOpacity(true))
+        );
+        assert_eq!(
+            "opacity decrease".parse(),
+            Ok(Command::BackgroundOpacity(false))
+        );
         assert!("opacity increase extra".parse::<Command>().is_err());
         assert!("opacity set nan".parse::<Command>().is_err());
         assert_eq!("keybindings toggle".parse(), Ok(Command::Keybindings));

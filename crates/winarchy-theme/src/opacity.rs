@@ -34,8 +34,11 @@ pub fn set(home: &Path, name: &str, opacity: f32) -> Result<(), String> {
     if !crate::valid_name(name) || !opacity.is_finite() || !(0.05..=1.0).contains(&opacity) {
         return Err("invalid background opacity override".into());
     }
-    let text = toml::to_string(&Override { theme: name.into(), opacity })
-        .map_err(|e| e.to_string())?;
+    let text = toml::to_string(&Override {
+        theme: name.into(),
+        opacity,
+    })
+    .map_err(|e| e.to_string())?;
     // Same-directory rename replaces the old snapshot atomically on Windows too.
     let temporary = home.join(format!("{FILE}.tmp"));
     std::fs::write(&temporary, text).map_err(|e| e.to_string())?;
@@ -62,7 +65,9 @@ mod tests {
         assert_eq!(step(0.0, false), 0.05);
         assert_eq!(step(1.0, true), 1.0);
         let mut opacity = 0.85;
-        for _ in 0..3 { opacity = step(opacity, true); }
+        for _ in 0..3 {
+            opacity = step(opacity, true);
+        }
         assert_eq!(opacity, 1.0);
     }
     #[test]
@@ -82,7 +87,11 @@ mod tests {
         theme = Theme::default_theme();
         apply(&home, "mine", &mut theme);
         assert_eq!(theme.background_opacity, 0.85);
-        for invalid in ["broken", "theme = 'mine'\nopacity = nan", "theme = 'mine'\nopacity = 2.0"] {
+        for invalid in [
+            "broken",
+            "theme = 'mine'\nopacity = nan",
+            "theme = 'mine'\nopacity = 2.0",
+        ] {
             std::fs::write(home.join(FILE), invalid).unwrap();
             apply(&home, "mine", &mut theme);
             assert_eq!(theme.background_opacity, 0.85);

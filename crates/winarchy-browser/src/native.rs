@@ -104,7 +104,9 @@ unsafe fn palette(show: bool) {
     }
 }
 unsafe fn refresh_theme() -> AppResult<()> {
-    apply_theme(&winarchy_theme::Theme::current(&winarchy_theme::config_home()))
+    apply_theme(&winarchy_theme::Theme::current(
+        &winarchy_theme::config_home(),
+    ))
 }
 unsafe fn apply_theme(theme: &winarchy_theme::Theme) -> AppResult<()> {
     let new_brush = CreateSolidBrush(color(&theme.background));
@@ -719,7 +721,12 @@ pub fn run(
         let window_id = hwnd.0 as usize;
         let _theme_subscription = winarchy_theme::live::watch(home.clone(), move |theme| {
             *pending.lock().unwrap() = Some(theme);
-            let _ = PostMessageW(Some(HWND(window_id as *mut _)), THEME_CHANGED, WPARAM(0), LPARAM(0));
+            let _ = PostMessageW(
+                Some(HWND(window_id as *mut _)),
+                THEME_CHANGED,
+                WPARAM(0),
+                LPARAM(0),
+            );
         })?;
         let mut msg = MSG::default();
         loop {
