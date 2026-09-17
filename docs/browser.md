@@ -20,6 +20,25 @@ The browser uses:
 - `%LOCALAPPDATA%/Winarchy/browser/profile`: persistent WebView2 profile, cookies and disk cache;
 - the current `winarchy-theme` at launch: window/editor background, editor text, WebView initial background and page dark/light preference. Live theme switching is not implemented.
 
+## Prepared launch (resident mode)
+
+With the bundled `browser = "winarchy-browser.exe"` alias, Winarchy prepares one hidden browser when the shell starts. `Alt+B` then sends an owner-only IPC request directly from the daemon: no intermediate browser process, filter parsing or WebView2 initialization on the warm opening path. The field and WebView2 must finish preparing first; opening immediately during shell startup can still wait for initialization.
+
+The resident holds at most one prepared/visible window. If that window is already in use (including on another workspace), another launch opens a separate standalone window rather than hijacking it. Closing the resident's visible window destroys its controller/page and rebuilds a fresh hidden home. The current theme is read again when showing the prepared window. No website is preloaded into the spare.
+
+This intentionally trades idle RAM for latency: WebView2 remains running in the background. Normal Winarchy exit requests that an idle resident stop; if its window is still open, shutdown is deferred until the user closes it. Diagnostics and explicit lifecycle controls:
+
+```powershell
+winarchy-browser.exe --serve       # prepare without showing/focusing a window
+winarchy-browser.exe --status      # JSON: pid, ready, opened, last warm_open_ms
+winarchy-browser.exe --quit        # stop idle; never close a user's open page
+winarchy-browser.exe --standalone  # no residency; process exits with its window
+```
+
+To opt out of prewarming, set `browser = "winarchy-browser.exe --standalone"` in `apps.toml` and reload Winarchy. Other browser aliases are unaffected. After updating filter lists, close browser windows and stop/restart the resident to load the new lists. Background initialization failures are written to `browser.log` without showing a startup dialog; a normal launch still reports failures visibly.
+
+Initial Windows smoke measurements with EasyList/EasyPrivacy, not a benchmark: a cold standalone WebView was ready in about 600 ms; prepared `ShowWindow` handling took 11–29 ms. One measured direct-IPC round trip, including the PowerShell test client's overhead, was 111 ms. These are not first-paint or key-to-pixel measurements. The idle resident and runtime consumed about 153 MiB of private commit across seven processes; summed working sets were about 303 MiB and double-count shared pages. The daemon also logs its actual warm-open request duration in `winarchy.log`.
+
 ## Home, history and bookmarks
 
 Launching without an argument (including `Alt+B`), or submitting an empty address / `about:blank`, shows a native home surface. A solid Winarchy theme color fills the window, with the URL/search field centered and focused, without an explanatory heading above it. The home window uses 85% opacity (alpha 217/255, also applying to its native controls). Web pages return to full opacity. An explicit web URL on the command line bypasses home.
@@ -47,7 +66,7 @@ The field suggests up to eight local results, matching case-insensitive ordered 
 
 Winarchy gives each newly opened browser window on the active workspace foreground focus and centers the pointer after applying its tile geometry. This is a one-shot launch action, not a cursor warp on every resize. Both the browser and the daemon must be updated for this behavior.
 
-There is no caption or tab strip. Use Winarchy's window management or Windows' system menu (`Alt+Space`) to move the window. The native editor and suggestions temporarily reserve space above the page instead of allocating another WebView. `target=_blank` currently navigates the same window; popup-based OAuth flows may not work. A second executable launch is not forwarded to a shared host yet: use **one instance** for prototype testing.
+There is no caption or tab strip. Use Winarchy's window management or Windows' system menu (`Alt+Space`) to move the window. The native editor and suggestions temporarily reserve space above the page instead of allocating another WebView. `target=_blank` currently navigates the same window; popup-based OAuth flows may not work. Only one window is kept prepared; additional simultaneous windows use standalone hosts.
 
 ## Blocking scope and security
 
@@ -93,6 +112,15 @@ powershell -ExecutionPolicy Bypass -File scripts/test-browser-desktop.ps1 `
 
 It uses disposable configuration and profile directories, checks home opacity, unified fuzzy matching, navigation, opaque page rendering mode, history and add-only bookmark persistence, and closes only its own process. With an updated Winarchy running, add `-CheckTilingFocus` to check foreground focus and cursor centering after tiling (do not move the mouse during this check). It invokes the queued bookmark action directly, without injecting global keystrokes; manually verify the actual `Ctrl+D` accelerator as well. It retains its temporary logs for diagnosis.
 
+For resident lifecycle and latency/memory checks, close and stop any existing resident first, then run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/test-browser-resident.ps1 `
+  -Exe "$PWD/target/release/winarchy-browser.exe"
+```
+
+This uses a disposable profile/config, copies filter lists and caches, compares a cold standalone launch with a prepared opening, measures the process trees, and tests extra windows, rebuilding the spare, and both deferred and idle shutdown. It refuses to use a resident it did not start. Its JSON result separates internal show time from IPC round-trip time. Repeat runs under controlled conditions before drawing performance conclusions.
+
 ## Performance protocol
 
 ```powershell
@@ -100,7 +128,7 @@ powershell -ExecutionPolicy Bypass -File scripts/measure-browser.ps1 `
   -Url http://127.0.0.1:8765/index.html -Output browser-local.csv
 ```
 
-The script samples the host and descendants, not just the small Rust process. It records private commit, summed working set, CPU time of live processes and process count. Working-set sums **double-count shared pages**; these are not unique physical-RAM totals. PID ancestry and CPU sums are diagnostic approximations, not ETW traces. Close other instances first so an existing shared runtime does not distort accounting.
+The script explicitly uses `--standalone` to measure cold process launches; stop existing residents first. It samples the host and descendants, not just the small Rust process. It records private commit, summed working set, CPU time of live processes and process count. Working-set sums **double-count shared pages**; these are not unique physical-RAM totals. PID ancestry and CPU sums are diagnostic approximations, not ETW traces. Close other instances first so an existing shared runtime does not distort accounting.
 
 The startup log records elapsed time from Rust `run()` entry to filter readiness, visible window, WebView readiness and navigation completion. This excludes process creation overhead and does **not** measure first paint or interactivity. Measure those separately with Windows tracing/page instrumentation. There are no performance claims based solely on a blank native window.
 
@@ -113,7 +141,7 @@ Run at least ten repetitions and report median/p95, Windows/runtime version, CPU
 - stable idle at 5/15/60 seconds, minimized/restored, and ten open/close cycles;
 - all associated runtime processes eventually exit after normal closure. Report residual processes rather than forcibly killing them to hide the result.
 
-No preloader, startup resident, polling timer, preloaded site, software-rendering override or manual working-set trimming is introduced. The single WebView is hidden while the native home surface is shown. One WebView per host. No suspension or reduced-memory mode until measurements demonstrate a benefit without breaking calls/audio/background work.
+Prepared mode keeps one browser host and its empty WebView ready. There is no polling timer, preloaded site, software-rendering override or manual working-set trimming. The single WebView is hidden while the native home surface is shown. One WebView per host; no unbounded spare pool. No suspension or reduced-memory override is applied without measurements showing a benefit.
 
 ## Validation performed
 
@@ -122,7 +150,7 @@ No preloader, startup resident, polling timer, preloaded site, software-renderin
 - Workspace formatting and the CLI dependency-boundary check pass.
 - Both PowerShell scripts parse; the updater successfully downloads upstream lists into a temporary config. Loading these lists, restoring their cache and matching a known blocked/allowed URL were smoke-tested on Linux.
 - The full workspace test run stops on the unchanged `theme_picker::loader::tests::parallel_render_preserves_paint_order_and_reuses_frames` timeout, including with one test thread. No unrelated theme-picker code was changed.
-- The home/history/bookmark desktop smoke script passes on Windows via WSL interop, including add-only bookmarking, combined suggestions, and the opt-in tiling focus/cursor check. The native frame inset was also verified to be zero on Windows. The broader desktop acceptance matrix, the measurement script's process sampling and meaningful startup/RAM comparisons remain **unverified**.
+- The home/history/bookmark desktop smoke script passes on Windows via WSL interop, including add-only bookmarking, combined suggestions, and the opt-in tiling focus/cursor check. The native frame inset was also verified to be zero on Windows. The resident lifecycle script also passes, including rebuilding a spare in the same process, independent extra windows, and idle/deferred shutdown. Initial process-tree memory samples and warm-open timings are recorded above; the broader acceptance matrix and statistically meaningful performance comparisons remain **unverified**.
 
 ## Status / remaining gates
 
