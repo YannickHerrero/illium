@@ -90,15 +90,25 @@ pub fn chord(key: &str) -> Result<(u32, u8), String> {
         let mut chars = part.chars();
         vk = Some(match (named, chars.next(), chars.next()) {
             (Some(vk), _, _) => vk,
-            (None, Some(c), None) if c.is_ascii_alphanumeric() => c.to_ascii_uppercase() as u32,
-            (None, Some(c), None) if c.is_ascii_punctuation() => {
-                layout_key(c).ok_or_else(|| format!("unsupported key: {key}"))?
+            (None, Some(c), None) => {
+                char_key(c).ok_or_else(|| format!("unsupported key: {key}"))?
             }
             _ => return Err(format!("unsupported key: {key}")),
         });
     }
     let key_code = vk.ok_or_else(|| format!("missing key: {key}"))?;
     Ok((key_code, modifiers))
+}
+/// Virtual key of a typed character: letters and digits directly, punctuation
+/// through the active layout.
+pub fn char_key(c: char) -> Option<u32> {
+    if c.is_ascii_alphanumeric() {
+        Some(c.to_ascii_uppercase() as u32)
+    } else if c.is_ascii_punctuation() {
+        layout_key(c)
+    } else {
+        None
+    }
 }
 /// Configuration spelling of a virtual key, or None when it cannot be bound.
 pub fn key_name(vk: u32) -> Option<String> {

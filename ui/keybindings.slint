@@ -45,6 +45,9 @@ export component KeybindingsEditor inherits Window {
     callback dismiss();
     /// A key the list itself did not handle: text, Ctrl, Alt and Meta held.
     callback typed(string, bool, bool, bool);
+    /// A key while the capture dialog is open: text, Ctrl, Shift, Alt, Meta held, pressed.
+    /// The keyboard hook does not see keys aimed at this process's own windows.
+    callback capture-key(string, bool, bool, bool, bool, bool);
     /// Set once the native window has its final size: the whole surface is
     /// repainted then, instead of only the regions dirtied since the first frame.
     in property <bool> ready;
@@ -57,12 +60,22 @@ export component KeybindingsEditor inherits Window {
     keys := FocusScope {
         width: root.width; height: root.height;
         key-pressed(event) => {
+            if (root.capture-open) {
+                root.capture-key(event.text, event.modifiers.control, event.modifiers.shift, event.modifiers.alt, event.modifiers.meta, true);
+                return accept;
+            }
             if (event.text == Key.Escape) { root.dismiss(); return accept; }
             if (event.text == Key.DownArrow) { root.selected = min(root.selected + 1, root.rows.length - 1); return accept; }
             if (event.text == Key.UpArrow) { root.selected = max(0, root.selected - 1); return accept; }
             if (event.text == Key.Return) { root.change(root.selected); return accept; }
             // Typing while the search field is not focused still searches.
             root.typed(event.text, event.modifiers.control, event.modifiers.alt, event.modifiers.meta);
+            return accept;
+        }
+        key-released(event) => {
+            if (root.capture-open) {
+                root.capture-key(event.text, event.modifiers.control, event.modifiers.shift, event.modifiers.alt, event.modifiers.meta, false);
+            }
             return accept;
         }
         panel := Rectangle {
@@ -203,4 +216,5 @@ export component KeybindingsEditor inherits Window {
         }
     }
     public function focus-search() { input.focus(); }
+    public function focus-capture() { keys.focus(); }
 }

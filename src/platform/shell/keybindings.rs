@@ -21,6 +21,47 @@ pub enum Input {
     /// Key text reaching the list rather than the search field, and whether a
     /// non-Shift modifier was held.
     Typed(String, bool),
+    /// A key seen by the window while the capture dialog is open, already
+    /// reduced to the hook's virtual key and modifier mask.
+    CaptureKey(u32, u8, bool),
+}
+/// Slint reports keys as text: modifier and special keys as control or
+/// private-use characters, everything else as what the key types.
+fn key_from_text(text: &str) -> u32 {
+    use slint::platform::Key as K;
+    let Some(c) = text.chars().next() else {
+        return 0;
+    };
+    let is = |k: K| char::from(k) == c;
+    if is(K::Shift) || is(K::ShiftR) {
+        0x10
+    } else if is(K::Control) || is(K::ControlR) {
+        0x11
+    } else if is(K::Alt) || is(K::AltGr) {
+        0x12
+    } else if is(K::Meta) || is(K::MetaR) {
+        0x5b
+    } else if is(K::Escape) {
+        0x1b
+    } else if is(K::Return) {
+        0x0d
+    } else if is(K::Backspace) {
+        0x08
+    } else if is(K::Tab) || is(K::Backtab) {
+        0x09
+    } else if is(K::Space) {
+        0x20
+    } else if is(K::LeftArrow) {
+        0x25
+    } else if is(K::UpArrow) {
+        0x26
+    } else if is(K::RightArrow) {
+        0x27
+    } else if is(K::DownArrow) {
+        0x28
+    } else {
+        keyboard::char_key(c).unwrap_or_default()
+    }
 }
 /// Slint reports special keys as control or private-use characters.
 fn printable(text: &str) -> bool {
@@ -98,6 +139,29 @@ impl Editor {
         ui.on_dismiss(move || f(Input::Dismiss));
         let f = send(&tx, &epoch);
         ui.on_typed(move |text, ctrl, alt, meta| f(Input::Typed(text.into(), ctrl || alt || meta)));
+        let f = send(&tx, &epoch);
+        ui.on_capture_key(move |text, ctrl, shift, alt, meta, down| {
+            let vk = key_from_text(&text);
+            let own = match vk {
+                0x10 => keyboard::SHIFT,
+                0x11 => keyboard::CTRL,
+                0x12 => keyboard::ALT,
+                0x5b => keyboard::SUPER,
+                _ => 0,
+            };
+            let held = [
+                (ctrl, keyboard::CTRL),
+                (shift, keyboard::SHIFT),
+                (alt, keyboard::ALT),
+                (meta, keyboard::SUPER),
+            ]
+            .into_iter()
+            .filter(|(pressed, _)| *pressed)
+            .fold(0, |mask, (_, bit)| mask | bit);
+            // Whether the modifier keys count themselves varies by platform.
+            let modifiers = if down { held | own } else { held & !own };
+            f(Input::CaptureKey(vk, modifiers, down));
+        });
         let f = send(&tx, &epoch);
         ui.window().on_close_requested(move || {
             f(Input::Dismiss);
@@ -265,9 +329,16 @@ impl Editor {
     }
     fn show_capture(&self) {
         let Some(capture) = &self.capture else {
-            self.ui.set_capture_open(false);
+            if self.ui.get_capture_open() {
+                self.ui.set_capture_open(false);
+                self.ui.invoke_focus_search();
+            }
             return;
         };
+        if !self.ui.get_capture_open() {
+            self.ui.set_capture_open(true);
+            self.ui.invoke_focus_capture();
+        }
         let row = &self.rows[capture.row];
         let chord = capture
             .chord
@@ -291,7 +362,6 @@ impl Editor {
         } else {
             (String::new(), false)
         };
-        self.ui.set_capture_open(true);
         self.ui.set_capture_title(
             if capture.reset {
                 format!("Reset {}", row.description)
@@ -368,9 +438,10 @@ impl Editor {
                 Outcome::None
             }
             Input::Typed(..) => Outcome::None,
+            Input::CaptureKey(vk, modifiers, down) => self.capture(vk, modifiers, down),
         }
     }
-    /// A key reported by the hook while capturing.
+    /// A key reported while capturing, by the hook or by the window itself.
     pub fn capture(&mut self, vk: u32, modifiers: u8, down: bool) -> Outcome {
         let Some(capture) = &mut self.capture else {
             return Outcome::None;
