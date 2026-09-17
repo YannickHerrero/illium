@@ -64,8 +64,20 @@ try {
     # Invoke the same queued action as Ctrl+D without injecting keys into the user's desktop.
     [void][BrowserTest]::PostMessage($window,0x8005,[IntPtr]::Zero,[IntPtr]::Zero)
     Wait-For { ((Get-Content $library -Raw | ConvertFrom-Json).bookmarks.url) -contains $TestUrl } 'Bookmark was not saved'
+    if ([BrowserTest]::IsWindowVisible($edit)) { throw 'Adding a bookmark should not open the picker' }
     [void][BrowserTest]::PostMessage($window,0x8005,[IntPtr]::Zero,[IntPtr]::Zero)
-    Wait-For { ((Get-Content $library -Raw | ConvertFrom-Json).bookmarks.url) -notcontains $TestUrl } 'Bookmark toggle did not remove the entry'
+    Wait-For { (Get-Content $log -Raw) -match 'bookmark_added=false' } 'Repeated bookmark action not handled'
+    $saved = Get-Content $library -Raw | ConvertFrom-Json
+    if (@($saved.bookmarks | Where-Object { $_.url -eq $TestUrl }).Count -ne 1) { throw 'Repeated Ctrl+D removed or duplicated the bookmark' }
+    # Return to home: both history and bookmarks must appear in this same field.
+    [void][BrowserTest]::PostMessage($window,0x8001,[IntPtr]::Zero,[IntPtr]::Zero)
+    Wait-For { [BrowserTest]::IsWindowVisible($edit) } 'Picker did not open'
+    [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, 'about:blank')
+    Start-Sleep -Milliseconds 200
+    [void][BrowserTest]::PostMessage($edit,0x0100,[IntPtr]13,[IntPtr]::Zero)
+    Wait-For { [BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) } 'Home did not return'
+    [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, 'https')
+    Wait-For { [BrowserTest]::SendMessage($list,0x018B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 2 } 'Home must search the bookmark and history together'
     Write-Host "PASS: home opacity, fuzzy suggestions, navigation, opaque page, history and bookmark persistence. Logs: $root"
 } finally {
     $env:WINARCHY_CONFIG_HOME = $oldHome

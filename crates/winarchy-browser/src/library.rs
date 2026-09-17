@@ -87,13 +87,14 @@ impl Library {
             data.history.truncate(HISTORY_LIMIT);
         })
     }
-    pub fn toggle_bookmark(&mut self, url: &str, title: &str) -> Result<Option<bool>> {
+    /// Add the current page once. Repeating Ctrl+D never removes a bookmark.
+    pub fn add_bookmark(&mut self, url: &str, title: &str) -> Result<Option<bool>> {
         let Some(site) = site(url, title) else {
             return Ok(None);
         };
         self.update(|data| {
             if let Some(i) = data.bookmarks.iter().position(|s| s.url == site.url) {
-                data.bookmarks.remove(i);
+                data.bookmarks[i] = site;
                 Some(false)
             } else {
                 data.bookmarks.insert(0, site);
@@ -174,7 +175,7 @@ mod tests {
         let mut b = Library::load(&dir).unwrap();
         a.visit("https://github.com", "GitHub").unwrap();
         assert_eq!(
-            b.toggle_bookmark("https://github.com", "GitHub").unwrap(),
+            b.add_bookmark("https://github.com", "GitHub").unwrap(),
             Some(true)
         );
         a.visit("https://rust-lang.org", "Rust").unwrap();
@@ -184,9 +185,16 @@ mod tests {
         assert!(hits[0].bookmarked);
         assert_eq!(a.suggestions("ghb").len(), 1);
         assert_eq!(
-            a.toggle_bookmark("https://github.com", "GitHub").unwrap(),
+            a.add_bookmark("https://github.com", "GitHub").unwrap(),
             Some(false)
         );
+        let reloaded = Library::load(&dir).unwrap();
+        assert_eq!(reloaded.data.bookmarks.len(), 1);
+        // One shared fuzzy search returns both sources, without duplicating GitHub.
+        let mixed = reloaded.suggestions("https");
+        assert_eq!(mixed.len(), 2);
+        assert!(mixed.iter().any(|s| s.bookmarked));
+        assert!(mixed.iter().any(|s| !s.bookmarked));
         a.visit("about:blank", "Home").unwrap();
         assert_eq!(a.suggestions("").len(), 2);
         assert_eq!(

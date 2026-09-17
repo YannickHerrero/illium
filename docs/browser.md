@@ -26,7 +26,7 @@ Launching without an argument (including `Alt+B`), or submitting an empty addres
 
 The field suggests up to eight local results, matching case-insensitive ordered subsequences against titles and URLs. Contiguous matches rank higher; equally ranked favorites precede recent history. With empty input, favorites come first, then recent history. No remote suggestions, page prefetches or second WebView are used. Typing and pressing Enter submits the input as typed; select a suggestion with arrows first to open it, or double-click it.
 
-`Ctrl+D` toggles the current page's bookmark and opens the field with a confirmation. Successful top-level web navigations record the title and URL; history is deduplicated and limited to 500 entries. Data is stored as plain JSON in `browser/library.json`; embedded URL username/password credentials are removed, but paths and query strings remain. There is no private browsing mode yet. Close the browser and remove this file to erase history and bookmarks. Updates are merged under a file lock across windows; no idle polling/indexer is added.
+`Ctrl+D` adds the current page to favorites without opening the search field or moving focus. Repeating it does not remove or duplicate the bookmark. Favorites and history share the same fuzzy results list, with each URL shown only once. An already-open home refreshes its data when it regains focus. Successful top-level web navigations record the title and URL; history is deduplicated and limited to 500 entries. Data is stored as plain JSON in `browser/library.json`; embedded URL username/password credentials are removed, but paths and query strings remain. There is no private browsing mode yet. Close the browser and remove this file to erase history and bookmarks. Updates are merged under a file lock across windows; no idle polling/indexer is added.
 
 ## Controls
 
@@ -36,7 +36,7 @@ The field suggests up to eight local results, matching case-insensitive ordered 
 | URL/domain, then Enter | Navigate (bare domains use HTTPS) |
 | Other text, then Enter | DuckDuckGo search; no remote autocomplete |
 | Up / Down, then Enter | Select and open a history/bookmark suggestion |
-| `Ctrl+D` | Add/remove the current page from favorites |
+| `Ctrl+D` | Add the current page to favorites (safe to repeat) |
 | Escape | Close editor and restore page focus; on home, clear input |
 | `:block` in editor, then Enter | Toggle blocking for the current exact hostname, persist, reload |
 | `Alt+Left` / `Alt+Right` | Back / forward |

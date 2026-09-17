@@ -30,6 +30,7 @@ const HISTORY: u32 = WM_APP + 2;
 const PICKER_CHANGED: u32 = WM_APP + 3;
 const SUBMIT: u32 = WM_APP + 4;
 const BOOKMARK: u32 = WM_APP + 5;
+const LIBRARY_CHANGED: u32 = WM_APP + 6;
 #[derive(Clone)]
 struct App {
     hwnd: HWND,
@@ -161,6 +162,26 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
                 let _ = PostMessageW(Some(hwnd), PICKER_CHANGED, WPARAM(0), LPARAM(0));
             } else if id == LIST_ID && notification == LBN_DBLCLK as usize {
                 let _ = PostMessageW(Some(hwnd), SUBMIT, WPARAM(0), LPARAM(0));
+            }
+            LRESULT(0)
+        }
+        WM_ACTIVATE if wp.0 & 0xffff != WA_INACTIVE as usize => {
+            // Another browser window may have added a bookmark. Reload on focus,
+            // not on every keystroke or on a background polling timer.
+            let _ = PostMessageW(Some(hwnd), LIBRARY_CHANGED, WPARAM(0), LPARAM(0));
+            DefWindowProcW(hwnd, msg, wp, lp)
+        }
+        LIBRARY_CHANGED => {
+            if let Some(app) = snapshot()
+                && app.picker.borrow().visible
+            {
+                let mut picker = app.picker.borrow_mut();
+                if let Err(e) = picker.library.borrow_mut().reload() {
+                    eprintln!("Cannot reload history: {e}");
+                }
+                picker.refresh(hwnd);
+                drop(picker);
+                layout(&app);
             }
             LRESULT(0)
         }
@@ -549,14 +570,19 @@ pub fn run() -> AppResult<()> {
                 if !snapshot().is_some_and(|a| a.home) {
                     let source = take_string(|s| web.Source(s))?;
                     let title = take_string(|s| web.DocumentTitle(s)).unwrap_or_default();
-                    let result = library.borrow_mut().toggle_bookmark(&source, &title);
-                    palette(true);
+                    let result = library.borrow_mut().add_bookmark(&source, &title);
                     match result {
-                        Ok(Some(added)) => picker.borrow().status(if added {
-                            "★ Favori ajouté · Ctrl+D pour retirer"
-                        } else {
-                            "Favori retiré"
-                        }),
+                        Ok(Some(added)) => {
+                            eprintln!("metric bookmark_added={added}");
+                            if picker.borrow().visible {
+                                picker.borrow_mut().refresh(hwnd);
+                                picker.borrow().status(if added {
+                                    "★ Favori ajouté"
+                                } else {
+                                    "★ Déjà dans les favoris"
+                                });
+                            }
+                        }
                         Ok(None) => {}
                         Err(e) => {
                             eprintln!("Cannot save bookmark: {e}");
