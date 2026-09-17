@@ -15,8 +15,8 @@ struct Override {
 
 /// Five percentage points, bounded interactively to keep windows visible.
 pub fn step(current: f32, increase: bool) -> f32 {
-    let percent = (current * 100.0).round() as i32;
-    (percent + if increase { 5 } else { -5 }).clamp(5, 100) as f32 / 100.0
+    let percent = current * 100.0;
+    (percent + if increase { 5.0 } else { -5.0 }).clamp(5.0, 100.0) / 100.0
 }
 
 pub fn apply(home: &Path, name: &str, theme: &mut Theme) {
@@ -61,6 +61,7 @@ mod tests {
         assert_eq!(step(0.85, false), 0.80);
         assert_eq!(step(0.85, true), 0.90);
         assert_eq!(step(0.83, false), 0.78);
+        assert_eq!(step(0.855, false), 0.805);
         assert_eq!(step(0.05, false), 0.05);
         assert_eq!(step(0.0, false), 0.05);
         assert_eq!(step(1.0, true), 1.0);
