@@ -237,7 +237,7 @@ mod tests {
     #[test]
     fn defaults_are_unchanged_and_ordered() {
         let rows = rows(DEFAULTS, DEFAULTS);
-        assert_eq!(rows.len(), 50);
+        assert_eq!(rows.len(), 51);
         assert!(rows.iter().all(|r| !r.changed()));
         assert_eq!(rows[0].description, "Launcher");
         assert_eq!(rows[0].label(), "Alt + Space");
@@ -257,7 +257,7 @@ mod tests {
     }
     #[test]
     fn rebound_unbound_and_custom() {
-        let user = "[keybindings]\n\"Ctrl+Alt+Space\" = \"launcher toggle\"\n\"Alt+Left\" = \"window focus left\"\n\"Alt+Shift+H\" = \"window move left\"\n\"alt+q\" = \"window close\"\n\"Alt+Z\" = \"spawn browser\"\n";
+        let user = "[keybindings]\n\"Ctrl+Alt+Space\" = \"launcher toggle\"\n\"Alt+Left\" = \"window focus left\"\n\"Alt+Shift+H\" = \"window move left\"\n\"alt+q\" = \"window close\"\n\"Alt+Z\" = \"spawn editor\"\n";
         let rows = rows(DEFAULTS, user);
         let by = |d: &str| {
             rows.iter()
@@ -276,7 +276,7 @@ mod tests {
         assert!(!by("Close window")[0].changed());
         assert!(!by("Move window left")[0].changed());
         let custom = rows.last().unwrap();
-        assert_eq!(custom.description, "Launch browser");
+        assert_eq!(custom.description, "Launch editor");
         assert_eq!(custom.default, None);
         assert!(!custom.changed());
     }

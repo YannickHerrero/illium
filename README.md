@@ -54,6 +54,7 @@ This does **not** stop Explorer. Defaults are installed without overwriting exis
 | Keys | Action |
 |---|---|
 | Alt+Enter | Configured terminal (WezTerm by default) |
+| Alt+B | Configured browser (Winarchy Browser by default; filter-list setup required) |
 | Alt+Space | Launcher |
 | Alt+Shift+Space | Menu: Apps, System (hibernate, lock, restart, shut down, stop or start Explorer, quit), Keybindings, Theme and Wallpaper |
 | Alt+Shift+? | Keybindings viewer and editor |

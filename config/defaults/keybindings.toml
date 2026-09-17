@@ -5,6 +5,7 @@
 "Ctrl+Alt+Shift+Space" = "theme picker"
 "Ctrl+Alt+Shift+W" = "wallpaper picker"
 "Alt+Enter" = "spawn terminal"
+"Alt+B" = "spawn browser"
 "Alt+F" = "window toggle-fullscreen"
 "Alt+T" = "window set-tiling"
 "Alt+Shift+T" = "window toggle-float"
