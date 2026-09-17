@@ -86,8 +86,9 @@ try {
     $gui = New-Object BrowserTest+GuiThreadInfo
     $gui.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($gui)
     Wait-For { [void][BrowserTest]::GetGUIThreadInfo($thread,[ref]$gui); $gui.focus -eq $list } 'Suggestion did not receive focus'
-    # VK_A goes through TranslateMessage (keyboard layout preserved).
-    [void][BrowserTest]::PostMessage($list,0x0100,[IntPtr]0x41,[IntPtr]1)
+    # Deliver a translated character, independent of modifiers the user may be
+    # holding on the live desktop. Never synthesize global key releases here.
+    [void][BrowserTest]::PostMessage($list,0x0102,[IntPtr]0x61,[IntPtr]1)
     Wait-For { [void][BrowserTest]::GetGUIThreadInfo($thread,[ref]$gui); $gui.focus -eq $edit } 'Typing did not return focus to search'
     $text = New-Object Text.StringBuilder 256
     Wait-For { [void][BrowserTest]::GetText($edit,0x000D,[IntPtr]256,$text); $text.Length -eq 1 } 'First typed character was lost or duplicated'
