@@ -57,7 +57,7 @@ impl Picker {
         let list = child(
             w!("LISTBOX"),
             w!(""),
-            WS_VSCROLL | WINDOW_STYLE((LBS_NOTIFY | LBS_NOINTEGRALHEIGHT) as u32),
+            WINDOW_STYLE((LBS_NOTIFY | LBS_NOINTEGRALHEIGHT) as u32),
             LIST_ID,
         )?;
         let label = child(
@@ -183,6 +183,9 @@ impl Picker {
         // Enter submits typed input unless a suggestion was explicitly selected.
         self.layout(parent);
         let _ = InvalidateRect(Some(self.list), None, true);
+        // Erase the area vacated when results shrink or the picker is resized.
+        // The parent clips child controls, so this does not paint over the WebView.
+        let _ = InvalidateRect(Some(parent), None, true);
     }
     pub unsafe fn layout(&self, parent: HWND) -> i32 {
         let mut rect = RECT::default();

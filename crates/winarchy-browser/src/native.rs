@@ -133,6 +133,15 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
                 hit
             }
         }
+        WM_PAINT => {
+            let mut paint = PAINTSTRUCT::default();
+            let dc = BeginPaint(hwnd, &mut paint);
+            if let Some(app) = snapshot() {
+                FillRect(dc, &paint.rcPaint, app.brush);
+            }
+            let _ = EndPaint(hwnd, &paint);
+            LRESULT(0)
+        }
         WM_SIZE => {
             if let Some(app) = snapshot() {
                 layout(&app);
@@ -267,6 +276,7 @@ pub fn run() -> AppResult<()> {
         let brush = CreateSolidBrush(color(&theme.background));
         let surface_brush = CreateSolidBrush(color(&theme.surface));
         let wc = WNDCLASSW {
+            style: CS_HREDRAW | CS_VREDRAW,
             lpfnWndProc: Some(wndproc),
             hInstance: instance,
             lpszClassName: class,
@@ -280,7 +290,12 @@ pub fn run() -> AppResult<()> {
             Default::default(),
             class,
             w!("Winarchy Browser"),
-            WS_POPUP | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX,
+            WS_POPUP
+                | WS_THICKFRAME
+                | WS_SYSMENU
+                | WS_MINIMIZEBOX
+                | WS_MAXIMIZEBOX
+                | WS_CLIPCHILDREN,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
             1100,
