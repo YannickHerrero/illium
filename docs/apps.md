@@ -29,7 +29,11 @@ The resident uses 25 to 45 MB and samples processes only while Tasks is
 shown; `winarchyctl quit` stops it with the daemon.
 
 They have no title bar (the manager's border marks the focused one), read the
-active theme from the configuration home when they are shown and are otherwise
+active theme from the configuration home when they are shown and follow theme
+and shared `background_opacity` changes live, including while hidden. Their
+backgrounds default to 85% opacity; text and selection stay readable and opaque.
+Ctrl+Alt+Shift+Y/U adjust opacity by five points for all companion windows (see
+[themes](themes.md#adjust-opacity-live)). They are otherwise
 ordinary windows: Winarchy tiles them like any client, and a
 rule on `winarchy-apps.exe` in `rules.toml` can float them instead. Their
 Slint markup is compiled into the executable; the interpreter is reserved
@@ -97,6 +101,20 @@ tabs, bookmarks or plugins.
 `winarchy-apps.exe files <directory>` starts in that directory instead of
 the user profile; through the resident, `winarchyctl app files` shows the
 directory left open, or the profile the first time.
+
+## Opacity desktop smoke test
+
+On an unlocked Windows desktop, with test windows unobscured:
+
+```powershell
+./scripts/test-apps-opacity-desktop.ps1 -Executable C:\path\to\winarchy-apps.exe
+```
+
+This opens disposable standalone Files and Tasks windows and checks live opacity,
+reset, palette reload, invalid-theme retention and unchanged window handles. It
+never writes personal configuration or injects global keys. Also manually check
+resident windows hidden/reopened, readable text and selection, and multiple
+terminal/browser windows sharing the daemon's shortcuts.
 
 ## Screenshot
 
