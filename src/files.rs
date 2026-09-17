@@ -177,6 +177,17 @@ mod tests {
         }
     }
     #[test]
+    fn temporary_opacity_does_not_reload_shell_configuration() {
+        let t = Temp::new("opacity");
+        std::fs::create_dir(t.0.join("themes")).unwrap();
+        std::fs::write(t.0.join("winarchy.toml"), "theme = 'test'").unwrap();
+        let before = snapshot(&t.0).unwrap();
+        winarchy_theme::opacity::set(&t.0, "test", 0.65).unwrap();
+        assert_eq!(snapshot(&t.0).unwrap(), before);
+        winarchy_theme::opacity::clear(&t.0).unwrap();
+        assert_eq!(snapshot(&t.0).unwrap(), before);
+    }
+    #[test]
     fn terminal_preferences_do_not_restart_shell_subsystems() {
         let home = Path::new("home");
         let before = vec![(home.join("terminal.toml"), b"font_size=14".to_vec())];

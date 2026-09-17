@@ -73,6 +73,29 @@ pub fn watch(home: PathBuf, wake: impl Fn() + Send + 'static) -> Result<Slot, St
 mod tests {
     use super::*;
     #[test]
+    fn snapshot_applies_shared_override_without_changing_terminal_preferences() {
+        let home = std::env::temp_dir().join(format!("terminal-opacity-{}", std::process::id()));
+        std::fs::create_dir_all(home.join("themes")).unwrap();
+        std::fs::write(home.join("winarchy.toml"), "theme = 'test'").unwrap();
+        std::fs::write(
+            home.join("themes/test.toml"),
+            include_str!("../../../config/themes/catppuccin-mocha.toml"),
+        )
+        .unwrap();
+        let before = Snapshot::load(&home).unwrap();
+        winarchy_theme::opacity::set(&home, "test", 0.65).unwrap();
+        let after = Snapshot::load(&home).unwrap();
+        assert_eq!(after.theme.background_opacity, 0.65);
+        assert_eq!(before.config, after.config);
+        assert_eq!(Theme::load(&home, "test").unwrap().background_opacity, 0.85);
+        winarchy_theme::opacity::clear(&home).unwrap();
+        assert_eq!(
+            Snapshot::load(&home).unwrap().theme.background_opacity,
+            0.85
+        );
+        std::fs::remove_dir_all(home).unwrap();
+    }
+    #[test]
     fn watches_only_terminal_and_palette_files() {
         let home = Path::new("config");
         for p in [
