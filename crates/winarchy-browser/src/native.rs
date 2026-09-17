@@ -120,6 +120,55 @@ unsafe fn home_mode(home: bool) {
         palette(home);
     }
 }
+/// Route input only inside the foreground home window. Re-target key events
+/// before TranslateMessage so the first character, keyboard layout and dead
+/// keys are handled by the real EDIT control rather than reconstructed here.
+unsafe fn route_home_input(msg: &mut MSG) {
+    if !matches!(msg.message, WM_KEYDOWN | WM_KEYUP | WM_CHAR) {
+        return;
+    }
+    let Some(app) = snapshot() else {
+        return;
+    };
+    let edit = app.picker.borrow().edit;
+    if !app.home
+        || msg.hwnd == edit
+        || GetForegroundWindow() != app.hwnd
+        || (msg.hwnd != app.hwnd && !IsChild(app.hwnd, msg.hwnd).as_bool())
+    {
+        return;
+    }
+    let ctrl = GetKeyState(VK_CONTROL.0 as i32) < 0;
+    let alt = GetKeyState(VK_MENU.0 as i32) < 0;
+    let windows = GetKeyState(VK_LWIN.0 as i32) < 0 || GetKeyState(VK_RWIN.0 as i32) < 0;
+    let editing_chord = [
+        b'A' as usize,
+        b'C' as usize,
+        b'V' as usize,
+        b'X' as usize,
+        b'Y' as usize,
+        b'Z' as usize,
+        b'L' as usize,
+        VK_HOME.0 as usize,
+        VK_END.0 as usize,
+        VK_LEFT.0 as usize,
+        VK_RIGHT.0 as usize,
+        VK_BACK.0 as usize,
+        VK_DELETE.0 as usize,
+    ]
+    .contains(&msg.wParam.0);
+    let key = matches!(msg.message, WM_KEYDOWN | WM_KEYUP)
+        && !alt
+        && !windows
+        && (!ctrl || editing_chord);
+    // Also accept queued Unicode characters (including AltGr output), but not
+    // system/menu characters or control shortcuts translated to WM_CHAR.
+    let character = msg.message == WM_CHAR && (msg.wParam.0 >= 32 || msg.wParam.0 == 8);
+    if key || character {
+        let _ = SetFocus(Some(edit));
+        msg.hwnd = edit;
+    }
+}
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     match msg {
         // Keep WS_THICKFRAME for resizing/tiling, but let the page occupy the
@@ -576,6 +625,7 @@ pub fn run() -> AppResult<()> {
             if result <= 0 {
                 break;
             }
+            route_home_input(&mut msg);
             if msg.message == HISTORY {
                 if msg.wParam.0 == VK_LEFT.0 as usize {
                     let _ = web.GoBack();

@@ -13,6 +13,14 @@ using System.Runtime.InteropServices;
 public static class BrowserTest {
     [StructLayout(LayoutKind.Sequential)] public struct Rect { public int left, top, right, bottom; }
     [StructLayout(LayoutKind.Sequential)] public struct Point { public int x, y; }
+    [StructLayout(LayoutKind.Sequential)] public struct GuiThreadInfo {
+        public uint cbSize, flags;
+        public IntPtr active, focus, capture, menuOwner, moveSize, caret;
+        public Rect caretRect;
+    }
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr pid);
+    [DllImport("user32.dll")] public static extern bool GetGUIThreadInfo(uint id, ref GuiThreadInfo info);
+    [DllImport("user32.dll", EntryPoint="SendMessageW", CharSet=CharSet.Unicode)] public static extern IntPtr GetText(IntPtr h, uint m, IntPtr w, System.Text.StringBuilder text);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out Rect r);
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out Point p);
@@ -70,6 +78,22 @@ try {
     if (![BrowserTest]::IsWindowVisible($edit)) { throw 'Home input is not visible' }
     [uint32]$key=0; [byte]$alpha=0; [uint32]$flags=0
     if (![BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -or $alpha -ne 217) { throw 'Home alpha is not 85%' }
+    # Focus a suggestion, then type: the first character must go into search,
+    # not list-box type-ahead. These are window-local messages, not global input.
+    [void][BrowserTest]::PostMessage($list,0x0201,[IntPtr]1,[IntPtr]0x00080008)
+    [void][BrowserTest]::PostMessage($list,0x0202,[IntPtr]::Zero,[IntPtr]0x00080008)
+    $thread = [BrowserTest]::GetWindowThreadProcessId($window,[IntPtr]::Zero)
+    $gui = New-Object BrowserTest+GuiThreadInfo
+    $gui.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($gui)
+    Wait-For { [void][BrowserTest]::GetGUIThreadInfo($thread,[ref]$gui); $gui.focus -eq $list } 'Suggestion did not receive focus'
+    # VK_A goes through TranslateMessage (keyboard layout preserved).
+    [void][BrowserTest]::PostMessage($list,0x0100,[IntPtr]0x41,[IntPtr]1)
+    Wait-For { [void][BrowserTest]::GetGUIThreadInfo($thread,[ref]$gui); $gui.focus -eq $edit } 'Typing did not return focus to search'
+    $text = New-Object Text.StringBuilder 256
+    Wait-For { [void][BrowserTest]::GetText($edit,0x000D,[IntPtr]256,$text); $text.Length -eq 1 } 'First typed character was lost or duplicated'
+    # Queued Unicode input targeting the home container is forwarded as well.
+    [void][BrowserTest]::PostMessage($window,0x0102,[IntPtr]0x00E9,[IntPtr]1)
+    Wait-For { [void][BrowserTest]::GetText($edit,0x000D,[IntPtr]256,$text); $text.ToString().EndsWith([string][char]0x00E9) } 'Unicode input was lost'
     [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, 'bkmd')
     Wait-For { [BrowserTest]::SendMessage($list,0x018B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 1 } 'Fuzzy bookmark match missing'
     [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, 'zzzzzzzz')
