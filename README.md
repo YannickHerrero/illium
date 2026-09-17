@@ -51,7 +51,7 @@ This does **not** stop Explorer. Defaults are installed without overwriting exis
 |---|---|
 | Alt+Enter | Configured terminal (WezTerm by default) |
 | Alt+Space | Launcher |
-| Alt+Shift+Space | Menu: Apps, System (hibernate, lock, restart, shut down, quit), Keybindings, Theme and Wallpaper |
+| Alt+Shift+Space | Menu: Apps, System (hibernate, lock, restart, shut down, stop or start Explorer, quit), Keybindings, Theme and Wallpaper |
 | Alt+Shift+? | Keybindings viewer and editor |
 | Ctrl+Alt+Shift+Space | Visual theme picker (requires previews or wallpapers; see [Themes](docs/themes.md)) |
 | Ctrl+Alt+Shift+W | Visual wallpaper picker for the active theme |

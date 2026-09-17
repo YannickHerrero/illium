@@ -690,6 +690,17 @@ impl Shell {
                 "Shut down".into(),
                 run(format!("\"{}\" /s /t 0", shutdown.display())),
             ),
+            if super::session::explorer_running() {
+                (
+                    "Stop Explorer".into(),
+                    MetaEntry::Run(Command::Explorer(false)),
+                )
+            } else {
+                (
+                    "Start Explorer".into(),
+                    MetaEntry::Run(Command::Explorer(true)),
+                )
+            },
             ("Quit Winarchy".into(), MetaEntry::Run(Command::Quit)),
         ])
     }

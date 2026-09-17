@@ -134,6 +134,10 @@ pub fn explorer(start: bool) -> Result<(), String> {
         Err("could not stop Explorer".into())
     }
 }
+/// Whether the Explorer shell is running: it owns the desktop shell window.
+pub fn explorer_running() -> bool {
+    unsafe { !GetShellWindow().is_invalid() }
+}
 fn start_explorer() -> Result<(), String> {
     std::process::Command::new(security::os_executable("explorer.exe", false)?)
         .spawn()
