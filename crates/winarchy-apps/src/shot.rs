@@ -83,6 +83,76 @@ mod tests {
     }
 
     #[test]
+    fn teardown_does_not_quit_the_next_capture() {
+        use super::*;
+        // Hidden window: deterministically deliver the focus-loss notification
+        // during destruction without touching the user's actual foreground.
+        unsafe extern "system" fn teardown_procedure(
+            h: HWND,
+            m: u32,
+            w: WPARAM,
+            l: LPARAM,
+        ) -> LRESULT {
+            if m == WM_DESTROY {
+                unsafe {
+                    procedure(h, WM_KILLFOCUS, WPARAM(0), LPARAM(0));
+                }
+            }
+            unsafe { procedure(h, m, w, l) }
+        }
+        std::thread::spawn(|| unsafe {
+            let class = wide("WinarchyShotTeardownTest");
+            let instance = GetModuleHandleW(None).unwrap();
+            assert_ne!(
+                RegisterClassW(&WNDCLASSW {
+                    lpfnWndProc: Some(teardown_procedure),
+                    hInstance: instance.into(),
+                    lpszClassName: PCWSTR(class.as_ptr()),
+                    ..Default::default()
+                }),
+                0
+            );
+            for _ in 0..3 {
+                let window = CreateWindowExW(
+                    WINDOW_EX_STYLE::default(),
+                    PCWSTR(class.as_ptr()),
+                    PCWSTR(class.as_ptr()),
+                    WS_POPUP,
+                    0,
+                    0,
+                    1,
+                    1,
+                    None,
+                    None,
+                    Some(instance.into()),
+                    None,
+                )
+                .unwrap();
+                STATE.set(Some(State {
+                    size: (1, 1),
+                    screen: GetDC(None),
+                    frozen: HDC::default(),
+                    dimmed: HDC::default(),
+                    start: None,
+                    current: POINT::default(),
+                    cancelled: false,
+                }));
+                SendMessageW(window, WM_KEYDOWN, Some(WPARAM(VK_ESCAPE)), Some(LPARAM(0)));
+                let mut msg = MSG::default();
+                assert!(PeekMessageW(&mut msg, None, WM_QUIT, WM_QUIT, PM_REMOVE).as_bool());
+                assert!(finish_capture(window));
+                assert!(
+                    !PeekMessageW(&mut msg, None, WM_QUIT, WM_QUIT, PM_REMOVE).as_bool(),
+                    "destruction must not leave WM_QUIT for the next capture"
+                );
+            }
+            UnregisterClassW(PCWSTR(class.as_ptr()), Some(instance.into())).unwrap();
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
     fn disconnected_worker_allows_fallback() {
         let (sender, receiver) = mpsc::sync_channel(1);
         drop(receiver);
@@ -425,6 +495,14 @@ pub fn run() -> Result<(), String> {
     }
     Ok(())
 }
+/// Retire the selection before DestroyWindow synchronously sends WM_KILLFOCUS.
+/// Otherwise that notification posts another WM_QUIT after the loop consumed
+/// the first one, immediately terminating the next resident capture.
+unsafe fn finish_capture(window: HWND) -> bool {
+    let state = STATE.with_borrow_mut(Option::take);
+    let _ = unsafe { DestroyWindow(window) };
+    state.is_none_or(|s| s.cancelled)
+}
 fn capture() -> Result<bool, String> {
     let started = std::time::Instant::now();
     unsafe {
@@ -481,19 +559,15 @@ fn capture() -> Result<bool, String> {
             let result = GetMessageW(&mut msg, None, 0, 0).0;
             if result <= 0 {
                 if result == -1 {
-                    let _ = DestroyWindow(window);
-                    return Err(err("screenshot message loop"));
+                    let error = err("screenshot message loop");
+                    finish_capture(window);
+                    return Err(error);
                 }
                 break;
             }
             let _ = TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
-        let _ = DestroyWindow(window);
-        let cancelled = STATE.with_borrow_mut(|state| {
-            let s = state.take();
-            s.is_none_or(|s| s.cancelled)
-        });
-        Ok(cancelled)
+        Ok(finish_capture(window))
     }
 }
