@@ -24,7 +24,7 @@ pub fn address(input: &str) -> String {
     {
         return url.into();
     }
-    let mut url = Url::parse("https://www.google.com/search").unwrap();
+    let mut url = Url::parse("https://duckduckgo.com/").unwrap();
     url.query_pairs_mut().append_pair("q", input);
     url.into()
 }
@@ -150,7 +150,7 @@ mod tests {
             "a&b",
         ] {
             let u = Url::parse(&address(s)).unwrap();
-            assert_eq!(u.host_str(), Some("www.google.com"));
+            assert_eq!(u.host_str(), Some("duckduckgo.com"));
             assert_eq!(u.query_pairs().next().unwrap().1, s);
         }
     }
