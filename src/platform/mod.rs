@@ -1,6 +1,7 @@
 mod applet;
 mod apps;
 mod audio;
+mod dictate;
 mod dpi;
 use winarchy_ipc::identity;
 mod input;
@@ -68,6 +69,8 @@ pub enum Event {
     /// A key seen by the hook while the editor records a chord: virtual key,
     /// modifier mask and whether it went down.
     Capture(u32, u8, bool),
+    /// The `dictate` key went down (`true`) or up (`false`).
+    Dictate(bool),
 }
 struct Manager {
     config: Config,
@@ -362,6 +365,7 @@ impl Manager {
         }
         let bindings = input::parse(&config.keys)?;
         self.shell.configure(&config, &self.monitors)?;
+        dictate::prewarm(&bindings);
         input::update(bindings);
         let terminal_changed =
             config.apps.apps.get("terminal") != self.config.apps.apps.get("terminal");
@@ -555,6 +559,7 @@ impl Manager {
                 }
             }
             Command::App(name) => apps::open(name),
+            Command::Dictate => dictate::toggle(),
             Command::Reload => self.reload()?,
             Command::ThemePicker | Command::WallpaperPicker => {
                 if !self.shell.picker.opened {
@@ -586,6 +591,7 @@ impl Manager {
             Command::Quit => {
                 apps::stop_resident();
                 terminal::stop_idle();
+                dictate::stop_resident();
                 slint::quit_event_loop().map_err(|e| e.to_string())?;
             }
         }
@@ -849,6 +855,7 @@ impl Manager {
                 self.shell.close_popup();
                 self.applets.escape();
             }
+            Event::Dictate(down) => dictate::hold(down),
             Event::AppletData(name, generation, result) => {
                 self.applets.apply(&name, generation, result);
                 self.shell.refresh(&self.model, &self.config, &self.applets);
@@ -1026,6 +1033,7 @@ pub fn run(replace: bool) -> Result<(), String> {
             let monitors = m.monitors.clone();
             // Subscribe before enumeration so no show/create/restore event can
             // disappear between the initial snapshot and hook registration.
+            dictate::prewarm(&bindings);
             input::start(tx.clone(), bindings)?;
             let foreground = unsafe { GetForegroundWindow().0 as isize };
             m.shell.configure(&config, &monitors)?;

@@ -9,7 +9,7 @@ pub const ALT: u8 = 1;
 pub const CTRL: u8 = 2;
 pub const SHIFT: u8 = 4;
 pub const SUPER: u8 = 8;
-const NAMED: [(&str, u32); 8] = [
+const NAMED: [(&str, u32); 20] = [
     ("Space", 32),
     ("Enter", 13),
     ("Left", 37),
@@ -18,6 +18,18 @@ const NAMED: [(&str, u32); 8] = [
     ("Down", 40),
     ("Escape", 27),
     ("Tab", 9),
+    ("F1", 0x70),
+    ("F2", 0x71),
+    ("F3", 0x72),
+    ("F4", 0x73),
+    ("F5", 0x74),
+    ("F6", 0x75),
+    ("F7", 0x76),
+    ("F8", 0x77),
+    ("F9", 0x78),
+    ("F10", 0x79),
+    ("F11", 0x7a),
+    ("F12", 0x7b),
 ];
 /// Left/right Shift, Ctrl, Alt and the Windows keys.
 pub fn is_modifier(vk: u32) -> bool {
@@ -199,7 +211,7 @@ mod tests {
             "Alt",
             "Alt+",
             "",
-            "Alt+F1",
+            "Alt+F13",
             "Alt+é",
         ] {
             let keys = Keys {
@@ -207,6 +219,24 @@ mod tests {
             };
             assert!(parse(&keys).is_err(), "{chord}");
         }
+    }
+    #[test]
+    fn function_keys_bind_alone_or_with_modifiers() {
+        let keys = Keys {
+            keybindings: [
+                ("F8".into(), "dictate".into()),
+                ("alt+f1".into(), "quit".into()),
+            ]
+            .into(),
+        };
+        let bs = parse(&keys).unwrap();
+        assert_eq!(
+            (bs[0].key, bs[0].modifiers, bs[0].command.clone()),
+            (0x77, 0, Command::Dictate)
+        );
+        assert_eq!((bs[1].key, bs[1].modifiers), (0x70, ALT));
+        assert_eq!(format(0x77, 0).unwrap(), "F8");
+        assert_eq!(format(0x7b, ALT | SHIFT).unwrap(), "Alt+Shift+F12");
     }
     #[test]
     fn aliases_and_modifiers() {
@@ -241,7 +271,7 @@ mod tests {
             "Ctrl+Alt+Shift+Super+A"
         );
         assert_eq!(format(13, ALT).unwrap(), "Alt+Enter");
-        assert_eq!(format(0x70, ALT), None);
+        assert_eq!(format(0x7c, ALT), None);
         assert!(is_modifier(0xa4));
         assert!(!is_modifier(0x41));
     }

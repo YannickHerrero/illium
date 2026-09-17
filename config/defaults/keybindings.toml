@@ -49,3 +49,5 @@
 "Alt+Shift+8" = "window move-workspace 8 --follow"
 "Alt+9" = "workspace 9"
 "Alt+Shift+9" = "window move-workspace 9 --follow"
+# Hold-to-talk dictation needs winarchy-dictate.exe beside the daemon (see docs/dictate.md):
+# "F8" = "dictate"

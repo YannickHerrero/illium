@@ -39,7 +39,7 @@ V1 requires nine workspaces and Fibonacci. Gaps are 0–100 logical pixels. Poin
 "Alt+Shift+3" = "window move-workspace 3 --follow"
 ```
 
-Modifiers: Alt, Ctrl, Shift, Super. Keys: letters, digits, Space, Enter, arrows, Escape, Tab, and a single punctuation character such as `?` or `,`, resolved to the physical key that types it on the active keyboard layout. Matching uses virtual keys, with exact modifier sets. Remove a binding to release that shortcut to applications. Only configured combinations are consumed; Ctrl+Alt+Delete is not supported. Default bindings are listed in the README and shipped `config/defaults/keybindings.toml`.
+Modifiers: Alt, Ctrl, Shift, Super. Keys: letters, digits, Space, Enter, arrows, Escape, Tab, F1 to F12, and a single punctuation character such as `?` or `,`, resolved to the physical key that types it on the active keyboard layout. A function key may be bound alone. The `dictate` command is the one hold-to-talk action: the daemon records through [winarchy-dictate.exe](dictate.md) while its key is down, swallowing the key's repeats and release; over `winarchyctl dictate` it toggles. Matching uses virtual keys, with exact modifier sets. Remove a binding to release that shortcut to applications. Only configured combinations are consumed; Ctrl+Alt+Delete is not supported. Default bindings are listed in the README and shipped `config/defaults/keybindings.toml`.
 
 The keybindings editor (Alt+Shift+? or the `Keybindings` menu entry, see [usage](usage.md)) rewrites this file in place: the changed line is replaced and the other lines, comments and order are kept. A chord that the resulting configuration rejects is rolled back and the reason is shown in the editor.
 

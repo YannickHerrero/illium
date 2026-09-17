@@ -14,6 +14,9 @@ pub static POPUP_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 /// and reported as `Event::Capture` instead of running its binding.
 pub static CAPTURE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static CONSUMED: std::sync::Mutex<[bool; 256]> = std::sync::Mutex::new([false; 256]);
+/// Virtual key plus one of the `dictate` binding currently held, 0 otherwise:
+/// its repeats are swallowed and its release is reported instead of consumed.
+static HELD: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static MODIFIERS: std::sync::Mutex<crate::modifiers::Modifiers> =
     std::sync::Mutex::new(crate::modifiers::Modifiers::new());
 fn resync_modifiers() {
@@ -60,6 +63,14 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                     }
                     return LRESULT(1);
                 }
+                if up
+                    && HELD.load(std::sync::atomic::Ordering::Relaxed) == k.vkCode + 1
+                    && let Some((tx, _)) = STATE.get()
+                {
+                    HELD.store(0, std::sync::atomic::Ordering::Relaxed);
+                    let _ = tx.send(Event::Dictate(false));
+                    return LRESULT(1);
+                }
                 if up {
                     let mut consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner());
                     if consumed[k.vkCode as usize] {
@@ -75,6 +86,15 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                         .iter()
                         .find(|b| b.key == k.vkCode && b.modifiers == modifiers)
                 {
+                    if b.command == crate::command::Command::Dictate {
+                        // Auto-repeat keeps sending key-down while the key is held.
+                        if HELD.swap(k.vkCode + 1, std::sync::atomic::Ordering::Relaxed)
+                            != k.vkCode + 1
+                        {
+                            let _ = tx.send(Event::Dictate(true));
+                        }
+                        return LRESULT(1);
+                    }
                     let mut consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner());
                     if !consumed[k.vkCode as usize]
                         && tx.send(Event::Command(b.command.clone(), None)).is_err()

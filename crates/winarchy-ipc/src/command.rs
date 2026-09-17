@@ -40,6 +40,9 @@ pub enum Command {
     WallpaperNext,
     /// Open the keybindings viewer and editor.
     Keybindings,
+    /// Push-to-talk dictation through `winarchy-dictate.exe`: bound to a held
+    /// key, the daemon records while it is down; over IPC it toggles.
+    Dictate,
     /// None selects the solid theme background.
     Wallpaper(Option<String>),
     Explorer(bool),
@@ -95,6 +98,7 @@ impl FromStr for Command {
             ["launcher", "toggle"] => Self::Launcher,
             ["meta", "toggle"] => Self::Meta,
             ["keybindings", "toggle"] => Self::Keybindings,
+            ["dictate"] => Self::Dictate,
             ["app", name] if name.chars().all(|c| c.is_ascii_lowercase()) => {
                 Self::App((*name).into())
             }
@@ -135,6 +139,8 @@ mod tests {
         assert_eq!("app shot".parse(), Ok(Command::App("shot".into())));
         assert_eq!("theme picker".parse(), Ok(Command::ThemePicker));
         assert_eq!("keybindings toggle".parse(), Ok(Command::Keybindings));
+        assert_eq!("dictate".parse(), Ok(Command::Dictate));
+        assert!("dictate toggle".parse::<Command>().is_err());
         assert!("keybindings".parse::<Command>().is_err());
         assert!("theme picker extra".parse::<Command>().is_err());
         for s in [
