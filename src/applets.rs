@@ -14,7 +14,8 @@ pub const TIMEOUT: Duration = Duration::from_secs(20);
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Manifest {
-    /// Monochrome icon shown in the bar, relative to the applet folder.
+    /// Monochrome icon shown in the bar, relative to the applet folder; may
+    /// hold `{field}` placeholders so the provider picks the file.
     #[serde(default = "default_icon")]
     pub icon: String,
     /// Full command line; overrides `script`.
@@ -209,6 +210,20 @@ pub fn environment(applet: &Applet) -> Vec<(String, String)> {
         })
         .collect()
 }
+/// The bar icon file named by the manifest's `icon` once its `{field}`
+/// placeholders are filled: a plain file name inside the applet folder, or
+/// nothing when the data does not name one yet.
+pub fn icon_file(template: &str, data: &serde_json::Value) -> Option<String> {
+    let name = label(template, data);
+    let (stem, extension) = name.rsplit_once('.')?;
+    let plain = |s: &str| {
+        !s.is_empty()
+            && s.len() <= 64
+            && s.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    };
+    (plain(stem) && plain(extension)).then_some(name)
+}
 /// Fills `{field}` and `{a.b}` placeholders from the provider's JSON.
 pub fn label(template: &str, data: &serde_json::Value) -> String {
     let mut out = String::new();
@@ -253,6 +268,22 @@ mod tests {
         assert_eq!(interval("2h").unwrap(), Duration::from_secs(7200));
         for bad in ["0s", "10", "5d", "", "m"] {
             assert!(interval(bad).is_err(), "{bad}");
+        }
+    }
+    #[test]
+    fn icon_files_are_plain_names_in_the_folder() {
+        let data = serde_json::json!({"icon": "mic-off.svg", "bad": "../x.svg", "none": ""});
+        assert_eq!(icon_file("icon.svg", &data).as_deref(), Some("icon.svg"));
+        assert_eq!(icon_file("{icon}", &data).as_deref(), Some("mic-off.svg"));
+        for template in [
+            "{bad}",
+            "{none}",
+            "{missing}",
+            "icon",
+            "sub/icon.svg",
+            ".svg",
+        ] {
+            assert_eq!(icon_file(template, &data), None, "{template}");
         }
     }
     #[test]

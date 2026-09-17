@@ -10,6 +10,7 @@ fn runtime() -> Runtime {
             manifest: toml::from_str("").unwrap(),
         },
         icon: None,
+        icon_file: None,
         data: serde_json::json!({"ssid":"current"}),
         error: None,
         running: true,

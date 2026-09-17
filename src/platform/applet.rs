@@ -35,6 +35,8 @@ fn set_colors(instance: &ComponentInstance, theme: &crate::config::Theme) {
 pub struct Entry {
     pub applet: Applet,
     pub icon: Option<slint::Image>,
+    /// File the loaded icon came from, so data refreshes only reload on a change.
+    icon_file: Option<String>,
     pub data: serde_json::Value,
     pub error: Option<String>,
     running: bool,
@@ -44,6 +46,19 @@ pub struct Entry {
     interval: Duration,
     definition: Option<ComponentDefinition>,
     instance: Option<ComponentInstance>,
+}
+/// Loads the icon the manifest names for the entry's current data, when it changed.
+fn refresh_icon(e: &mut Entry) {
+    let file = applets::icon_file(&e.applet.manifest.icon, &e.data);
+    if file == e.icon_file {
+        return;
+    }
+    e.icon = file.as_ref().and_then(|name| {
+        slint::Image::load_from_path(&e.applet.dir.join(name))
+            .map_err(|err| tracing::warn!(applet = %e.applet.name, %err, "applet icon not loaded"))
+            .ok()
+    });
+    e.icon_file = file;
 }
 pub struct Runtime {
     pub entries: Vec<Entry>,
@@ -77,13 +92,11 @@ impl Runtime {
                 }
             };
             let old = previous.iter().find(|e| e.applet.name == applet.name);
-            let icon = slint::Image::load_from_path(&applet.dir.join(&applet.manifest.icon))
-                .map_err(|e| tracing::warn!(applet = %applet.name, %e, "applet icon not loaded"))
-                .ok();
-            self.entries.push(Entry {
+            let mut entry = Entry {
                 interval: applets::interval(&applet.manifest.interval)
                     .unwrap_or(Duration::from_secs(60)),
-                icon,
+                icon: None,
+                icon_file: None,
                 data: old.map_or(serde_json::Value::Null, |o| o.data.clone()),
                 error: None,
                 running: false,
@@ -93,7 +106,9 @@ impl Runtime {
                 definition: None,
                 instance: None,
                 applet,
-            });
+            };
+            refresh_icon(&mut entry);
+            self.entries.push(entry);
         }
     }
     /// Recolor existing views without resetting providers, data, intervals or compiled definitions.
@@ -204,6 +219,7 @@ impl Runtime {
         }) {
             Ok(data) => {
                 e.data = data;
+                refresh_icon(e);
                 if let Some(traffic) = &mut e.traffic {
                     let interface = if e.data["connected"].as_bool() == Some(true) {
                         e.data["interface_guid"].as_str().unwrap_or_default()

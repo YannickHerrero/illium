@@ -48,7 +48,7 @@ applets/weather/
 
 | Key | Default | Meaning |
 |---|---|---|
-| `icon` | `icon.svg` | Bar icon, relative to the folder |
+| `icon` | `icon.svg` | Bar icon, relative to the folder; `{field}` placeholders let the provider choose the file (a plain name in the folder), so a state can change the icon |
 | `interval` | `1m` | Provider cadence: `30s`, `10m`, `2h` |
 | `label` | none | Bar text; `{field}` and `{a.b}` read the JSON |
 | `popup` | `{ width = 360, height = 240 }` | Popup size in logical pixels |
