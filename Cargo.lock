@@ -5239,6 +5239,7 @@ dependencies = [
  "spin_on",
  "tiny-skia",
  "toml 0.8.23",
+ "toml_edit 0.22.27",
  "tracing",
  "tracing-subscriber",
  "winarchy-ipc",

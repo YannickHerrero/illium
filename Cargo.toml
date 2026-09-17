@@ -17,6 +17,8 @@ winarchy-ipc = { path = "crates/winarchy-ipc" }
 winarchy-theme = { path = "crates/winarchy-theme" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
+# Keybinding edits rewrite the user's file in place, keeping comments and order.
+toml_edit = "0.22"
 serde_json = "1"
 # Theme-picker raster preparation is pure Rust and tested without a desktop.
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
