@@ -61,7 +61,7 @@ impl Palette {
         Self {
             colors,
             selection: rgb(&theme.overlay),
-            opacity: theme.terminal_background_opacity,
+            opacity: theme.background_opacity,
         }
     }
     pub fn resolve(
@@ -102,7 +102,7 @@ mod tests {
         t.brights = None;
         let p = Palette::new(&t);
         assert_eq!(p.opacity, 0.85);
-        t.terminal_background_opacity = 1.0;
+        t.background_opacity = 1.0;
         assert_eq!(Palette::new(&t).opacity, 1.0);
         assert_eq!(p.colors[16], Rgb { r: 0, g: 0, b: 0 });
         assert_eq!(

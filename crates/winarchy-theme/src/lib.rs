@@ -26,14 +26,14 @@ pub struct Theme {
     /// Optional bright terminal colors, in the same order.
     #[serde(default)]
     pub brights: Option<Vec<String>>,
-    /// Background-only terminal opacity; text remains opaque.
-    #[serde(default = "default_terminal_opacity")]
-    pub terminal_background_opacity: f32,
+    /// Background opacity shared by Winarchy applications (web pages stay opaque).
+    #[serde(default = "default_background_opacity", alias = "terminal_background_opacity")]
+    pub background_opacity: f32,
     /// Windows color mode to apply with this theme: "dark" or "light".
     #[serde(default)]
     pub mode: Option<String>,
 }
-fn default_terminal_opacity() -> f32 {
+fn default_background_opacity() -> f32 {
     0.85
 }
 #[derive(Deserialize)]
@@ -85,10 +85,10 @@ impl Theme {
         Self::parse(DEFAULT).expect("embedded theme is valid")
     }
     pub fn validate(&self) -> Result<(), String> {
-        if !self.terminal_background_opacity.is_finite()
-            || !(0.0..=1.0).contains(&self.terminal_background_opacity)
+        if !self.background_opacity.is_finite()
+            || !(0.0..=1.0).contains(&self.background_opacity)
         {
-            return Err("terminal_background_opacity must be finite and between 0 and 1".into());
+            return Err("background_opacity must be finite and between 0 and 1".into());
         }
         if let Some(mode) = &self.mode
             && !["dark", "light"].contains(&mode.as_str())
@@ -180,26 +180,20 @@ mod tests {
         assert_eq!(rgb("#fff"), None);
     }
     #[test]
-    fn terminal_opacity() {
-        assert_eq!(
-            Theme::parse(DEFAULT).unwrap().terminal_background_opacity,
-            0.85
-        );
-        for value in ["0.0", "0.85", "1.0"] {
-            let t = Theme::parse(&format!(
-                "{DEFAULT}\nterminal_background_opacity = {value}\n"
-            ))
-            .unwrap();
-            assert_eq!(t.terminal_background_opacity, value.parse::<f32>().unwrap());
+    fn background_opacity() {
+        assert_eq!(Theme::parse(DEFAULT).unwrap().background_opacity, 0.85);
+        for key in ["background_opacity", "terminal_background_opacity"] {
+            for value in ["0.0", "0.85", "1.0"] {
+                let t = Theme::parse(&format!("{DEFAULT}\n{key} = {value}\n")).unwrap();
+                assert_eq!(t.background_opacity, value.parse::<f32>().unwrap());
+            }
+            for value in ["-0.1", "1.1", "nan", "inf", "-inf", "\"0.85\""] {
+                assert!(Theme::parse(&format!("{DEFAULT}\n{key} = {value}\n")).is_err());
+            }
         }
-        for value in ["-0.1", "1.1", "nan", "inf", "-inf", "\"0.85\""] {
-            assert!(
-                Theme::parse(&format!(
-                    "{DEFAULT}\nterminal_background_opacity = {value}\n"
-                ))
-                .is_err()
-            );
-        }
+        assert!(Theme::parse(&format!(
+            "{DEFAULT}\nbackground_opacity = 0.5\nterminal_background_opacity = 0.8\n"
+        )).is_err());
     }
     #[test]
     fn terminal_palettes() {

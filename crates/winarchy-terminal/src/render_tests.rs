@@ -36,7 +36,7 @@ fn hidden_gpu_surface_survives_resize_and_font_changes() {
         let g = Graphics::new(&config).unwrap();
         let mut surface = Surface::new(g.clone(), hwnd, 320, 160, 96, 4).unwrap();
         let mut theme = winarchy_theme::Theme::default_theme();
-        theme.terminal_background_opacity = 0.85;
+        theme.background_opacity = 0.85;
         let p = Palette::new(&theme);
         surface.draw(&Frame::new(None, &p)).unwrap();
         let mut model = Model::new(Size::new(30, 10), 20);
