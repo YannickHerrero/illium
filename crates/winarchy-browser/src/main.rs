@@ -2,6 +2,8 @@
 
 #[cfg(windows)]
 mod native;
+#[cfg(windows)]
+mod picker;
 
 fn main() {
     #[cfg(windows)]
