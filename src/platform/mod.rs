@@ -47,6 +47,8 @@ pub enum Event {
     Module(String, i32, usize),
     /// Left button pressed on the root window `isize`, anywhere on the desktop.
     Click(isize),
+    /// Empty bar area clicked.
+    BarBackground,
     /// An applet provider finished: applet name and its stdout or error.
     AppletData(String, u64, Result<String, String>),
     AppletTraffic {
@@ -417,7 +419,7 @@ impl Manager {
                 "theme_picker_filter": if self.shell.picker.wallpaper_theme.is_none() { self.shell.picker.filter() } else { "" },
                 "theme_picker_loading": self.shell.picker.wallpaper_theme.is_none() && self.shell.picker.loading(),
                 "theme_picker_error": self.shell.picker.wallpaper_theme.is_none().then_some(self.shell.picker.error.as_ref()).flatten(),
-                "monitors": self.monitors, "bar_count": self.shell.bars.len(),
+                "monitors": self.monitors, "bar_count": self.shell.bars.len(), "bar_transparent": self.shell.bar_transparent,
                 "clients": self.model.clients.iter().map(|c| serde_json::json!({"id":c.id,"workspace":c.workspace,"floating":c.floating,"fullscreen":c.fullscreen,"title":native::title(c.id),"rect":native::rect(c.id)})).collect::<Vec<_>>()
             }).to_string()),
             Command::Workspace(n) => {
@@ -750,6 +752,18 @@ impl Manager {
                     self.applets.close();
                     self.just_closed = open.map(|k| (k, std::time::Instant::now()));
                 }
+            }
+            Event::BarBackground => {
+                // The press already closed an open popup through Event::Click;
+                // that click only dismisses, it does not toggle.
+                if self
+                    .just_closed
+                    .take()
+                    .is_some_and(|(_, at)| at.elapsed().as_millis() < 500)
+                {
+                    return;
+                }
+                self.shell.toggle_bar_background();
             }
             Event::Escape => {
                 self.shell.close_popup();

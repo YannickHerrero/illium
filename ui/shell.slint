@@ -76,7 +76,13 @@ export component Bar inherits Window {
     callback workspace(int);
     /// A module was clicked: its kind and horizontal center in the bar.
     callback module(string, length);
-    background: bg;
+    /// The bar shows the wallpaper through instead of its surface color.
+    in property <bool> transparent;
+    /// Empty bar area clicked, outside every module.
+    callback toggle-background();
+    background: root.transparent ? Colors.transparent : root.bg;
+    // Declared first so the module and workspace touch areas stay above it.
+    TouchArea { clicked => { root.toggle-background(); } }
     // Each group is anchored on its own, so the center group is centered on
     // the screen whatever the side groups measure.
     center-group := HorizontalLayout {
@@ -89,7 +95,7 @@ export component Bar inherits Window {
         padding-left: 4px; padding-top: 4px; padding-bottom: 4px; spacing: 8px;
         for n in root.workspaces: Rectangle {
             width: 25px;
-            background: root.active == n ? root.accent : root.bg;
+            background: root.active == n ? root.accent : (root.transparent ? Colors.transparent : root.bg);
             Text { text: "\{n}"; color: root.active == n ? root.bg : root.fg; horizontal-alignment: center; vertical-alignment: center; }
             TouchArea { clicked => { root.workspace(n); } }
         }

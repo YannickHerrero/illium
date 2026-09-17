@@ -150,6 +150,8 @@ pub struct Shell {
     pub picker: theme_picker::Picker,
     pub backgrounds: Vec<Background>,
     pub bars: Vec<Bar>,
+    /// Bars show the wallpaper through; toggled by clicking an empty bar area.
+    pub bar_transparent: bool,
     models: Vec<BarModels>,
     pub launcher: Launcher,
     popup: Popup,
@@ -229,6 +231,7 @@ impl Shell {
             picker: theme_picker::Picker::new(tx.clone())?,
             backgrounds: vec![],
             bars: vec![],
+            bar_transparent: false,
             models: vec![],
             launcher,
             popup,
@@ -332,6 +335,11 @@ impl Shell {
                 b.set_fg(color(&c.theme.text));
                 b.set_accent(color(&c.theme.accent));
                 b.set_muted(color(&c.theme.subtext));
+                b.set_transparent(self.bar_transparent);
+                let tx = self.tx.clone();
+                b.on_toggle_background(move || {
+                    let _ = tx.send(Event::BarBackground);
+                });
                 let tx = self.tx.clone();
                 b.on_workspace(move |n| {
                     let _ = tx.send(Event::Command(
@@ -473,6 +481,12 @@ impl Shell {
         }
         self.picker.arrange();
         true
+    }
+    pub fn toggle_bar_background(&mut self) {
+        self.bar_transparent = !self.bar_transparent;
+        for b in &self.bars {
+            b.set_transparent(self.bar_transparent);
+        }
     }
     pub fn popup_hwnd(&self) -> isize {
         id(self.popup.window())
