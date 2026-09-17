@@ -20,20 +20,30 @@ The browser uses:
 - `%LOCALAPPDATA%/Winarchy/browser/profile`: persistent WebView2 profile, cookies and disk cache;
 - the current `winarchy-theme` at launch: window/editor background, editor text, WebView initial background and page dark/light preference. Live theme switching is not implemented.
 
+## Home, history and bookmarks
+
+Launching without an argument (including `Alt+B`), or submitting an empty address / `about:blank`, shows a native home surface. A solid Winarchy theme color fills the window, with the URL/search field centered and focused. The home window uses 85% opacity (alpha 217/255, also applying to its native controls). Web pages return to full opacity. An explicit web URL on the command line bypasses home.
+
+The field suggests up to eight local results, matching case-insensitive ordered subsequences against titles and URLs. Contiguous matches rank higher; equally ranked favorites precede recent history. With empty input, favorites come first, then recent history. No remote suggestions, page prefetches or second WebView are used. Typing and pressing Enter submits the input as typed; select a suggestion with arrows first to open it, or double-click it.
+
+`Ctrl+D` toggles the current page's bookmark and opens the field with a confirmation. Successful top-level web navigations record the title and URL; history is deduplicated and limited to 500 entries. Data is stored as plain JSON in `browser/library.json`; embedded URL username/password credentials are removed, but paths and query strings remain. There is no private browsing mode yet. Close the browser and remove this file to erase history and bookmarks. Updates are merged under a file lock across windows; no idle polling/indexer is added.
+
 ## Controls
 
 | Input | Action |
 | --- | --- |
 | `Ctrl+L` | Reveal native address editor; select current URL |
 | URL/domain, then Enter | Navigate (bare domains use HTTPS) |
-| Other text, then Enter | Google search; no remote autocomplete |
-| Escape | Close editor and restore page focus |
+| Other text, then Enter | DuckDuckGo search; no remote autocomplete |
+| Up / Down, then Enter | Select and open a history/bookmark suggestion |
+| `Ctrl+D` | Add/remove the current page from favorites |
+| Escape | Close editor and restore page focus; on home, clear input |
 | `:block` in editor, then Enter | Toggle blocking for the current exact hostname, persist, reload |
 | `Alt+Left` / `Alt+Right` | Back / forward |
 | `Ctrl+R`, `Ctrl+F`, `Ctrl++/-/0` | WebView2 built-in reload, find and zoom shortcuts |
 | `Alt+F4` | Close |
 
-There is no caption or tab strip. Use Winarchy's window management or Windows' system menu (`Alt+Space`) to move the window. The native editor temporarily reserves a small strip above the page instead of allocating another WebView. `target=_blank` currently navigates the same window; popup-based OAuth flows may not work. A second executable launch is not forwarded to a shared host yet: use **one instance** for prototype testing.
+There is no caption or tab strip. Use Winarchy's window management or Windows' system menu (`Alt+Space`) to move the window. The native editor and suggestions temporarily reserve space above the page instead of allocating another WebView. `target=_blank` currently navigates the same window; popup-based OAuth flows may not work. A second executable launch is not forwarded to a shared host yet: use **one instance** for prototype testing.
 
 ## Blocking scope and security
 
@@ -70,6 +80,15 @@ Check:
 7. Test nested cross-origin frames, worker fetches, sites with no Referer, redirects and a few real ad-heavy sites. These are **not covered by the local fixture**.
 8. Test downloads, TLS failures and denied permissions. Check popup policy with a real authentication flow.
 
+An automated UI smoke test is available after starting the fixture server:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/test-browser-desktop.ps1 `
+  -Exe "$PWD/target/release/winarchy-browser.exe"
+```
+
+It uses disposable configuration and profile directories, checks home opacity, fuzzy matching, navigation, opaque page rendering mode, history and bookmark persistence, and closes only its own process. It invokes the queued bookmark action directly, without injecting global keystrokes; manually verify the actual `Ctrl+D` accelerator as well. It retains its temporary logs for diagnosis.
+
 ## Performance protocol
 
 ```powershell
@@ -85,25 +104,25 @@ Run at least ten repetitions and report median/p95, Windows/runtime version, CPU
 
 - first profile creation and filter compilation (separate category);
 - cold launch after reboot versus warm relaunch;
-- blank page, local fixture, simple real page, heavy web app;
+- native home (no URL or `about:blank`), local fixture, simple real page, heavy web app;
 - real lists with blocking enabled versus exact-host disabled. This isolates filtering effects but is **not a no-engine baseline**; a plain WebView2 harness is still needed for total blocker overhead;
 - stable idle at 5/15/60 seconds, minimized/restored, and ten open/close cycles;
 - all associated runtime processes eventually exit after normal closure. Report residual processes rather than forcibly killing them to hide the result.
 
-No preloader, startup resident, polling timer, hidden page, software-rendering override or manual working-set trimming is introduced. One WebView per host. No suspension or reduced-memory mode until measurements demonstrate a benefit without breaking calls/audio/background work.
+No preloader, startup resident, polling timer, preloaded site, software-rendering override or manual working-set trimming is introduced. The single WebView is hidden while the native home surface is shown. One WebView per host. No suspension or reduced-memory mode until measurements demonstrate a benefit without breaking calls/audio/background work.
 
-## Validation performed in the Linux development environment
+## Validation performed
 
-- `cargo test -p winarchy-browser --locked`: four tests pass (address parsing, network/cosmetic rules, fixture rules, cache invalidation and persisted exceptions).
+- `cargo test -p winarchy-browser --locked`: six tests pass (DuckDuckGo/address parsing, network/cosmetic rules, fixture rules, cache invalidation, persisted exceptions, fuzzy matching and merged/bounded history/bookmark persistence).
 - Clippy with warnings denied for the browser's Linux, Windows GNU and Windows MSVC targets passes; Windows GNU release linking succeeds. GNU builds additionally require `WebView2Loader.dll` from the matching `webview2-com-sys` package next to the executable; the documented MSVC/release-CI build uses the static loader.
 - Workspace formatting and the CLI dependency-boundary check pass.
 - Both PowerShell scripts parse; the updater successfully downloads upstream lists into a temporary config. Loading these lists, restoring their cache and matching a known blocked/allowed URL were smoke-tested on Linux.
 - The full workspace test run stops on the unchanged `theme_picker::loader::tests::parallel_render_preserves_paint_order_and_reuses_frames` timeout, including with one test thread. No unrelated theme-picker code was changed.
-- Windows desktop behavior, the measurement script's Windows process sampling and actual startup/RAM remain **unverified**. Cross-compilation is not a runtime acceptance test.
+- The home/history/bookmark desktop smoke script passes on Windows via WSL interop. The native frame inset was also verified to be zero on Windows. The broader desktop acceptance matrix, the measurement script's process sampling and meaningful startup/RAM comparisons remain **unverified**.
 
 ## Status / remaining gates
 
-Implemented and statically checked: native host, address/search editor, persistent profile, startup theme, native filtering, basic cosmetics, persistent exceptions, filter provisioning, fixture, unit tests and measurement script.
+Implemented: native host, translucent home, DuckDuckGo/address editor, local fuzzy suggestions, persistent history/bookmarks/profile, startup theme, native filtering, basic cosmetics, persistent exceptions, filter provisioning, fixtures, unit tests and measurement script.
 
 Still required before declaring the V1 validated:
 
