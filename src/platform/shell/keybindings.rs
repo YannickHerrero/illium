@@ -18,6 +18,16 @@ pub enum Input {
     Change(i32),
     Reset(i32),
     Dismiss,
+    /// Key text reaching the list rather than the search field, and whether a
+    /// non-Shift modifier was held.
+    Typed(String, bool),
+}
+/// Slint reports special keys as control or private-use characters.
+fn printable(text: &str) -> bool {
+    !text.is_empty()
+        && text
+            .chars()
+            .all(|c| !c.is_control() && !('\u{e000}'..='\u{f8ff}').contains(&c))
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct Apply {
@@ -86,6 +96,8 @@ impl Editor {
         ui.on_reset(move |n| f(Input::Reset(n)));
         let f = send(&tx, &epoch);
         ui.on_dismiss(move || f(Input::Dismiss));
+        let f = send(&tx, &epoch);
+        ui.on_typed(move |text, ctrl, alt, meta| f(Input::Typed(text.into(), ctrl || alt || meta)));
         let f = send(&tx, &epoch);
         ui.window().on_close_requested(move || {
             f(Input::Dismiss);
@@ -161,8 +173,9 @@ impl Editor {
         tool(self.ui.window(), false);
         native::position(id(self.ui.window()), self.monitor, Some(HWND_TOPMOST));
         native::focus(id(self.ui.window()), false);
-        self.ui.invoke_focus_search();
+        // The field must be visible before it can take focus.
         self.ui.set_ready(true);
+        self.ui.invoke_focus_search();
         self.pending_window = false;
     }
     pub fn display_changed(&mut self, monitor: Rect) {
@@ -338,6 +351,23 @@ impl Editor {
                 Outcome::None
             }
             Input::Dismiss => Outcome::Close,
+            Input::Typed(text, held) if self.capture.is_none() => {
+                let mut query = self.ui.get_query().to_string();
+                let backspace = text.starts_with(char::from(slint::platform::Key::Backspace));
+                if backspace {
+                    query.pop();
+                } else if held || !printable(&text) {
+                    return Outcome::None;
+                } else {
+                    query.push_str(&text);
+                }
+                self.ui.set_query(query.clone().into());
+                self.ui.set_selected(0);
+                self.search(&query);
+                self.ui.invoke_focus_search();
+                Outcome::None
+            }
+            Input::Typed(..) => Outcome::None,
         }
     }
     /// A key reported by the hook while capturing.

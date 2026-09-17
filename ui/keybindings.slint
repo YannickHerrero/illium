@@ -43,6 +43,8 @@ export component KeybindingsEditor inherits Window {
     callback change(int);
     callback reset(int);
     callback dismiss();
+    /// A key the list itself did not handle: text, Ctrl, Alt and Meta held.
+    callback typed(string, bool, bool, bool);
     /// Set once the native window has its final size: the whole surface is
     /// repainted then, instead of only the regions dirtied since the first frame.
     in property <bool> ready;
@@ -59,7 +61,9 @@ export component KeybindingsEditor inherits Window {
             if (event.text == Key.DownArrow) { root.selected = min(root.selected + 1, root.rows.length - 1); return accept; }
             if (event.text == Key.UpArrow) { root.selected = max(0, root.selected - 1); return accept; }
             if (event.text == Key.Return) { root.change(root.selected); return accept; }
-            return reject;
+            // Typing while the search field is not focused still searches.
+            root.typed(event.text, event.modifiers.control, event.modifiers.alt, event.modifiers.meta);
+            return accept;
         }
         panel := Rectangle {
             visible: root.ready;
