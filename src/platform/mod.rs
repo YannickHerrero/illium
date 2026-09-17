@@ -83,6 +83,8 @@ struct Manager {
     /// Popup closed by a press on the bar: the module click that follows the
     /// release must not reopen it.
     just_closed: Option<(String, std::time::Instant)>,
+    /// New browser to focus after its final tile geometry has been applied.
+    pending_browser_focus: Option<isize>,
     /// Placement may have changed since the last save.
     dirty: bool,
 }
@@ -111,7 +113,19 @@ impl Manager {
         previous != self.model.clients.len()
     }
     fn add(&mut self, id: isize) -> bool {
-        self.enroll(id, None)
+        let added = self.enroll(id, None);
+        if added
+            && native::metadata(id).is_some_and(|(_, class, _)| class == "WinarchyBrowser")
+            && self
+                .model
+                .clients
+                .iter()
+                .any(|c| c.id == id && c.workspace == self.model.active)
+        {
+            self.model.focused = Some(id);
+            self.pending_browser_focus = Some(id);
+        }
+        added
     }
     /// A remembered placement wins over the active workspace, the rules and
     /// the floating heuristics: the user had already arranged that window.
@@ -260,6 +274,16 @@ impl Manager {
             if c.workspace == self.model.active && c.fullscreen && !native::minimized(c.id) {
                 native::position(c.id, native::framed(c.id, area), Some(HWND_TOP));
             }
+        }
+        if let Some(id) = self.pending_browser_focus.take()
+            && self
+                .model
+                .clients
+                .iter()
+                .any(|c| c.id == id && c.workspace == self.model.active && !c.hidden)
+        {
+            // Warp only once, after tiling, not during subsequent page resizes.
+            native::focus(id, true);
         }
         self.shell.refresh(&self.model, &self.config, &self.applets);
         self.borders();
@@ -1014,6 +1038,7 @@ pub fn run(replace: bool) -> Result<(), String> {
         monitors: native::monitors(),
         shell: shell::Shell::new(tx.clone())?,
         borders: std::collections::HashMap::new(),
+        pending_browser_focus: None,
         applets: applet::Runtime::new(tx.clone()),
         just_closed: None,
         dirty: false,

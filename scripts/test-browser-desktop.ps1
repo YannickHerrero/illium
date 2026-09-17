@@ -3,13 +3,20 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$Exe,
-    [string]$TestUrl = 'http://127.0.0.1:8765/index.html'
+    [string]$TestUrl = 'http://127.0.0.1:8765/index.html',
+    [switch]$CheckTilingFocus
 )
 $ErrorActionPreference = 'Stop'
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 public static class BrowserTest {
+    [StructLayout(LayoutKind.Sequential)] public struct Rect { public int left, top, right, bottom; }
+    [StructLayout(LayoutKind.Sequential)] public struct Point { public int x, y; }
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out Rect r);
+    [DllImport("user32.dll")] public static extern bool GetCursorPos(out Point p);
+    [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c);
     [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr h, int id);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
     [DllImport("user32.dll", EntryPoint="SendMessageW", CharSet=CharSet.Unicode)] public static extern IntPtr SetText(IntPtr h, uint m, IntPtr w, string s);
@@ -45,6 +52,19 @@ try {
     Wait-For { $process.Refresh(); $process.MainWindowHandle -ne [IntPtr]::Zero } 'No browser window'
     Wait-For { (Get-Content $log -Raw -ErrorAction SilentlyContinue) -match 'webview_ready_ms=' } 'WebView not ready'
     $window = $process.MainWindowHandle
+    if ($CheckTilingFocus) {
+        # Requires Winarchy running; do not move the mouse during this check.
+        [void][BrowserTest]::SetThreadDpiAwarenessContext([IntPtr](-4))
+        Wait-For { [BrowserTest]::GetForegroundWindow() -eq $window } 'New browser did not receive foreground focus'
+        $rect = New-Object BrowserTest+Rect
+        $cursor = New-Object BrowserTest+Point
+        [void][BrowserTest]::GetWindowRect($window, [ref]$rect)
+        [void][BrowserTest]::GetCursorPos([ref]$cursor)
+        if ([Math]::Abs($cursor.x - ($rect.left + $rect.right)/2) -gt 2 -or [Math]::Abs($cursor.y - ($rect.top + $rect.bottom)/2) -gt 2) {
+            throw "Pointer not centered in the browser tile: actual=($($cursor.x),$($cursor.y)), expected=($(($rect.left+$rect.right)/2),$(($rect.top+$rect.bottom)/2))"
+        }
+        Write-Host 'PASS: new browser focused and pointer centered after tiling.'
+    }
     $edit = [BrowserTest]::GetDlgItem($window, 101)
     $list = [BrowserTest]::GetDlgItem($window, 102)
     if (![BrowserTest]::IsWindowVisible($edit)) { throw 'Home input is not visible' }

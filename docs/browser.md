@@ -43,6 +43,8 @@ The field suggests up to eight local results, matching case-insensitive ordered 
 | `Ctrl+R`, `Ctrl+F`, `Ctrl++/-/0` | WebView2 built-in reload, find and zoom shortcuts |
 | `Alt+F4` | Close |
 
+Winarchy gives each newly opened browser window on the active workspace foreground focus and centers the pointer after applying its tile geometry. This is a one-shot launch action, not a cursor warp on every resize. Both the browser and the daemon must be updated for this behavior.
+
 There is no caption or tab strip. Use Winarchy's window management or Windows' system menu (`Alt+Space`) to move the window. The native editor and suggestions temporarily reserve space above the page instead of allocating another WebView. `target=_blank` currently navigates the same window; popup-based OAuth flows may not work. A second executable launch is not forwarded to a shared host yet: use **one instance** for prototype testing.
 
 ## Blocking scope and security
@@ -87,7 +89,7 @@ powershell -ExecutionPolicy Bypass -File scripts/test-browser-desktop.ps1 `
   -Exe "$PWD/target/release/winarchy-browser.exe"
 ```
 
-It uses disposable configuration and profile directories, checks home opacity, fuzzy matching, navigation, opaque page rendering mode, history and bookmark persistence, and closes only its own process. It invokes the queued bookmark action directly, without injecting global keystrokes; manually verify the actual `Ctrl+D` accelerator as well. It retains its temporary logs for diagnosis.
+It uses disposable configuration and profile directories, checks home opacity, unified fuzzy matching, navigation, opaque page rendering mode, history and add-only bookmark persistence, and closes only its own process. With an updated Winarchy running, add `-CheckTilingFocus` to check foreground focus and cursor centering after tiling (do not move the mouse during this check). It invokes the queued bookmark action directly, without injecting global keystrokes; manually verify the actual `Ctrl+D` accelerator as well. It retains its temporary logs for diagnosis.
 
 ## Performance protocol
 
@@ -118,7 +120,7 @@ No preloader, startup resident, polling timer, preloaded site, software-renderin
 - Workspace formatting and the CLI dependency-boundary check pass.
 - Both PowerShell scripts parse; the updater successfully downloads upstream lists into a temporary config. Loading these lists, restoring their cache and matching a known blocked/allowed URL were smoke-tested on Linux.
 - The full workspace test run stops on the unchanged `theme_picker::loader::tests::parallel_render_preserves_paint_order_and_reuses_frames` timeout, including with one test thread. No unrelated theme-picker code was changed.
-- The home/history/bookmark desktop smoke script passes on Windows via WSL interop. The native frame inset was also verified to be zero on Windows. The broader desktop acceptance matrix, the measurement script's process sampling and meaningful startup/RAM comparisons remain **unverified**.
+- The home/history/bookmark desktop smoke script passes on Windows via WSL interop, including add-only bookmarking, combined suggestions, and the opt-in tiling focus/cursor check. The native frame inset was also verified to be zero on Windows. The broader desktop acceptance matrix, the measurement script's process sampling and meaningful startup/RAM comparisons remain **unverified**.
 
 ## Status / remaining gates
 
