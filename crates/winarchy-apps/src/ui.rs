@@ -7,6 +7,7 @@ pub fn color(hex: &str) -> slint::Color {
 }
 /// Pushes the theme into the window's `Palette` global.
 pub fn apply(palette: Palette<'_>, theme: &Theme) {
+    palette.set_background_opacity(theme.background_opacity);
     palette.set_bg(color(&theme.background));
     palette.set_surface(color(&theme.surface));
     palette.set_overlay(color(&theme.overlay));
@@ -16,6 +17,23 @@ pub fn apply(palette: Palette<'_>, theme: &Theme) {
     palette.set_green(color(&theme.green));
     palette.set_yellow(color(&theme.yellow));
     palette.set_red(color(&theme.red));
+}
+/// Subscribe without IO on the UI thread; hidden resident windows update too.
+pub fn watch_theme<T>(window: &T) -> Result<winarchy_theme::live::Subscription, String>
+where
+    T: slint::ComponentHandle + 'static,
+    for<'a> Palette<'a>: slint::Global<'a, T>,
+{
+    let weak = window.as_weak();
+    winarchy_theme::live::watch(config_home(), move |theme| {
+        let weak = weak.clone();
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(window) = weak.upgrade() {
+                apply(window.global::<Palette>(), &theme);
+                window.window().request_redraw();
+            }
+        });
+    })
 }
 /// The configuration home the daemon uses, for the theme.
 pub fn config_home() -> std::path::PathBuf {

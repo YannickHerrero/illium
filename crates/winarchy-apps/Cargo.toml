@@ -8,7 +8,7 @@ repository = "https://github.com/YannickHerrero/winarchy"
 build = "build.rs"
 
 [dependencies]
-winarchy-theme = { path = "../winarchy-theme" }
+winarchy-theme = { path = "../winarchy-theme", features = ["live"] }
 toml = "0.8"
 
 [target.'cfg(windows)'.dependencies]

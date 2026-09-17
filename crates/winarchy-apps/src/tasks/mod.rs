@@ -25,6 +25,7 @@ mod app {
     };
     pub struct App {
         window: TasksWindow,
+        _theme: winarchy_theme::live::Subscription,
         /// The sampler only works while the window is shown.
         visible: Arc<AtomicBool>,
         _timer: slint::Timer,
@@ -133,8 +134,10 @@ mod app {
                     },
                 );
             }
+            let theme = ui::watch_theme(&window)?;
             Ok(Self {
                 window,
+                _theme: theme,
                 visible,
                 _timer: timer,
             })

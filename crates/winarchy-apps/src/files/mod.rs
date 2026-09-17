@@ -19,6 +19,7 @@ mod app {
     /// The window and its state; `resident` makes `q` hide instead of quit.
     pub struct App {
         window: FilesWindow,
+        _theme: winarchy_theme::live::Subscription,
         files: Rc<RefCell<Files>>,
         render: Rc<dyn Fn(&Files)>,
     }
@@ -132,8 +133,10 @@ mod app {
                     render(&f);
                 });
             }
+            let theme = ui::watch_theme(&window)?;
             Ok(Self {
                 window,
+                _theme: theme,
                 files,
                 render,
             })

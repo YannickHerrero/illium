@@ -40,7 +40,7 @@ export component FilesWindow inherits Window {
     in property <[string]> help-lines;
     callback key(string, bool, bool);
     out property <int> page: current.page;
-    background: Palette.bg;
+    background: Palette.bg.with-alpha(Palette.background-opacity);
     forward-focus: keys;
     keys := FocusScope {
         key-pressed(event) => {

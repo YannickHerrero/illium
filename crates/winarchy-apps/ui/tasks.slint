@@ -14,7 +14,7 @@ export component TasksWindow inherits Window {
     /// Key text as Slint reports it, with the control and shift state.
     callback key(string, bool, bool);
     out property <int> page: column.page;
-    background: Palette.bg;
+    background: Palette.bg.with-alpha(Palette.background-opacity);
     forward-focus: keys;
     keys := FocusScope {
         key-pressed(event) => {
