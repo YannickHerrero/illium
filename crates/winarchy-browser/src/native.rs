@@ -32,6 +32,7 @@ const PICKER_CHANGED: u32 = WM_APP + 3;
 const SUBMIT: u32 = WM_APP + 4;
 const BOOKMARK: u32 = WM_APP + 5;
 const LIBRARY_CHANGED: u32 = WM_APP + 6;
+const THEME_CHANGED: u32 = WM_APP + 7;
 #[derive(Clone)]
 struct App {
     hwnd: HWND,
@@ -44,6 +45,7 @@ struct App {
     controller: Option<ICoreWebView2Controller>,
     web: Option<ICoreWebView2>,
     home: bool,
+    background_opacity: f32,
 }
 thread_local! { static APP: RefCell<Option<App>> = const { RefCell::new(None) }; }
 pub(crate) fn wide(s: &str) -> Vec<u16> {
@@ -102,7 +104,9 @@ unsafe fn palette(show: bool) {
     }
 }
 unsafe fn refresh_theme() -> AppResult<()> {
-    let theme = winarchy_theme::Theme::current(&winarchy_theme::config_home());
+    apply_theme(&winarchy_theme::Theme::current(&winarchy_theme::config_home()))
+}
+unsafe fn apply_theme(theme: &winarchy_theme::Theme) -> AppResult<()> {
     let new_brush = CreateSolidBrush(color(&theme.background));
     let new_surface = CreateSolidBrush(color(&theme.surface));
     let previous = APP.with(|state| {
@@ -114,11 +118,14 @@ unsafe fn refresh_theme() -> AppResult<()> {
         app.background = color(&theme.background);
         app.surface = color(&theme.surface);
         app.text = color(&theme.text);
+        app.background_opacity = theme.background_opacity;
         previous
     });
     let _ = DeleteObject(previous.0.into());
     let _ = DeleteObject(previous.1.into());
     if let Some(app) = snapshot() {
+        apply_opacity(&app);
+        let _ = RedrawWindow(Some(app.hwnd), None, None, RDW_INVALIDATE | RDW_ALLCHILDREN);
         if let Some(controller) = app
             .controller
             .and_then(|c| c.cast::<ICoreWebView2Controller2>().ok())
@@ -143,6 +150,17 @@ unsafe fn refresh_theme() -> AppResult<()> {
     }
     Ok(())
 }
+unsafe fn apply_opacity(app: &App) {
+    let style = GetWindowLongPtrW(app.hwnd, GWL_EXSTYLE);
+    if app.home {
+        SetWindowLongPtrW(app.hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED.0 as isize);
+        let alpha = (app.background_opacity * 255.0).round() as u8;
+        let _ = SetLayeredWindowAttributes(app.hwnd, COLORREF(0), alpha, LWA_ALPHA);
+    } else {
+        // WebView2 pages must never inherit the native home's layered alpha.
+        SetWindowLongPtrW(app.hwnd, GWL_EXSTYLE, style & !(WS_EX_LAYERED.0 as isize));
+    }
+}
 unsafe fn home_mode(home: bool) {
     APP.with(|a| {
         if let Some(a) = a.borrow_mut().as_mut() {
@@ -150,13 +168,7 @@ unsafe fn home_mode(home: bool) {
         }
     });
     if let Some(app) = snapshot() {
-        let style = GetWindowLongPtrW(app.hwnd, GWL_EXSTYLE);
-        if home {
-            SetWindowLongPtrW(app.hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED.0 as isize);
-            let _ = SetLayeredWindowAttributes(app.hwnd, COLORREF(0), 217, LWA_ALPHA);
-        } else {
-            SetWindowLongPtrW(app.hwnd, GWL_EXSTYLE, style & !(WS_EX_LAYERED.0 as isize));
-        }
+        apply_opacity(&app);
         if let Some(c) = &app.controller {
             let _ = c.SetIsVisible(!home);
         }
@@ -437,6 +449,7 @@ pub fn run(
                 controller: None,
                 web: None,
                 home: start_home,
+                background_opacity: theme.background_opacity,
             })
         });
         home_mode(start_home);
@@ -701,11 +714,26 @@ pub fn run(
                 started.elapsed().as_millis()
             ));
         }
+        let pending_theme = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let pending = pending_theme.clone();
+        let window_id = hwnd.0 as usize;
+        let _theme_subscription = winarchy_theme::live::watch(home.clone(), move |theme| {
+            *pending.lock().unwrap() = Some(theme);
+            let _ = PostMessageW(Some(HWND(window_id as *mut _)), THEME_CHANGED, WPARAM(0), LPARAM(0));
+        })?;
         let mut msg = MSG::default();
         loop {
             let result = GetMessageW(&mut msg, None, 0, 0).0;
             if result <= 0 {
                 break;
+            }
+            if msg.message == THEME_CHANGED {
+                if let Some(theme) = pending_theme.lock().unwrap().take()
+                    && let Err(error) = apply_theme(&theme)
+                {
+                    eprintln!("Cannot apply theme: {error}");
+                }
+                continue;
             }
             if msg.message == resident::REQUEST {
                 if let Some(requests) = requests {
