@@ -143,7 +143,9 @@ impl Picker {
         self.refresh(parent);
         let _ = ShowWindow(self.edit, SW_SHOW);
         let _ = ShowWindow(self.label, if home { SW_HIDE } else { SW_SHOW });
-        let _ = SetFocus(Some(self.edit));
+        if IsWindowVisible(parent).as_bool() {
+            let _ = SetFocus(Some(self.edit));
+        }
         SendMessageW(
             self.edit,
             0x00B1, /* EM_SETSEL */

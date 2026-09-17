@@ -1,6 +1,7 @@
 //! Windows-only prototype. All COM objects and filter evaluation stay on the UI STA.
 #![allow(unsafe_op_in_unsafe_fn)]
 use crate::picker::{EDIT_ID, LIST_ID, Picker};
+use crate::resident::{self, Exit, Request};
 use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Instant};
 use webview2_com::{Microsoft::Web::WebView2::Win32::*, *};
 use winarchy_browser::{Blocker, address, library::Library};
@@ -8,7 +9,7 @@ use windows::{
     Win32::{
         Foundation::*,
         Graphics::Gdi::*,
-        System::{Com::*, LibraryLoader::*},
+        System::{Com::*, LibraryLoader::*, Threading::GetCurrentThreadId},
         UI::{HiDpi::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
     },
     core::*,
@@ -99,6 +100,48 @@ unsafe fn palette(show: bool) {
         layout(&app);
         let _ = InvalidateRect(Some(app.hwnd), None, true);
     }
+}
+unsafe fn refresh_theme() -> AppResult<()> {
+    let theme = winarchy_theme::Theme::current(&winarchy_theme::config_home());
+    let new_brush = CreateSolidBrush(color(&theme.background));
+    let new_surface = CreateSolidBrush(color(&theme.surface));
+    let previous = APP.with(|state| {
+        let mut state = state.borrow_mut();
+        let app = state.as_mut().unwrap();
+        let previous = (app.brush, app.surface_brush);
+        app.brush = new_brush;
+        app.surface_brush = new_surface;
+        app.background = color(&theme.background);
+        app.surface = color(&theme.surface);
+        app.text = color(&theme.text);
+        previous
+    });
+    let _ = DeleteObject(previous.0.into());
+    let _ = DeleteObject(previous.1.into());
+    if let Some(app) = snapshot() {
+        if let Some(controller) = app
+            .controller
+            .and_then(|c| c.cast::<ICoreWebView2Controller2>().ok())
+        {
+            let (r, g, b) = winarchy_theme::rgb(&theme.background).unwrap();
+            controller.SetDefaultBackgroundColor(COREWEBVIEW2_COLOR {
+                A: 255,
+                R: r,
+                G: g,
+                B: b,
+            })?;
+        }
+        if let Some(web) = app.web {
+            web.cast::<ICoreWebView2_13>()?
+                .Profile()?
+                .SetPreferredColorScheme(if theme.mode.as_deref() == Some("light") {
+                    COREWEBVIEW2_PREFERRED_COLOR_SCHEME_LIGHT
+                } else {
+                    COREWEBVIEW2_PREFERRED_COLOR_SCHEME_DARK
+                })?;
+        }
+    }
+    Ok(())
 }
 unsafe fn home_mode(home: bool) {
     APP.with(|a| {
@@ -311,10 +354,24 @@ fn kind(context: COREWEBVIEW2_WEB_RESOURCE_CONTEXT) -> &'static str {
     }
 }
 
-pub fn run() -> AppResult<()> {
+struct Apartment;
+impl Drop for Apartment {
+    fn drop(&mut self) {
+        unsafe {
+            CoUninitialize();
+        }
+    }
+}
+
+pub fn run(
+    input: &str,
+    hidden: bool,
+    requests: Option<&std::sync::mpsc::Receiver<Request>>,
+    ready: impl FnOnce(u32),
+) -> AppResult<Exit> {
     unsafe {
         let started = Instant::now();
-        let target = address(&std::env::args().skip(1).collect::<Vec<_>>().join(" "));
+        let target = address(input);
         let start_home = target == "about:blank";
         let home = winarchy_theme::config_home();
         let filters = home.join("browser");
@@ -329,6 +386,7 @@ pub fn run() -> AppResult<()> {
             .join("Winarchy/browser/profile");
         std::fs::create_dir_all(&profile)?;
         CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
+        let _apartment = Apartment;
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         let instance = HINSTANCE(GetModuleHandleW(None)?.0);
         let class = w!("WinarchyBrowser");
@@ -342,7 +400,7 @@ pub fn run() -> AppResult<()> {
             hCursor: LoadCursorW(None, IDC_ARROW)?,
             ..Default::default()
         };
-        if RegisterClassW(&wc) == 0 {
+        if RegisterClassW(&wc) == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS {
             return Err(windows::core::Error::from_thread().into());
         }
         let hwnd = CreateWindowExW(
@@ -382,11 +440,13 @@ pub fn run() -> AppResult<()> {
             })
         });
         home_mode(start_home);
-        let _ = ShowWindow(hwnd, SW_SHOW);
-        if start_home {
-            let _ = SetFocus(Some(edit));
+        if !hidden {
+            let _ = ShowWindow(hwnd, SW_SHOW);
+            if start_home {
+                let _ = SetFocus(Some(edit));
+            }
+            eprintln!("metric window_visible_ms={}", started.elapsed().as_millis());
         }
-        eprintln!("metric window_visible_ms={}", started.elapsed().as_millis());
         let (tx, rx) = std::sync::mpsc::channel();
         let profile = wide(&profile.to_string_lossy());
         CreateCoreWebView2EnvironmentCompletedHandler::wait_for_async_operation(
@@ -610,20 +670,88 @@ pub fn run() -> AppResult<()> {
             layout(&app);
         }
         controller.SetIsVisible(!start_home)?;
-        if start_home {
-            let _ = SetFocus(Some(edit));
-        } else {
-            controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC)?;
+        if !hidden {
+            if start_home {
+                let _ = SetFocus(Some(edit));
+            } else {
+                controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC)?;
+            }
         }
         eprintln!("metric webview_ready_ms={}", started.elapsed().as_millis());
         if !start_home {
             web.Navigate(PCWSTR(wide(&target).as_ptr()))?;
+        }
+        let mut opened = !hidden;
+        let mut quit = false;
+        let mut warm_open_ms: Option<u128> = None;
+        ready(GetCurrentThreadId());
+        if requests.is_some() {
+            // COM initialization pumps messages; re-signal requests queued while
+            // rebuilding a spare so a consumed thread message cannot strand them.
+            let _ = windows::Win32::UI::WindowsAndMessaging::PostThreadMessageW(
+                GetCurrentThreadId(),
+                resident::REQUEST,
+                WPARAM(0),
+                LPARAM(0),
+            );
+            resident::log(&format!(
+                "resident_ready pid={} hidden={} ready_ms={}",
+                std::process::id(),
+                hidden,
+                started.elapsed().as_millis()
+            ));
         }
         let mut msg = MSG::default();
         loop {
             let result = GetMessageW(&mut msg, None, 0, 0).0;
             if result <= 0 {
                 break;
+            }
+            if msg.message == resident::REQUEST {
+                if let Some(requests) = requests {
+                    while let Ok(request) = requests.try_recv() {
+                        let result = if request.command == "status" {
+                            Ok(serde_json::json!({"pid": std::process::id(), "ready": true, "opened": opened, "warm_open_ms": warm_open_ms}).to_string())
+                        } else if request.command == "quit" {
+                            quit = true;
+                            if !opened {
+                                let _ = DestroyWindow(hwnd);
+                            }
+                            Ok(if opened {
+                                "stopping after window closes"
+                            } else {
+                                "stopping"
+                            }
+                            .into())
+                        } else if let Some(input) = request.command.strip_prefix("open ") {
+                            serde_json::from_str::<String>(input).map_err(|e| e.to_string()).and_then(|input| {
+                                if opened {
+                                    // Only the first window is kept warm. Do not hijack an
+                                    // existing window (possibly hidden on another workspace).
+                                    std::env::current_exe().and_then(|exe| std::process::Command::new(exe).arg("--standalone").arg(&input).spawn())
+                                        .map(|child| serde_json::json!({"pid": child.id(), "warm": false}).to_string()).map_err(|e| e.to_string())
+                                } else {
+                                    let show_started = Instant::now();
+                                    refresh_theme().map_err(|e| e.to_string())?;
+                                    let target = address(&input);
+                                    home_mode(target == "about:blank");
+                                    opened = true;
+                                    let _ = ShowWindow(hwnd, SW_SHOW);
+                                    let _ = SetForegroundWindow(hwnd);
+                                    if target == "about:blank" { let _ = SetFocus(Some(edit)); }
+                                    else { web.Navigate(PCWSTR(wide(&target).as_ptr())).map_err(|e| e.to_string())?; }
+                                    warm_open_ms = Some(show_started.elapsed().as_millis());
+                                    resident::log(&format!("warm_open pid={} show_ms={}", std::process::id(), warm_open_ms.unwrap()));
+                                    Ok(serde_json::json!({"pid": std::process::id(), "warm": true, "show_ms": warm_open_ms}).to_string())
+                                }
+                            })
+                        } else {
+                            Err("expected open, status or quit".into())
+                        };
+                        let _ = request.reply.send(result);
+                    }
+                }
+                continue;
             }
             route_home_input(&mut msg);
             if msg.message == HISTORY {
@@ -724,12 +852,10 @@ pub fn run() -> AppResult<()> {
         }
         eprintln!("metric blocked_requests={}", blocker.borrow().blocked);
         controller.Close()?;
-        APP.with(|a| {
-            a.borrow_mut().take();
-        });
-        let _ = DeleteObject(brush.into());
-        let _ = DeleteObject(surface_brush.into());
-        // COM interfaces are dropped before process exit; no resident helper is kept.
-        Ok(())
+        if let Some(app) = APP.with(|a| a.borrow_mut().take()) {
+            let _ = DeleteObject(app.brush.into());
+            let _ = DeleteObject(app.surface_brush.into());
+        }
+        Ok(if quit { Exit::Quit } else { Exit::Closed })
     }
 }

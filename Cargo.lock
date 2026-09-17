@@ -5950,6 +5950,7 @@ dependencies = [
  "serde_json",
  "url",
  "webview2-com",
+ "winarchy-ipc",
  "winarchy-theme",
  "windows 0.62.2",
 ]

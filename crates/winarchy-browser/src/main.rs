@@ -4,12 +4,16 @@
 mod native;
 #[cfg(windows)]
 mod picker;
+#[cfg(windows)]
+mod resident;
 
 fn main() {
     #[cfg(windows)]
-    if let Err(error) = native::run() {
-        eprintln!("winarchy-browser: {error}");
-        native::show_error(&error.to_string());
+    if let Err(error) = resident::run() {
+        resident::log(&format!("winarchy-browser: {error}"));
+        if !std::env::args().any(|a| matches!(a.as_str(), "--serve" | "--status" | "--quit")) {
+            native::show_error(&error);
+        }
         std::process::exit(1);
     }
     #[cfg(not(windows))]

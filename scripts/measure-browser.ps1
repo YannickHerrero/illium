@@ -13,7 +13,7 @@ if (!$PSBoundParameters.ContainsKey('Exe') -and !(Test-Path $Exe) -and (Test-Pat
 if (Get-Process winarchy-browser -ErrorAction SilentlyContinue) { throw 'Close other winarchy-browser instances first.' }
 if ($Url.Contains('"')) { throw 'URL must not contain literal quotes.' }
 $log = [IO.Path]::GetFullPath("$Output.startup.log")
-$process = Start-Process -FilePath $Exe -ArgumentList ('"' + $Url + '"') -RedirectStandardError $log -PassThru
+$process = Start-Process -FilePath $Exe -ArgumentList ('--standalone "' + $Url + '"') -RedirectStandardError $log -PassThru
 $known = [Collections.Generic.HashSet[int]]::new()
 [void]$known.Add($process.Id)
 $rows = @()

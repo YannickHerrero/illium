@@ -56,7 +56,7 @@ $log = Join-Path $root 'startup.log'
 try {
     $env:WINARCHY_CONFIG_HOME = $configDir
     $env:LOCALAPPDATA = Join-Path $root 'local'
-    $process = Start-Process -FilePath $Exe -PassThru -RedirectStandardError $log
+    $process = Start-Process -FilePath $Exe -ArgumentList '--standalone' -PassThru -RedirectStandardError $log
     Wait-For { $process.Refresh(); $process.MainWindowHandle -ne [IntPtr]::Zero } 'No browser window'
     Wait-For { (Get-Content $log -Raw -ErrorAction SilentlyContinue) -match 'webview_ready_ms=' } 'WebView not ready'
     $window = $process.MainWindowHandle
