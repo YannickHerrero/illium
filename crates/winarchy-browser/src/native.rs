@@ -32,7 +32,9 @@ const PICKER_CHANGED: u32 = WM_APP + 3;
 const SUBMIT: u32 = WM_APP + 4;
 const BOOKMARK: u32 = WM_APP + 5;
 const LIBRARY_CHANGED: u32 = WM_APP + 6;
-const THEME_CHANGED: u32 = WM_APP + 7;
+// WM_APP + 7 is the resident pipe wakeup, handled by the same message loop.
+const THEME_CHANGED: u32 = WM_APP + 8;
+const _: () = assert!(THEME_CHANGED != crate::resident::REQUEST);
 #[derive(Clone)]
 struct App {
     hwnd: HWND,

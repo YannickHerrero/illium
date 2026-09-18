@@ -64,7 +64,10 @@ function Memory([int]$RootId) {
 $root = Join-Path $env:TEMP ('winarchy-browser-resident-test-' + [guid]::NewGuid())
 $config = Join-Path $root 'config'
 $filterDir = Join-Path $config 'browser'
-New-Item -ItemType Directory -Force $filterDir | Out-Null
+New-Item -ItemType Directory -Force $filterDir, (Join-Path $config 'themes') | Out-Null
+[IO.File]::WriteAllText((Join-Path $config 'winarchy.toml'), 'theme = "test"')
+$theme = (Get-Content "$PSScriptRoot/../config/themes/catppuccin-mocha.toml" -Raw) + "`nbackground_opacity = 0.75`n"
+[IO.File]::WriteAllText((Join-Path $config 'themes/test.toml'), $theme)
 Get-ChildItem $Filters -File | Where-Object { $_.Extension -in '.txt','.bin' } | Copy-Item -Destination $filterDir
 if (!(Get-ChildItem $filterDir -Filter '*.txt')) { throw 'Download filter lists first.' }
 $oldHome=$env:WINARCHY_CONFIG_HOME; $oldLocal=$env:LOCALAPPDATA
@@ -89,6 +92,12 @@ try {
     if ($state.pid -ne $resident.Id -or $state.opened) { throw 'Expected our hidden ready resident' }
     $resident.Refresh()
     if ($resident.MainWindowHandle -ne [IntPtr]::Zero) { throw 'Prewarm unexpectedly showed a window' }
+    # Palette wakeups and resident IPC must have distinct Win32 message IDs.
+    # Exercise both while hidden; a collision silently swallows status/open/quit.
+    [IO.File]::WriteAllText((Join-Path $config 'background-opacity.state'), "theme = 'test'`nopacity = 0.60`n")
+    Start-Sleep -Milliseconds 250
+    $state=Control '--status' | ConvertFrom-Json
+    if ($state.pid -ne $resident.Id -or $state.opened) { throw 'Opacity update broke hidden resident IPC' }
     $idleMemory=Memory $resident.Id
     $clock=[Diagnostics.Stopwatch]::StartNew()
     Warm-Open
