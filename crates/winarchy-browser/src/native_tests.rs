@@ -75,6 +75,7 @@ unsafe extern "system" fn timer(hwnd: HWND, _: u32, _: usize, _: u32) {
 }
 
 #[test]
+#[ignore = "requires an interactive Windows desktop and the WebView2 runtime"]
 fn tab_palette_open_filter_close_and_reopen_on_windows() {
     unsafe {
         let old_config = std::env::var_os("WINARCHY_CONFIG_HOME");

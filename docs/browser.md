@@ -253,6 +253,19 @@ screenshot is saved alongside the temporary logs. It adds no test IPC or script
 bridge to the browser. Security software may block keyboard automation; do not
 disable protection to run it. In that case, perform the same checks manually.
 
+A Windows-native palette regression is available without keyboard injection:
+
+```powershell
+cargo test -p winarchy-browser --bin winarchy-browser --locked -- --ignored --nocapture
+```
+
+It requires an interactive Windows desktop and WebView2 (ignored by default).
+The test uses a disposable profile/config and its own window, queues real host
+commands, and checks opening, empty/matching filters, closing, and reopening the
+tab picker. It reproduced the User32 crash caused by drawing an empty badge and
+passes with the fix. Its test driver is compiled only into the test executable,
+not exposed through production IPC or messages.
+
 For the new **non-keyboard tab smoke test**, with the same local fixture server:
 
 ```powershell
@@ -334,6 +347,8 @@ Prepared mode keeps one browser host and its empty WebView ready. There is no po
   `test-browser-tabs.ps1` on Windows: two retained controllers, one visible view,
   full client bounds, per-tab history and filtering, unsolicited-popup blocking,
   a user-initiated popup tab, and a clean shutdown.
+- The Windows-native tab-palette regression passes, including painting inactive
+  tabs with empty badges, filter updates and reopening after closing the last tab.
 - **The keyboard desktop leader/tab suite has not run successfully in the implementation
   environment:** Windows antivirus rejected the script before execution. No
   protection was bypassed. The desktop claims in earlier sections describe
