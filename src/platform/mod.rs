@@ -461,9 +461,10 @@ impl Manager {
         Ok(())
     }
     fn execute(&mut self, c: Command) -> Result<String, String> {
-        if !matches!(c, Command::BarHints | Command::Status) {
+        if self.shell.hints.opened && !matches!(c, Command::BarHints | Command::Status) {
             self.shell.hints.close();
-            self.bar_restore = None;
+            let restore = self.bar_restore.take();
+            self.restore_focus(restore);
         }
         if self.prune() {
             self.layout();
@@ -869,7 +870,9 @@ impl Manager {
                     }
                 }
                 EVENT_SYSTEM_FOREGROUND => {
-                    if self.shell.hints.opened && Some(id) != self.bar_restore {
+                    if (self.shell.hints.opened || self.bar_restore.is_some())
+                        && Some(id) != self.bar_restore
+                    {
                         let mut pid = 0;
                         unsafe {
                             GetWindowThreadProcessId(native::hwnd(id), Some(&mut pid));

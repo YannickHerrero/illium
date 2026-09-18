@@ -111,7 +111,9 @@ impl Hints {
                 windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow().0 as isize
             };
             if foreground == id(self.ui.window())
-                && let Some(restore) = restore.filter(|id| super::super::native::visible(*id))
+                && let Some(restore) = restore.filter(|id| {
+                    super::super::native::visible(*id) && !super::super::native::minimized(*id)
+                })
             {
                 super::super::native::focus(restore, false);
             }
