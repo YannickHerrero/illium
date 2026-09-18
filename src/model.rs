@@ -17,6 +17,7 @@ pub struct Model {
     pub recent: u8,
     pub focused: Option<isize>,
     pub monitors: [usize; 9],
+    pub splits: [crate::layout::Splits; 9],
 }
 impl Model {
     pub fn new() -> Self {

@@ -18,7 +18,46 @@ impl Rect {
         }
     }
 }
+pub use crate::command::Axis;
+
+/// Ratios belong to split positions, not window identities.
+#[derive(Debug, Default, Clone)]
+pub struct Splits {
+    members: Vec<(isize, usize)>,
+    ratios: Vec<i32>,
+}
+impl Splits {
+    /// Ignore ordering (swaps), but reset when the tiled membership changes.
+    pub fn sync(&mut self, mut members: Vec<(isize, usize)>) {
+        members.sort_unstable();
+        if self.members != members {
+            self.ratios = vec![50; members.len().saturating_sub(1)];
+            self.members = members;
+        }
+    }
+    pub fn resize(&mut self, index: usize, axis: Axis, delta: i32) -> bool {
+        if index >= self.members.len() || delta == 0 || !(-100..=100).contains(&delta) {
+            return false;
+        }
+        let split = (0..self.ratios.len().min(index + 1))
+            .rev()
+            .find(|i| (*i % 2 == 0) == (axis == Axis::Width));
+        let Some(split) = split else { return false };
+        let signed = if split == index { delta } else { -delta };
+        let next = (self.ratios[split] + signed).clamp(10, 90);
+        let changed = next != self.ratios[split];
+        self.ratios[split] = next;
+        changed
+    }
+    pub fn layout(&self, area: Rect, count: usize, gap: i32, outer: i32) -> Vec<Rect> {
+        fibonacci_ratios(area, count, gap, outer, &self.ratios)
+    }
+}
+
 pub fn fibonacci(area: Rect, count: usize, gap: i32, outer: i32) -> Vec<Rect> {
+    fibonacci_ratios(area, count, gap, outer, &[])
+}
+fn fibonacci_ratios(area: Rect, count: usize, gap: i32, outer: i32, ratios: &[i32]) -> Vec<Rect> {
     let mut r = area.inset(outer);
     let mut out = Vec::with_capacity(count);
     for i in 0..count {
@@ -34,7 +73,9 @@ pub fn fibonacci(area: Rect, count: usize, gap: i32, outer: i32) -> Vec<Rect> {
             break;
         }
         let g = gap.max(0).min(length - 2);
-        let half = (length - g) / 2;
+        let ratio = ratios.get(i).copied().unwrap_or(50).clamp(10, 90);
+        let half =
+            ((i64::from(length - g) * i64::from(ratio) / 100) as i32).clamp(1, length - g - 1);
         let mut first = r;
         if horizontal {
             first.w = half;

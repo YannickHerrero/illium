@@ -8,6 +8,11 @@ pub enum Direction {
     Up,
     Right,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Axis {
+    Width,
+    Height,
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Command {
     Workspace(u8),
