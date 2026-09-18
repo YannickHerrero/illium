@@ -39,6 +39,9 @@ pub struct Bar {
     pub center: Vec<String>,
     pub right: Vec<String>,
     pub clock_format: String,
+    /// Optional secondary date label beside the clock; old configurations keep a single label.
+    #[serde(default)]
+    pub clock_date_format: String,
 }
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -382,6 +385,8 @@ impl Config {
             }
         }
         crate::clock::validate(&c.bar.clock_format)?;
+        crate::clock::validate(&c.bar.clock_date_format)
+            .map_err(|e| format!("clock_date_format: {e}"))?;
         c.theme.validate()?;
         for r in &c.rules.rules {
             if r.workspace.is_some_and(|n| !(1..=9).contains(&n)) {
@@ -428,6 +433,18 @@ mod tests {
         assert!(Config::load(&p).is_err());
         assert_eq!(c.wm.gap, 16);
         std::fs::remove_dir_all(p).unwrap();
+    }
+    #[test]
+    fn secondary_clock_date_is_optional_and_validated() {
+        let home = std::env::temp_dir().join(format!("winarchy-clock-date-{}", std::process::id()));
+        Config::install(&home).unwrap();
+        let original = std::fs::read_to_string(home.join("bar.toml")).unwrap();
+        assert!(Config::load(&home).unwrap().bar.clock_date_format.is_empty());
+        std::fs::write(home.join("bar.toml"), format!("{original}\nclock_date_format = \"%a %d %b\"\n")).unwrap();
+        assert_eq!(Config::load(&home).unwrap().bar.clock_date_format, "%a %d %b");
+        std::fs::write(home.join("bar.toml"), format!("{original}\nclock_date_format = \"%Q\"\n")).unwrap();
+        assert!(Config::load(&home).is_err());
+        std::fs::remove_dir_all(home).unwrap();
     }
     #[test]
     fn separators_repeat_but_unknown_modules_do_not_load() {

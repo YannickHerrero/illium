@@ -73,24 +73,27 @@ pub fn battery_status() -> Option<(u8, bool)> {
     unsafe { GetSystemPowerStatus(&mut p) }.ok()?;
     (p.BatteryLifePercent <= 100).then_some((p.BatteryLifePercent, p.ACLineStatus == 1))
 }
+/// Both clock labels use the same timestamp, including across midnight.
+pub fn clock_labels(c: &Config) -> (String, String) {
+    let t = unsafe { GetLocalTime() };
+    let moment = crate::clock::Moment {
+        weekday: t.wDayOfWeek as u8,
+        day: t.wDay as u8,
+        month: t.wMonth as u8,
+        hour: t.wHour as u8,
+        minute: t.wMinute as u8,
+        second: t.wSecond as u8,
+    };
+    (
+        crate::clock::format(&c.bar.clock_format, moment),
+        crate::clock::format(&c.bar.clock_date_format, moment),
+    )
+}
 /// Rendered text of a built-in module, when it has something to show.
 pub fn item(c: &Config, title: &str, module: &str) -> Option<String> {
     match module {
         "window-title" => Some(title.to_owned()),
-        "clock" => unsafe {
-            let t = GetLocalTime();
-            Some(crate::clock::format(
-                &c.bar.clock_format,
-                crate::clock::Moment {
-                    weekday: t.wDayOfWeek as u8,
-                    day: t.wDay as u8,
-                    month: t.wMonth as u8,
-                    hour: t.wHour as u8,
-                    minute: t.wMinute as u8,
-                    second: t.wSecond as u8,
-                },
-            ))
-        },
+        "clock" => Some(clock_labels(c).0),
         "cpu" => cpu(),
         "memory" => memory(),
         "separator" => Some(String::new()),

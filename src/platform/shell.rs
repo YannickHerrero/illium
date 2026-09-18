@@ -832,6 +832,7 @@ impl Shell {
                     StatusItem {
                         kind: name.clone().into(),
                         value: label.into(),
+                        secondary: Default::default(),
                         has_icon: icon.is_some(),
                         icon: icon.unwrap_or_default(),
                         hint_id: 0,
@@ -845,6 +846,7 @@ impl Shell {
                     StatusItem {
                         kind: "battery".into(),
                         value: format!("{percent}%").into(),
+                        secondary: Default::default(),
                         has_icon: false,
                         icon: slint::Image::default(),
                         level: i32::from(percent),
@@ -858,16 +860,26 @@ impl Shell {
                     StatusItem {
                         kind: "volume".into(),
                         value: "".into(),
+                        secondary: Default::default(),
                         has_icon: true,
                         icon: self.volume_icons[usize::from(muted)].clone(),
                         hint_id: 0,
                         level: 0,
                         charging: false,
                     }
+                } else if name == "clock" {
+                    let (value, secondary) = super::status::clock_labels(c);
+                    StatusItem {
+                        kind: "clock".into(),
+                        value: value.into(),
+                        secondary: secondary.into(),
+                        ..Default::default()
+                    }
                 } else if let Some(value) = super::status::item(c, &title, name) {
                     StatusItem {
                         kind: name.clone().into(),
                         value: value.into(),
+                        secondary: Default::default(),
                         hint_id: 0,
                         has_icon: false,
                         icon: slint::Image::default(),

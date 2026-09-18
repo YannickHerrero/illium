@@ -17,7 +17,7 @@ export component Background inherits Window {
         image-fit: cover;
     }
 }
-export struct StatusItem { kind: string, value: string, icon: image, has-icon: bool, level: int, charging: bool, hint-id: int }
+export struct StatusItem { kind: string, value: string, secondary: string, icon: image, has-icon: bool, level: int, charging: bool, hint-id: int }
 component StatusModule inherits Rectangle {
     in property <StatusItem> item;
     in property <color> fg;
@@ -68,7 +68,13 @@ component StatusModule inherits Rectangle {
                 : item.icon;
             colorize: muted;
         }
-        if !separator: Text { text: item.value; color: fg; vertical-alignment: center; }
+        if !separator && item.value != "": Text {
+            text: item.value; color: fg; vertical-alignment: center;
+            font-weight: item.kind == "clock" && item.secondary != "" ? 700 : 400;
+        }
+        if !separator && item.secondary != "": Text {
+            text: item.secondary; color: muted; vertical-alignment: center;
+        }
     }
     // A separator is not clickable: the press reaches the bar background like an empty area.
     TouchArea { enabled: !root.separator; clicked => { root.clicked(root.x + root.width / 2); } }
