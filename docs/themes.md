@@ -32,11 +32,14 @@ The built-in themes include the [official Catppuccin terminal palettes](https://
 
 `background_opacity` is optional (default `0.85`), a finite number from `0.0`
 to `1.0`. It controls the native terminal, Files and Tasks window backgrounds
-without fading their text. Terminal cursor, selection and explicit application
+and the status bar's base surface without fading their text or icons. Terminal cursor, selection and explicit application
 background cells, and Files/Tasks selection and status surfaces remain opaque.
 The browser's native home uses the same value (including its native controls);
-**web pages always remain opaque**. Shell surfaces and external applications
-such as WezTerm are unchanged. For example:
+**web pages always remain opaque**. The bar's active workspace indicator also
+remains opaque; inactive workspaces reveal the same translucent base, without
+stacking additional opacity layers. Clicking empty bar space still toggles a
+fully transparent base; clicking again restores the shared opacity. Other shell
+surfaces and external applications such as WezTerm are unchanged. For example:
 
 ```toml
 background_opacity = 0.85

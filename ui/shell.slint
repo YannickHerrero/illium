@@ -85,11 +85,13 @@ export component Bar inherits Window {
     callback workspace(int);
     /// A module was clicked: its kind and horizontal center in the bar.
     callback module(string, length);
-    /// The bar shows the wallpaper through instead of its surface color.
+    /// Shared theme/application opacity affects only the base surface.
+    in property <float> background-opacity: 1;
+    /// Clicking the bar can still hide its surface completely.
     in property <bool> transparent;
     /// Empty bar area clicked, outside every module.
     callback toggle-background();
-    background: root.transparent ? Colors.transparent : root.bg;
+    background: root.transparent ? Colors.transparent : root.bg.with-alpha(root.background-opacity);
     // Declared first so the module and workspace touch areas stay above it.
     TouchArea { clicked => { root.toggle-background(); } }
     // Each group is anchored on its own, so the center group is centered on
@@ -104,7 +106,9 @@ export component Bar inherits Window {
         padding-left: 4px; padding-top: 4px; padding-bottom: 4px; spacing: 8px;
         for n in root.workspaces: Rectangle {
             width: 25px;
-            background: root.active == n ? root.accent : (root.transparent ? Colors.transparent : root.bg);
+            // Inactive workspaces reveal the single base surface, avoiding a
+            // second opacity layer. The active indicator and all text stay opaque.
+            background: root.active == n ? root.accent : Colors.transparent;
             Text { text: "\{n}"; color: root.active == n ? root.bg : root.fg; horizontal-alignment: center; vertical-alignment: center; }
             TouchArea { clicked => { root.workspace(n); } }
         }

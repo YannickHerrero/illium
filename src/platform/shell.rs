@@ -5,6 +5,8 @@ use slint::{ComponentHandle, Model as _, ModelRc, VecModel};
 use std::rc::Rc;
 use windows::Win32::{Foundation::*, UI::WindowsAndMessaging::*};
 slint::include_modules!();
+#[cfg(test)]
+mod bar_tests;
 pub(super) fn color(s: &str) -> slint::Color {
     let c = u32::from_str_radix(&s[1..], 16).unwrap_or_default();
     slint::Color::from_rgb_u8((c >> 16) as u8, (c >> 8) as u8, c as u8)
@@ -268,6 +270,18 @@ impl Shell {
             tx,
         })
     }
+    fn background_opacity(c: &Config) -> f32 {
+        let mut theme = c.theme.clone();
+        winarchy_theme::opacity::apply(&c.home, &c.global.theme, &mut theme);
+        theme.background_opacity
+    }
+    /// Opacity-only changes never rebuild surfaces or restart applet providers.
+    pub fn apply_opacity(&self, c: &Config) {
+        let opacity = Self::background_opacity(c);
+        for bar in &self.bars {
+            bar.set_background_opacity(opacity);
+        }
+    }
     /// Update existing surfaces in place; application index, geometry and UI state stay intact.
     pub fn apply_theme(&mut self, c: &Config) {
         self.picker.apply_theme(c);
@@ -287,6 +301,7 @@ impl Shell {
             b.set_accent(color(&c.theme.accent));
             b.set_muted(color(&c.theme.subtext));
         }
+        self.apply_opacity(c);
         self.launcher.set_bg(color(&c.theme.background));
         self.launcher.set_fg(color(&c.theme.text));
         self.launcher.set_accent(color(&c.theme.accent));
@@ -341,6 +356,7 @@ impl Shell {
                 b.set_accent(color(&c.theme.accent));
                 b.set_muted(color(&c.theme.subtext));
                 b.set_transparent(self.bar_transparent);
+                b.set_background_opacity(Self::background_opacity(c));
                 let tx = self.tx.clone();
                 b.on_toggle_background(move || {
                     let _ = tx.send(Event::BarBackground);

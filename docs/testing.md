@@ -26,6 +26,23 @@ ConPTY. A visible desktop probe uses a temporary theme and asserts that live
 reload retains both the native HWND and WSL PID. Do not run visible probes
 while interacting with their test windows.
 
+## Status bar opacity
+
+The Windows-only offscreen test renders the production Slint bar at 0%, 50%,
+85% and 100% opacity. It checks pixel alpha for the base, inactive workspaces
+(no double layer), the opaque active indicator, and the full-transparency toggle.
+It also verifies the shared temporary override and reset without changing the
+running desktop or personal configuration:
+
+```powershell
+cargo test -p winarchy --lib bar_fades_only_its_background_and_honors_shared_override -- --nocapture
+```
+
+This test passes on Windows. After deployment, `winarchyctl status` exposes
+`bar_background_opacity` (null when no bar exists) alongside `bar_transparent`.
+Opacity shortcuts and external override edits update bars in place, without
+restarting applets or recreating HWNDs.
+
 ## Theme demo scene
 
 Regular tests cover `demo` parsing/serialization, the three-tile geometry,

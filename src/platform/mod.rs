@@ -39,6 +39,7 @@ pub enum Event {
     Launch(i32),
     Dismiss,
     Reload,
+    Opacity,
     Wallpapers,
     /// Preview assets changed independently of configuration and the active wallpaper.
     ThemePreviews,
@@ -480,6 +481,7 @@ impl Manager {
                 "wallpaper_pending": self.shell.pending_wallpaper(),
                 "wallpaper_error": self.shell.wallpaper_error,
                 "gap": self.config.wm.gap, "launcher": self.shell.visible,
+                "bar_background_opacity": self.shell.bars.first().map(|bar| bar.get_background_opacity()),
                 "theme_picker": self.shell.picker.opened && self.shell.picker.wallpaper_theme.is_none(),
                 "wallpaper_picker": self.shell.picker.opened && self.shell.picker.wallpaper_theme.is_some(),
                 "wallpaper_picker_theme": self.shell.picker.wallpaper_theme,
@@ -678,6 +680,7 @@ impl Manager {
                 winarchy_theme::opacity::set(
                     &self.config.home, &self.config.global.theme, opacity,
                 )?;
+                self.shell.apply_opacity(&self.config);
                 return Ok(format!("background opacity: {:.0}%", opacity * 100.0));
             }
             Command::Theme(name) => {
@@ -1013,6 +1016,7 @@ impl Manager {
                 // while the last-used surface was the theme selector.
                 self.shell.picker.rescan();
             }
+            Event::Opacity => self.shell.apply_opacity(&self.config),
             Event::Reload => {
                 if let Err(e) = self.reload_config(false) {
                     tracing::warn!(%e,"keeping previous configuration");
@@ -1068,6 +1072,8 @@ fn watch(home: std::path::PathBuf, tx: EventSender) {
         let mut previous = crate::files::snapshot(&home);
         let mut previous_wallpapers = wallpaper_snapshot();
         let mut previous_previews = winarchy_theme::preview::catalog(&home);
+        let opacity_path = home.join(winarchy_theme::opacity::FILE);
+        let mut previous_opacity = crate::files::read_config(&opacity_path);
         loop {
             if WaitForSingleObject(h, INFINITE) != WAIT_OBJECT_0 {
                 break;
@@ -1078,6 +1084,11 @@ fn watch(home: std::path::PathBuf, tx: EventSender) {
             std::thread::sleep(std::time::Duration::from_millis(150));
             let next = crate::files::snapshot(&home);
             let next_wallpapers = wallpaper_snapshot();
+            let next_opacity = crate::files::read_config(&opacity_path);
+            if next_opacity != previous_opacity {
+                previous_opacity = next_opacity;
+                let _ = tx.send(Event::Opacity);
+            }
             // The picker covers inactive themes too. This bounded scan lives on
             // the notification thread and never decodes pixels or reloads applets.
             let next_previews = winarchy_theme::preview::catalog(&home);
