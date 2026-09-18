@@ -120,9 +120,18 @@ pub struct App {
 /// updated in place instead.
 struct BarModels {
     workspaces: Rc<VecModel<i32>>,
+    before_workspaces: Rc<VecModel<StatusItem>>,
     left: Rc<VecModel<StatusItem>>,
     center: Rc<VecModel<StatusItem>>,
     right: Rc<VecModel<StatusItem>>,
+}
+/// Keep the workspace group at its configured position, not always first.
+/// Without a workspace entry, all left modules retain their ordinary order.
+fn split_workspaces(modules: &[String]) -> (&[String], &[String]) {
+    match modules.iter().position(|name| name == "workspaces") {
+        Some(index) => (&modules[..index], &modules[index + 1..]),
+        None => (&[], modules),
+    }
 }
 fn sync<T: Clone + PartialEq + 'static>(model: &Rc<VecModel<T>>, rows: &[T]) {
     for (i, row) in rows.iter().enumerate() {
@@ -377,11 +386,13 @@ impl Shell {
                 b.show().map_err(|e| e.to_string())?;
                 let models = BarModels {
                     workspaces: Rc::new(VecModel::default()),
+                    before_workspaces: Rc::new(VecModel::default()),
                     left: Rc::new(VecModel::default()),
                     center: Rc::new(VecModel::default()),
                     right: Rc::new(VecModel::default()),
                 };
                 b.set_workspaces(ModelRc::from(models.workspaces.clone()));
+                b.set_before_workspace_items(ModelRc::from(models.before_workspaces.clone()));
                 b.set_left_items(ModelRc::from(models.left.clone()));
                 b.set_center_items(ModelRc::from(models.center.clone()));
                 b.set_right_items(ModelRc::from(models.right.clone()));
@@ -827,12 +838,15 @@ impl Shell {
             }
             out
         };
-        let left = items(&c.bar.left);
+        let (before, after) = split_workspaces(&c.bar.left);
+        let before_workspaces = items(before);
+        let left = items(after);
         let center = items(&c.bar.center);
         let right = items(&c.bar.right);
         for (b, models) in self.bars.iter().zip(&self.models) {
             b.set_active(m.active as i32);
             sync(&models.workspaces, &workspaces);
+            sync(&models.before_workspaces, &before_workspaces);
             sync(&models.left, &left);
             sync(&models.center, &center);
             sync(&models.right, &right);

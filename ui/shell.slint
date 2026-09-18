@@ -79,6 +79,7 @@ export component Bar inherits Window {
     in property <int> active;
     /// Workspace numbers to show: the occupied ones and the active one.
     in property <[int]> workspaces;
+    in property <[StatusItem]> before-workspace-items;
     in property <[StatusItem]> left-items;
     in property <[StatusItem]> center-items;
     in property <[StatusItem]> right-items;
@@ -104,6 +105,7 @@ export component Bar inherits Window {
     left-group := HorizontalLayout {
         x: 0; height: root.height; width: self.preferred-width;
         padding-left: 4px; padding-top: 4px; padding-bottom: 4px; spacing: 8px;
+        for item in root.before-workspace-items: StatusModule { item: item; fg: root.fg; muted: root.muted; bg: root.bg; clicked(x) => { root.module(item.kind, left-group.x + x); } }
         for n in root.workspaces: Rectangle {
             width: 25px;
             // Inactive workspaces reveal the single base surface, avoiding a
