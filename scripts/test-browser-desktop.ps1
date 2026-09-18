@@ -201,6 +201,16 @@ try {
         if (!$field -or !$events) { throw 'Keyboard fixture controls missing from UI Automation' }
         $field.SetFocus()
         Send-LeaderKeys 'sentinel'
+        # Regression: consuming the opening chord's key-up made the next Ctrl+B
+        # look like a repeat. Exercise consecutive actions in web AND native input.
+        foreach ($action in @('d', 'd', 'l', 'l')) {
+            Send-LeaderKeys '^b'
+            if (![BrowserTest]::IsWindowVisible($leaderPanel)) { throw 'Leader required a second Ctrl+B after an action' }
+            Send-LeaderKeys $action
+            Assert-LeaderClosed
+        }
+        Send-LeaderKeys '{ESC}' # dismiss the URL palette opened by the last action
+        $field.SetFocus()
         $keysBefore = Accessible-Value $events
         Send-LeaderKeys '^b'
         Wait-For { [BrowserTest]::IsWindowVisible($leaderPanel) } 'Ctrl+B did not open leader from web input'

@@ -6,7 +6,7 @@ use crate::resident::{self, Exit, Request};
 use std::collections::{HashSet, VecDeque};
 use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Instant};
 use webview2_com::{Microsoft::Web::WebView2::Win32::*, *};
-use winarchy_browser::leader::{Action, Key, Leader, Outcome};
+use winarchy_browser::leader::{Action, CapturedKeys, Key, Leader, Outcome};
 use winarchy_browser::{Blocker, address, library::Library};
 use windows::{
     Win32::{
@@ -43,7 +43,7 @@ const LEADER_TIMER: usize = 0x4c44;
 #[derive(Default)]
 struct LeaderInput {
     state: Leader,
-    consumed: HashSet<u32>,
+    consumed: CapturedKeys,
     actions: VecDeque<Action>,
     hook: Option<HHOOK>,
     held: HashSet<u32>,
@@ -185,24 +185,26 @@ unsafe fn leader_key(vk: u32, scan: u32, down: bool, repeat: bool, from_hook: bo
     }
     let mut input = app.leader.borrow_mut();
     if !down {
-        let consumed = input.consumed.remove(&vk);
-        if consumed {
+        if let Some(suppress) = input.consumed.release(vk) {
             let _ = PostMessageW(Some(app.hwnd), LEADER_CHANGED, WPARAM(0), LPARAM(0));
+            // The opening Ctrl+B down already reached the input queue before
+            // its accelerator fired. Let its up reset Windows/WebView key state.
+            return suppress;
         }
-        return consumed;
+        return false;
     }
     if !from_hook && vk == b'B' as u32 && input.pass_leader_once {
         input.pass_leader_once = false;
         return false;
     }
-    if repeat && input.consumed.contains(&vk) {
+    if repeat && input.consumed.contains(vk) {
         return true;
     }
     // An action can move focus to a runtime-owned control which does not send
     // its key-up through this adapter. A fresh press must not inherit that
     // consumed key or suppress normal autorepeat later.
     if !repeat {
-        input.consumed.remove(&vk);
+        input.consumed.release(vk);
     }
     // Modifier transitions must pass through, notably the second Ctrl+B.
     if [
@@ -283,7 +285,7 @@ unsafe fn leader_key(vk: u32, scan: u32, down: bool, repeat: bool, from_hook: bo
         input.actions.push_back(action);
     }
     if handled {
-        input.consumed.insert(vk);
+        input.consumed.press(vk, from_hook);
     }
     if input.state.menu().is_some() && input.hook.is_none() {
         input.held = (0..256)

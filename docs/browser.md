@@ -120,8 +120,10 @@ browser running and show a brief message; details go to the browser log.
   keys, and never records or intercepts another application's input. The hook
   is removed when the mode ends and the last consumed key is released, or
   immediately on deactivation/destruction. This preserves page/input/frame
-  focus and suppresses repeats as well as key-up leakage, without global
-  keyboard injection. Existing shortcuts remain available outside leader mode.
+  focus and suppresses repeats and releases of hook-captured action keys,
+  without global keyboard injection. The opening Ctrl+B release is forwarded
+  when its down already reached a native/WebView input queue, so the next
+  Ctrl+B is a fresh press rather than a stale autorepeat. Existing shortcuts remain available outside leader mode.
   If Windows refuses hook installation, the leader cancels with a message.
 - Letter keys are case-insensitive; punctuation follows the active keyboard
   layout. `=` is an alternative to `+` for zoom.
@@ -192,7 +194,8 @@ This requires the updated local fixture and cannot be combined with
 `-SkipFocusChecks`. Before each injected sequence it verifies that its own test
 browser is foreground; it does not inject into another application. The test
 uses UI Automation to verify page-input preservation, no leaked command keys,
-one passed-through Ctrl+B, native find input, home/URL palette query preservation,
+one passed-through Ctrl+B, reopening with a single Ctrl+B after consecutive
+web/native actions, native find input, home/URL palette query preservation,
 iframe activation, menu transitions, persistence past the former timeout and unchanged page bounds. A panel
 screenshot is saved alongside the temporary logs. It adds no test IPC or script
 bridge to the browser. Security software may block keyboard automation; do not
@@ -241,9 +244,10 @@ Prepared mode keeps one browser host and its empty WebView ready. There is no po
 
 ### Leader implementation validation
 
-- All ten browser unit tests pass, including command-map reachability/uniqueness,
+- All twelve browser unit tests pass, including command-map reachability/uniqueness,
   submenu navigation, cancellation, unknown-key persistence, repeat handling, double
-  leader passthrough and the zoom alias.
+  leader passthrough, the zoom alias and queue-aware key-release tracking
+  (including hook repeats and reopening after actions).
 - Browser Clippy with warnings denied passes on Linux, Windows GNU and Windows
   MSVC. The Windows GNU release binary builds. The updated PowerShell smoke
   script parses successfully.

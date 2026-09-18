@@ -1,4 +1,32 @@
 //! Platform-independent leader key map and state machine.
+use std::collections::HashMap;
+
+/// Remember where each consumed key-down was intercepted. A down which already
+/// reached a Windows/WebView input queue MUST have its up forwarded to that
+/// queue, otherwise the next press can be reported as an autorepeat.
+#[derive(Default)]
+pub struct CapturedKeys {
+    before_queue: HashMap<u32, bool>,
+}
+impl CapturedKeys {
+    pub fn press(&mut self, key: u32, before_queue: bool) {
+        // A repeat intercepted by the hook must not change the first down's origin.
+        self.before_queue.entry(key).or_insert(before_queue);
+    }
+    pub fn contains(&self, key: u32) -> bool {
+        self.before_queue.contains_key(&key)
+    }
+    /// Some(true) suppresses key-up; Some(false) forwards it while ending capture.
+    pub fn release(&mut self, key: u32) -> Option<bool> {
+        self.before_queue.remove(&key)
+    }
+    pub fn is_empty(&self) -> bool {
+        self.before_queue.is_empty()
+    }
+    pub fn clear(&mut self) {
+        self.before_queue.clear();
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     Address,
@@ -171,6 +199,44 @@ impl Leader {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn queued_leader_release_allows_reopening_after_each_action() {
+        let mut leader = Leader::default();
+        let mut captured = CapturedKeys::default();
+        let b = u32::from(b'B');
+        for action in ['l', 'r', 'f', 'd'] {
+            // Initial Ctrl+B arrives through the native/WebView queue.
+            assert_eq!(leader.input(Key::Leader, false), Outcome::Changed);
+            assert_eq!(leader.menu(), Some(Menu::Root));
+            captured.press(b, false);
+            // Repeats may arrive via the newly installed hook, but the original
+            // down's queue must still receive the physical release.
+            captured.press(b, true);
+            assert_eq!(captured.release(b), Some(false));
+            assert_eq!(captured.release(b), None); // later queued delivery
+            assert!(matches!(
+                leader.input(Key::Character(action), false),
+                Outcome::Execute(_)
+            ));
+            assert_eq!(leader.menu(), None);
+            captured.press(action as u32, true);
+            assert_eq!(captured.release(action as u32), Some(true));
+            assert!(captured.is_empty());
+        }
+    }
+    #[test]
+    fn hook_only_keys_suppress_release_and_focus_loss_clears_capture() {
+        let mut captured = CapturedKeys::default();
+        let b = u32::from(b'B');
+        // A new leader can also open through a hook still draining action keys.
+        captured.press(b, true);
+        assert!(captured.contains(b));
+        assert_eq!(captured.release(b), Some(true));
+        captured.press(b, false);
+        captured.clear();
+        assert!(captured.is_empty());
+        assert_eq!(captured.release(b), None);
+    }
     #[test]
     fn every_entry_is_unique_and_reachable() {
         for menu in [
