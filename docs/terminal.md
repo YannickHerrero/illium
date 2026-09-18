@@ -54,12 +54,13 @@ font_family = "JetBrainsMono Nerd Font Mono"
 font_size = 14.0 # points, 6..72
 padding = 4     # logical pixels, 0..64
 scrollback = 2000 # lines, 0..100000
+osc52_copy = true # allow application clipboard writes, never reads
 distribution = "Debian" # new windows only
 ```
 
 Use an installed monospace font. Missing preferences use these defaults.
 Unknown keys, nonfinite sizes and oversized files (>64 KiB) are rejected.
-Font, padding, history and theme edits update existing windows; distribution
+Font, padding, history, OSC 52 policy and theme edits update existing windows; distribution
 changes affect only new WSL children. Editing the file resets a window's zoom
 when the configured font changes. There is no settings UI.
 
@@ -101,8 +102,23 @@ edits and log writes do not trigger terminal reloads.
   text composition, not Ctrl+digit shortcut encoding.
 
 Bracketed paste strips ESC so clipboard content cannot close its bracket and
-inject escape-key sequences. OSC52 clipboard reads/writes are disabled; only
-explicit user copy/paste accesses the Windows clipboard. The terminal does not
+inject escape-key sequences. OSC 52 clipboard **writes** are enabled by default,
+so selections copied by Herdr and other terminal applications reach the Windows
+clipboard. Clipboard and primary-selection targets both map to Windows text.
+OSC 52 **reads remain disabled**: applications cannot retrieve clipboard content
+through escape sequences. Explicit Ctrl+Shift+C/V remains available.
+
+Any program producing terminal output (including a remote program over SSH) can
+replace the clipboard. Set `osc52_copy = false` to disallow this; reload also
+clears pending copies. Writes accept valid UTF-8 without NUL, at most 64 KiB per
+copy. The queue holds eight copies; overflow drops the oldest. Invalid base64
+or UTF-8 is ignored by the VT parser. Size/NUL/queue errors and Windows write
+failures are reported without recording copied text. A busy Windows clipboard
+is retried twice, with a five-millisecond delay. Copy processing does not depend
+on rendering, including while minimized and after synchronized-update timeouts.
+
+Herdr's “copied” message is not a Windows acknowledgement: OSC 52 does not return
+a write-success response. The terminal does not
 advertise full Kitty keyboard support. It handles alternate screen, 256 colors,
 truecolor and synchronized updates with a timeout for missing end markers.
 
@@ -187,6 +203,9 @@ native window's keyboard translation or presentation.
 cargo test -p winarchy-terminal
 # Windows wakeup regression: no visible window, WSL session or injected input.
 cargo test -p winarchy-terminal --bin winarchy-terminal output_wake
+# WARNING: overwrites the Windows clipboard; use a disposable desktop.
+# Hidden native window, no WSL or keyboard/focus injection.
+cargo test -p winarchy-terminal --bin winarchy-terminal osc52_windows_clipboard_roundtrip -- --ignored
 # Hidden GPU test: requires a desktop compositor, never shows/focuses a window.
 cargo test -p winarchy-terminal --lib hidden_gpu -- --ignored --nocapture
 # Starts one disposable Debian shell, checks actual CSI-u input roundtrip.
@@ -198,6 +217,15 @@ cargo run -p winarchy-terminal --release --example measure_open -- 20
 .\scripts\measure-terminal.ps1 -Executable .\target\release\winarchy-terminal.exe -WindowClass WinarchyTerminal
 .\scripts\test-terminal-desktop.ps1 -Executable .\target\release\winarchy-terminal.exe
 ```
+
+Manual clipboard validation (replaces the clipboard): in a newly built terminal,
+run `printf '\033]52;c;aGVsbG8=\007'` from WSL, then paste into Notepad: expect
+`hello`. Next select text in Herdr and paste into Notepad, including accents,
+emojis and multiple lines. Repeat with the terminal minimized during output.
+Set `osc52_copy = false` in the disposable configuration and confirm OSC 52 no
+longer changes the clipboard, while Shift+drag / Ctrl+Shift+C and Ctrl+Shift+V
+still work; turn it back on and check live reload. Run these checks in a new
+`--standalone` process so an older resident executable is not reused.
 
 The desktop script uses a disposable configuration and verifies actual palette
 pixels, invalid-opacity retention and unchanged HWND/WSL PID through reloads.
