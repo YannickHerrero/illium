@@ -1036,10 +1036,14 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
                 && app.picker.borrow().visible
             {
                 let mut picker = app.picker.borrow_mut();
-                if let Err(e) = picker.library.borrow_mut().reload() {
-                    eprintln!("Cannot reload history: {e}");
+                if picker.tabs_mode {
+                    picker.refresh_tabs(hwnd, true);
+                } else {
+                    if let Err(e) = picker.library.borrow_mut().reload() {
+                        eprintln!("Cannot reload history: {e}");
+                    }
+                    picker.refresh(hwnd);
                 }
-                picker.refresh(hwnd);
                 drop(picker);
                 layout(&app);
             }
