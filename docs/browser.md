@@ -41,7 +41,7 @@ Initial Windows smoke measurements with EasyList/EasyPrivacy, not a benchmark: a
 
 ## Home, history and bookmarks
 
-Launching without an argument (including `Alt+B`), or submitting an empty address / `about:blank`, shows a native home surface. A Winarchy theme color fills the window, with a focused native navigation palette centered as a whole in the browser's client area. The same palette overlays web pages with `Ctrl+L`, without changing the page's bounds. It contains a search field, navigation heading, grouped favorites/history with icons and category badges, and a result count/keyboard hint footer. It uses Cascadia Mono (with Windows font fallback), the active theme's colors, a DPI-scaled maximum width of 850 logical pixels and a bounded, scrollable result list. The home window uses the theme's `background_opacity` (85% by default, also applying to its native controls), including live Ctrl+Alt+Shift+Y/U adjustments. Web pages always stay fully opaque, even when opacity changes while browsing. An explicit web URL on the command line bypasses home.
+Launching without an argument (including `Alt+B`), or submitting an empty address / `about:blank`, shows a native home surface. A Winarchy theme color fills the window, with a focused native navigation palette centered as a whole in the browser's client area. The same palette overlays web pages with `Ctrl+L`, without changing the page's bounds. It contains a search field, navigation heading, grouped favorites/history with icons and category badges, and a result count/keyboard hint footer. It uses Cascadia Mono (with Windows font fallback), the active theme's colors, a compact 13-pixel logical font, 20% tighter spacing, a DPI-scaled maximum width of 680 logical pixels and a bounded, scrollable result list. The home window uses the theme's `background_opacity` (85% by default, also applying to its native controls), including live Ctrl+Alt+Shift+Y/U adjustments. Web pages always stay fully opaque, even when opacity changes while browsing. An explicit web URL on the command line bypasses home.
 
 While the home window is foreground, typing redirects focus and the first character to the search field even after selecting a suggestion. Editing shortcuts such as Ctrl+V work too. Other applications' input and Alt/Windows shortcuts are not intercepted; this does not apply to web pages.
 
@@ -72,13 +72,18 @@ There is no caption or tab strip. Use Winarchy's window management or Windows' s
 ## Leader key
 
 Press and release `Ctrl+B`, then type a key. No modifier needs to stay held.
-The native, centered help panel follows the current Winarchy/Omarchy theme,
+The compact native help panel sits at the **bottom-right of the browser's client
+area**, inset by 12 logical pixels, and follows the current Winarchy/Omarchy theme,
 including live updates: `surface` background, `overlay` borders, `text` labels,
 `subtext` hints and `accent` keys. It uses the URL palette's Cascadia Mono/font
-fallback and DPI conventions, two columns (one in narrow windows), a menu path,
+fallback and DPI conventions, with a 13-pixel logical font and 20% tighter
+spacing. The root menu uses at most 576 logical pixels of width and two columns
+(one in narrow windows); submenus use a single column up to 384 logical pixels.
+Rows are 32 logical pixels high. The panel includes a menu path,
 key count, boxed keys, submenu chevrons and a keyboard-help footer. It does
 not resize the page, create another WebView, or introduce page transparency.
-The existing URL palette's contents and focus remain intact beneath the overlay.
+The URL palette stays centered; its contents and focus remain intact while the
+leader is open. Resizing and DPI changes keep the leader anchored bottom-right.
 
 | Key after `Ctrl+B` | Action |
 | --- | --- |

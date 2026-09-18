@@ -29,6 +29,7 @@ public static class BrowserTest {
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out Rect r);
+    [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out Point p);
     [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c);
     [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr h, int id);
@@ -40,6 +41,7 @@ public static class BrowserTest {
     [DllImport("user32.dll")] public static extern bool GetLayeredWindowAttributes(IntPtr h, out uint key, out byte alpha, out uint flags);
 }
 '@
+[void][BrowserTest]::SetThreadDpiAwarenessContext([IntPtr](-4))
 function Wait-For([scriptblock]$Condition, [string]$Message) {
     $until = [DateTime]::UtcNow.AddSeconds(30)
     while (!( & $Condition )) {
@@ -99,6 +101,7 @@ try {
             [Math]::Abs(($outer.top+$outer.bottom)-($inner.top+$inner.bottom)) -gt 2) {
             throw 'Navigation palette is not centered'
         }
+        if (($inner.right-$inner.left) -gt (680 * [BrowserTest]::GetDpiForWindow($window) / 96 + 1)) { throw 'Navigation palette exceeds compact maximum width' }
         if ($inner.left -lt $outer.left -or $inner.right -gt $outer.right -or
             $inner.top -lt $outer.top -or $inner.bottom -gt $outer.bottom) { throw 'Palette overflows the browser' }
     }
@@ -205,8 +208,10 @@ try {
         $windowRect = New-Object BrowserTest+Rect
         [void][BrowserTest]::GetWindowRect($leaderPanel,[ref]$leaderRect)
         [void][BrowserTest]::GetWindowRect($window,[ref]$windowRect)
-        if ([Math]::Abs(($leaderRect.left+$leaderRect.right)-($windowRect.left+$windowRect.right)) -gt 2 -or
-            [Math]::Abs(($leaderRect.top+$leaderRect.bottom)-($windowRect.top+$windowRect.bottom)) -gt 2) { throw 'Leader panel not centered' }
+        $margin = [Math]::Floor(12 * [BrowserTest]::GetDpiForWindow($window) / 96)
+        if ([Math]::Abs($windowRect.right-$leaderRect.right-$margin) -gt 2 -or
+            [Math]::Abs($windowRect.bottom-$leaderRect.bottom-$margin) -gt 2) { throw 'Leader panel not anchored bottom-right' }
+        if (($leaderRect.right-$leaderRect.left) -gt (576 * [BrowserTest]::GetDpiForWindow($window) / 96 + 1)) { throw 'Leader exceeds compact maximum width' }
         [void][BrowserTest]::GetWindowRect($web,[ref]$after)
         if ($before.left -ne $after.left -or $before.top -ne $after.top -or $before.right -ne $after.right -or $before.bottom -ne $after.bottom) { throw 'Leader resized the page' }
         $bitmap = New-Object Drawing.Bitmap ($leaderRect.right-$leaderRect.left),($leaderRect.bottom-$leaderRect.top)

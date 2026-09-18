@@ -85,11 +85,12 @@ impl LeaderPanel {
         Ok(panel)
     }
     fn px(&self, value: i32) -> i32 {
-        unsafe { value * GetDpiForWindow(self.hwnd) as i32 / 96 }
+        // Match the compact navigation palette's spacing and DPI scaling.
+        unsafe { value * GetDpiForWindow(self.hwnd) as i32 * 4 / (96 * 5) }
     }
     pub unsafe fn set_font(&mut self, parent: HWND) {
         let font = CreateFontW(
-            -(16 * GetDpiForWindow(parent) as i32 / 96),
+            -(13 * GetDpiForWindow(parent) as i32 / 96),
             0,
             0,
             0,
@@ -127,16 +128,20 @@ impl LeaderPanel {
         let _ = SetWindowTextW(self.hwnd, PCWSTR(wide(&title).as_ptr()));
         let mut rect = RECT::default();
         let _ = GetClientRect(parent, &mut rect);
-        let width = self.px(780).min((rect.right - self.px(32)).max(1));
+        let margin = self.px(15); // 12 logical pixels from the client edges.
+        let preferred_width = if menu == Some(Menu::Root) { 720 } else { 480 };
+        let width = self
+            .px(preferred_width)
+            .min((rect.right - 2 * margin).max(1));
         let columns = if width >= self.px(680) { 2 } else { 1 };
         let count = menu.map(|m| m.entries().len() as i32).unwrap_or(1);
         let rows = (count + columns - 1) / columns;
-        let height = (self.px(112) + rows * self.px(52)).min(rect.bottom.max(1));
+        let height = (self.px(112) + rows * self.px(40)).min((rect.bottom - 2 * margin).max(1));
         let _ = SetWindowPos(
             self.hwnd,
             Some(HWND_TOP),
-            (rect.right - width) / 2,
-            (rect.bottom - height) / 2,
+            (rect.right - width - margin).max(0),
+            (rect.bottom - height - margin).max(0),
             width,
             height,
             SWP_NOACTIVATE | SWP_SHOWWINDOW,
@@ -178,7 +183,7 @@ impl LeaderPanel {
             let columns = if r.right >= p(680) { 2 } else { 1 };
             let rows = (menu.entries().len() as i32 + columns - 1) / columns;
             let cell_width = (r.right - p(40)) / columns;
-            let row_height = ((r.bottom - p(112)) / rows).min(p(52)).max(1);
+            let row_height = ((r.bottom - p(112)) / rows).min(p(40)).max(1);
             for (i, entry) in menu.entries().iter().enumerate() {
                 let i = i as i32;
                 let x = p(20) + (i % columns) * cell_width;
@@ -237,7 +242,7 @@ impl LeaderPanel {
         } else if let Some((notice, _)) = &self.notice {
             text(
                 dc,
-                box_at(p(24), p(68), r.right - p(48), p(48)),
+                box_at(p(24), p(64), r.right - p(48), p(36)),
                 notice,
                 &t.text,
             );

@@ -150,11 +150,12 @@ impl Picker {
         );
     }
     fn px(&self, n: i32) -> i32 {
-        unsafe { (n * GetDpiForWindow(self.panel) as i32 / 96).max(1) }
+        // Compact the original palette geometry by 20%, retaining DPI scaling.
+        unsafe { (n * GetDpiForWindow(self.panel) as i32 * 4 / (96 * 5)).max(1) }
     }
     pub unsafe fn set_font(&mut self, parent: HWND) {
         let font = CreateFontW(
-            -(16 * GetDpiForWindow(parent) as i32 / 96),
+            -(13 * GetDpiForWindow(parent) as i32 / 96),
             0,
             0,
             0,
