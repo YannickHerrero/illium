@@ -9,8 +9,11 @@ param(
     [switch]$SkipFocusChecks,
     # Opt-in real keyboard input, restricted to this test's foreground window.
     # Do not use the keyboard/mouse while running this check.
-    [switch]$CheckLeader
+    [switch]$CheckLeader,
+    # Includes -CheckLeader, then exercises real keyboard tab actions.
+    [switch]$CheckTabs
 )
+if ($CheckTabs) { $CheckLeader = $true }
 $ErrorActionPreference = 'Stop'
 Add-Type @'
 using System;
@@ -329,6 +332,107 @@ try {
     [void][BrowserTest]::PostMessage($list,0x0201,[IntPtr]1,[IntPtr]0x00200020)
     [void][BrowserTest]::PostMessage($list,0x0202,[IntPtr]::Zero,[IntPtr]0x00200020)
     Wait-For { ![BrowserTest]::IsWindowVisible($panel) } 'Single click did not navigate'
+    if ($CheckTabs) {
+        function Window-Title {
+            $value = New-Object Text.StringBuilder 512
+            [void][BrowserTest]::GetText($window,0x000D,[IntPtr]512,$value)
+            $value.ToString()
+        }
+        function Tab-Views {
+            $child = [IntPtr]::Zero
+            while ($true) {
+                $child = [BrowserTest]::FindWindowEx($window,$child,'Chrome_WidgetWin_0',$null)
+                if ($child -eq [IntPtr]::Zero) { break }
+                $child
+            }
+        }
+        function Assert-TabViews([int]$count, [int]$visible) {
+            Wait-For { @(Tab-Views).Count -eq $count } "Expected $count retained tab controllers"
+            Wait-For { @(Tab-Views | Where-Object { [BrowserTest]::IsWindowVisible($_) }).Count -eq $visible } "Expected $visible visible tab controllers"
+        }
+        function Selected-TabLabel {
+            $index = [BrowserTest]::SendMessage($list,0x0188,[IntPtr]::Zero,[IntPtr]::Zero)
+            if ($index.ToInt32() -lt 0) { return '' }
+            $length = [BrowserTest]::SendMessage($list,0x018A,$index,[IntPtr]::Zero).ToInt32()
+            $value = New-Object Text.StringBuilder ($length+1)
+            [void][BrowserTest]::GetText($list,0x0189,$index,$value)
+            $value.ToString()
+        }
+        Wait-For { (Window-Title) -match 'filtering fixture' } 'First tab fixture did not finish loading'
+        $firstInput = Find-Accessible 'Leader test input'
+        $firstInput.SetFocus()
+        Send-LeaderKeys 'preserved across tabs'
+        Send-LeaderKeys '^b'
+        Send-LeaderKeys 't'
+        Wait-For { (Window-Title) -match 'Nouvel onglet' } 'Leader new-tab action failed'
+        Assert-TabViews 2 0
+        $secondUrl = [Uri]::new([Uri]$TestUrl, 'tabs.html?child=1').AbsoluteUri
+        [void][BrowserTest]::SetText($edit,0x000C,[IntPtr]::Zero,$secondUrl)
+        Send-LeaderKeys '{ENTER}'
+        Wait-For { (Window-Title) -match 'fixture.*second' } 'Second tab did not navigate'
+        Assert-TabViews 2 1
+        Send-LeaderKeys '^+{TAB}'
+        Wait-For { (Window-Title) -match 'filtering fixture' } 'Ctrl+Shift+Tab failed'
+        if ((Accessible-Value $firstInput) -ne 'preserved across tabs') { throw 'Switching tabs recreated or navigated the first page' }
+        Send-LeaderKeys '^{TAB}'
+        Wait-For { (Window-Title) -match 'fixture.*second' } 'Ctrl+Tab failed'
+        Send-LeaderKeys '^b'
+        Send-LeaderKeys 'j'
+        Wait-For { (Window-Title) -match 'filtering fixture' } 'Leader previous-tab action failed'
+        Send-LeaderKeys '^b'
+        Send-LeaderKeys 'k'
+        Wait-For { (Window-Title) -match 'fixture.*second' } 'Leader next-tab action failed'
+        Send-LeaderKeys '^b'
+        Send-LeaderKeys 'oo'
+        Wait-For { [BrowserTest]::IsWindowVisible($panel) -and [BrowserTest]::SendMessage($list,0x018B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 2 } 'Tab palette did not list both tabs'
+        Assert-CenteredPalette
+        [void][BrowserTest]::SetText($edit,0x000C,[IntPtr]::Zero,'zzzz-no-tab-match')
+        Wait-For { [BrowserTest]::SendMessage($list,0x018B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 0 } 'Unrelated tab retained'
+        Send-LeaderKeys '{ENTER}'
+        Send-LeaderKeys '^w'
+        Assert-TabViews 2 1
+        if (![BrowserTest]::IsWindowVisible($panel)) { throw 'Empty tab query navigated or closed the palette' }
+        [void][BrowserTest]::SetText($edit,0x000C,[IntPtr]::Zero,'filtering')
+        Wait-For { [BrowserTest]::SendMessage($list,0x018B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 1 } 'Fuzzy tab title search failed'
+        Send-LeaderKeys '{ENTER}'
+        Wait-For { (Window-Title) -match 'filtering fixture' } 'Tab picker did not activate its selected result'
+        if ((Accessible-Value $firstInput) -ne 'preserved across tabs') { throw 'Picker navigation lost the page input' }
+        Send-LeaderKeys '^b'
+        Send-LeaderKeys 'od'
+        Assert-TabViews 3 1
+        Send-LeaderKeys '^+a'
+        Wait-For { [BrowserTest]::IsWindowVisible($panel) } 'Ctrl+Shift+A did not open tabs'
+        Send-LeaderKeys '^w'
+        Assert-TabViews 2 1
+        if (![BrowserTest]::IsWindowVisible($panel)) { throw 'Closing a selected tab dismissed the palette' }
+        Send-LeaderKeys '^b'
+        Send-LeaderKeys 'or'
+        Assert-TabViews 3 1
+        Send-LeaderKeys '^b'
+        Send-LeaderKeys 'oe'
+        Send-LeaderKeys '^w'
+        Assert-TabViews 3 1 # pinned tab must resist accidental close
+        Send-LeaderKeys '^b'
+        Send-LeaderKeys 'om'
+        Send-LeaderKeys '^b'
+        Send-LeaderKeys 'oe'
+        Send-LeaderKeys '^w'
+        Assert-TabViews 2 1
+        Send-LeaderKeys '^+t'
+        Assert-TabViews 3 1
+        Send-LeaderKeys '^+a'
+        Wait-For { (Selected-TabLabel).Contains('[muet]') } 'Reopen did not restore the muted state'
+        Send-LeaderKeys '^w'
+        Assert-TabViews 2 1
+        Send-LeaderKeys '^w'
+        Assert-TabViews 1 1
+        Send-LeaderKeys '^w'
+        Wait-For { (Window-Title) -match 'Nouvel onglet' } 'Closing the final tab did not create an empty home'
+        Assert-TabViews 1 0
+        Send-LeaderKeys '^+t'
+        Assert-TabViews 2 1
+        Write-Host 'PASS: hidden tabs, preserved input, fuzzy picker, empty results, tab leader/standard shortcuts, duplicate, close, reopen, pin, mute and final-tab home.'
+    }
     Write-Host "PASS: centered home/overlay, Escape, home opacity, fuzzy suggestions, navigation, opaque page, history and bookmark persistence. Logs: $root"
 } finally {
     $env:WINARCHY_CONFIG_HOME = $oldHome

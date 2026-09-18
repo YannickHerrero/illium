@@ -189,6 +189,29 @@ mod tests {
         assert_eq!(tabs.active(), Some(a));
     }
     #[test]
+    fn all_duplicate_urls_remain_selectable_and_closed_metadata_is_retained() {
+        let mut tabs = Tabs::default();
+        let ids: Vec<_> = (0..12).map(|_| tabs.add("https://same.test/", 0)).collect();
+        assert_eq!(
+            tabs.search("same")
+                .iter()
+                .map(|tab| tab.id)
+                .collect::<Vec<_>>(),
+            ids
+        );
+        let id = ids[5];
+        tabs.activate(id, 100);
+        tabs.get_mut(id).unwrap().muted = true;
+        tabs.get_mut(id).unwrap().title = "Saved page".into();
+        tabs.close(id).unwrap();
+        assert_eq!(tabs.active(), Some(ids[6]));
+        let closed = tabs.recently_closed().unwrap();
+        assert!(closed.muted);
+        assert_eq!(closed.title, "Saved page");
+        assert_eq!(closed.age(220), "2 min");
+        assert_eq!(tabs.search("same").len(), 11);
+    }
+    #[test]
     fn closed_is_bounded_and_failures_are_not_reopened() {
         let mut tabs = Tabs::default();
         for _ in 0..30 {

@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Winarchy tabs fixture — first</title>
+<style>body { font: 18px system-ui; color-scheme: light dark; } input { font: inherit; }</style>
+<h1>Background tabs fixture</h1>
+<p>Type below, switch tabs, then return: the value and scroll position should remain.</p>
+<input aria-label="Tab state" value="preserved input">
+<p><a href="tabs.html?child=1" target="_blank">Open a second tab</a></p>
+<button id="popup">Open second tab with window.open</button>
+<p id="network">Waiting for filtering checks…</p>
+<script src="ads.js"></script>
+<script src="ads.js?allowed=1"></script>
+<script>
+const query = new URLSearchParams(location.search);
+const child = query.has('child');
+document.title = 'Winarchy tabs fixture — ' + (child ? 'second' : 'first');
+document.querySelector('#popup').onclick = () => window.open('tabs.html?child=1');
+window.addEventListener('load', () => {
+  document.querySelector('#network').textContent = !window.adLoaded && window.exceptionLoaded
+    ? 'PASS: ad blocked and exception allowed in this tab.' : 'FAIL: check filtering.';
+  // The opt-in unsolicited popup must be blocked. The smoke test then invokes
+  // the button through UI Automation to open a user-initiated second tab.
+  if (!child && query.has('auto')) window.open('tabs.html?child=1');
+});
+</script>
+<div style="height:150vh"></div>
+<p>Scroll-position marker</p>
