@@ -4,6 +4,8 @@ mod native;
 #[cfg(windows)]
 mod resident;
 #[cfg(windows)]
+mod wake;
+#[cfg(windows)]
 fn log(message: &str) {
     use std::io::Write;
     let home = winarchy_theme::config_home();

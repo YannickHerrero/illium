@@ -116,7 +116,9 @@ hardware device creation fails. No Slint/WebView/Lua in this executable.
 A themed GPU frame and native window are prepared **before** WSL startup.
 PTY creation, parsing, writing, resize and teardown run off the UI thread.
 Output is parsed in 16 KiB chunks; input is bounded to 32 items and resize has
-one latest-value slot. Frames are scheduled on notifications, not an idle
+one latest-value slot. PTY output wakes the UI through a coalesced kernel event,
+so nested Windows message loops cannot discard the wakeup and leave rendering
+stalled until a keypress. Frames are scheduled on notifications, not an idle
 animation loop. Hidden/minimized windows do not render. The grid is bounded
 to 512 columns by 256 rows. More scrollback consumes more RAM.
 
@@ -183,6 +185,8 @@ native window's keyboard translation or presentation.
 
 ```powershell
 cargo test -p winarchy-terminal
+# Windows wakeup regression: no visible window, WSL session or injected input.
+cargo test -p winarchy-terminal --bin winarchy-terminal output_wake
 # Hidden GPU test: requires a desktop compositor, never shows/focuses a window.
 cargo test -p winarchy-terminal --lib hidden_gpu -- --ignored --nocapture
 # Starts one disposable Debian shell, checks actual CSI-u input roundtrip.

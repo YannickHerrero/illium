@@ -1,6 +1,7 @@
 //! The window procedure never borrows application state: it only validates
 //! paint regions and posts notifications. Win32's synchronous re-entrancy
 //! therefore cannot alias a mutable terminal/renderer borrow.
+use crate::wake::WakeEvent;
 use alacritty_terminal::{
     grid::Scroll,
     index::Side,
@@ -35,7 +36,6 @@ use windows::{
     core::{PCWSTR, w},
 };
 pub const REQUEST: u32 = WM_APP + 1;
-const OUTPUT: u32 = WM_APP + 2;
 const PAINT: u32 = WM_APP + 3;
 const RESIZE: u32 = WM_APP + 4;
 const SPARE: u32 = WM_APP + 5;
@@ -77,6 +77,7 @@ struct App {
     palette: Palette,
     thread: u32,
     resident: bool,
+    output: Arc<WakeEvent>,
 }
 fn post(thread: u32, message: u32, w: usize, l: isize) {
     unsafe {
@@ -183,6 +184,7 @@ pub fn run(
         palette,
         thread,
         resident,
+        output: Arc::new(WakeEvent::new().map_err(|e| e.to_string())?),
     };
     app.prepare()?;
     let reloaded = reload::watch(home, move || post(thread, RELOAD, 0, 0))
@@ -199,12 +201,29 @@ pub fn run(
     unsafe {
         let mut msg = MSG::default();
         loop {
-            let result = GetMessageW(&mut msg, None, 0, 0).0;
-            if result == 0 {
-                break;
-            }
-            if result < 0 {
+            // A kernel event is not consumed by Windows' nested modal loops.
+            // MWMO_INPUTAVAILABLE also notices messages those loops inspected.
+            let result = MsgWaitForMultipleObjectsEx(
+                Some(&[app.output.handle()]),
+                INFINITE,
+                QS_ALLINPUT,
+                MWMO_INPUTAVAILABLE,
+            );
+            if result == WAIT_FAILED {
                 return Err(windows::core::Error::from_win32().to_string());
+            }
+            if result == WAIT_OBJECT_0 {
+                for window in app.windows.values_mut() {
+                    if window.pending.load(Ordering::Acquire) {
+                        window.schedule();
+                    }
+                }
+            }
+            if !PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+                continue;
+            }
+            if msg.message == WM_QUIT {
+                break;
             }
             if msg.hwnd.0.is_null() {
                 match msg.message {
@@ -235,13 +254,6 @@ pub fn run(
                                 };
                                 let _ = request.reply.send(result);
                             }
-                        }
-                    }
-                    OUTPUT => {
-                        if let Some(window) =
-                            app.windows.values_mut().find(|w| w.id == msg.wParam.0)
-                        {
-                            window.schedule();
                         }
                     }
                     PAINT => {
@@ -436,12 +448,15 @@ impl App {
             at.elapsed().as_secs_f64() * 1000.,
             window.id
         ));
-        let thread = self.thread;
-        let id = window.id;
+        let output = self.output.clone();
         let pending = window.pending.clone();
         let wake = Arc::new(move || {
-            if !pending.swap(true, Ordering::AcqRel) {
-                post(thread, OUTPUT, id, 0);
+            if !pending.swap(true, Ordering::AcqRel)
+                && let Err(e) = output.signal()
+            {
+                // Do not suppress all future notifications after a failure.
+                pending.store(false, Ordering::Release);
+                crate::log(&format!("output wake: {e}"));
             }
         });
         // The themed frame already exists and the window is visible BEFORE any
@@ -487,6 +502,10 @@ impl Window {
             }
             if !self.timer {
                 self.timer = SetTimer(Some(self.hwnd), 1, 8, None) != 0;
+                if !self.timer {
+                    self.pending.store(false, Ordering::Release);
+                    crate::log("Unable to schedule terminal paint timer");
+                }
             }
         }
     }
