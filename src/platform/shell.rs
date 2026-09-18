@@ -641,6 +641,7 @@ impl Shell {
                 "Solid background".into(),
                 MetaEntry::Run(crate::command::Command::Wallpaper(None)),
             ),
+            ("Demo".into(), MetaEntry::Run(crate::command::Command::Demo)),
         ]
     }
     /// Companion applications, also indexed by the launcher.

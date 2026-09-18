@@ -2,6 +2,7 @@ mod applet;
 mod apps;
 mod audio;
 mod browser;
+mod demo;
 mod dictate;
 mod dpi;
 use winarchy_ipc::identity;
@@ -86,6 +87,8 @@ struct Manager {
     just_closed: Option<(String, std::time::Instant)>,
     /// New browser to focus after its final tile geometry has been applied.
     pending_browser_focus: Option<isize>,
+    demo: Option<demo::Pending>,
+    demo_error: Option<String>,
     /// Placement may have changed since the last save.
     dirty: bool,
 }
@@ -149,14 +152,22 @@ impl Manager {
         };
         let title = native::title(id);
         let mut workspace = self.model.active;
+        let demo_workspace = self
+            .demo
+            .as_ref()
+            .and_then(|pending| pending.role(id).map(|_| pending.workspace));
         for r in &self.config.rules.rules {
-            if r.matches(&exe, &class, &title) {
+            if demo_workspace.is_none() && r.matches(&exe, &class, &title) {
                 if r.ignore {
                     return false;
                 }
                 floating |= r.floating;
                 workspace = r.workspace.unwrap_or(workspace);
             }
+        }
+        if let Some(target) = demo_workspace {
+            workspace = target;
+            floating = false;
         }
         let (mut fullscreen, mut restore) = (false, native::rect(id));
         if let Some(p) = saved {
@@ -463,6 +474,7 @@ impl Manager {
         match c {
             Command::Status => return Ok(serde_json::json!({
                 "workspace": self.model.active, "recent": self.model.recent,
+                "demo_pending": self.demo.is_some(), "demo_error": self.demo_error,
                 "focused": self.model.focused, "theme": self.config.global.theme,
                 "wallpaper": self.shell.wallpaper,
                 "wallpaper_pending": self.shell.pending_wallpaper(),
@@ -600,6 +612,7 @@ impl Manager {
                     self.layout();
                 }
             }
+            Command::Demo => return self.start_demo(),
             Command::Spawn(app) => {
                 let target = self
                     .config
@@ -818,6 +831,11 @@ impl Manager {
                                 && r.y + r.h / 2 >= m.y
                                 && r.y + r.h / 2 < m.y + m.h
                         }) {
+                            let index = self
+                                .demo
+                                .as_ref()
+                                .filter(|pending| pending.role(id).is_some())
+                                .map_or(index, |pending| pending.monitor);
                             self.model.monitors[(self.model.active - 1) as usize] = index;
                             self.dirty = true;
                         }
@@ -1109,6 +1127,8 @@ pub fn run(replace: bool) -> Result<(), String> {
         shell: shell::Shell::new(tx.clone())?,
         borders: std::collections::HashMap::new(),
         pending_browser_focus: None,
+        demo: None,
+        demo_error: None,
         applets: applet::Runtime::new(tx.clone()),
         just_closed: None,
         dirty: false,
@@ -1186,6 +1206,7 @@ pub fn run(replace: bool) -> Result<(), String> {
             for event in rx.try_iter().take(128) {
                 m.event(event);
             }
+            m.poll_demo();
             let Manager {
                 shell,
                 config,

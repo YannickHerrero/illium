@@ -37,6 +37,8 @@ pub enum Command {
         shortcut: bool,
     },
     Launcher,
+    /// Open a privacy-safe screenshot scene on an empty workspace.
+    Demo,
     /// Session menu: hibernate, lock, restart, shut down, quit.
     Meta,
     /// Launch a companion application from `winarchy-apps.exe`: `shot`, `tasks`, `files`.
@@ -124,6 +126,7 @@ impl FromStr for Command {
             ["meta", "toggle"] => Self::Meta,
             ["keybindings", "toggle"] => Self::Keybindings,
             ["dictate"] => Self::Dictate,
+            ["demo"] => Self::Demo,
             ["app", name] if name.chars().all(|c| c.is_ascii_lowercase()) => {
                 Self::App((*name).into())
             }
@@ -177,6 +180,13 @@ mod tests {
         assert!("opacity set nan".parse::<Command>().is_err());
         assert_eq!("keybindings toggle".parse(), Ok(Command::Keybindings));
         assert_eq!("dictate".parse(), Ok(Command::Dictate));
+        assert_eq!("demo".parse(), Ok(Command::Demo));
+        assert!("demo extra".parse::<Command>().is_err());
+        assert_eq!(
+            serde_json::from_str::<Command>(&serde_json::to_string(&Command::Demo).unwrap())
+                .unwrap(),
+            Command::Demo
+        );
         assert!("dictate toggle".parse::<Command>().is_err());
         assert!("keybindings".parse::<Command>().is_err());
         assert!("theme picker extra".parse::<Command>().is_err());

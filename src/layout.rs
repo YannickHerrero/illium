@@ -111,6 +111,26 @@ pub fn neighbor(rects: &[(isize, Rect)], current: isize, direction: Direction) -
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn demo_three_tiles_are_left_top_right_bottom_right() {
+        for (w, h) in [(1920, 1080), (1280, 720), (1080, 1920)] {
+            let area = super::Rect {
+                x: -1920,
+                y: 30,
+                w,
+                h,
+            };
+            let tiles = super::fibonacci(area, 3, 8, 8);
+            let (left, top, bottom) = (tiles[0], tiles[1], tiles[2]);
+            assert_eq!(left.y, top.y);
+            assert_eq!(top.x, bottom.x);
+            assert_eq!(left.x + left.w + 8, top.x);
+            assert_eq!(top.y + top.h + 8, bottom.y);
+            assert_eq!(left.y + left.h, bottom.y + bottom.h);
+            assert!((left.w - top.w).abs() <= 1);
+            assert!((top.h - bottom.h).abs() <= 1);
+        }
+    }
     use super::*;
     #[test]
     fn geometry() {

@@ -94,6 +94,7 @@ pub fn describe(command: &str) -> String {
         Command::LaunchTarget { target, .. } => format!("Launch {target}"),
         Command::Launcher => "Launcher".into(),
         Command::Meta => "Menu".into(),
+        Command::Demo => "Demo scene".into(),
         Command::App(name) => match name.as_str() {
             "files" => "File manager".into(),
             "tasks" => "Task manager".into(),
