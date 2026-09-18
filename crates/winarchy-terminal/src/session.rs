@@ -255,6 +255,28 @@ fn pty_size(size: Size) -> PtySize {
 mod tests {
     use super::*;
     #[test]
+    fn demo_ignores_input_and_redraws_without_a_shell() {
+        use alacritty_terminal::index::{Column, Line, Point};
+        for scene in [crate::demo::Scene::Build, crate::demo::Scene::Fetch] {
+            let session = Session::demo(
+                scene,
+                Size::new(90, 40),
+                Palette::new(&winarchy_theme::Theme::default_theme()),
+            );
+            session.send(b"echo personal-data\r".to_vec()).unwrap();
+            session.resize(Size::new(80, 30));
+            let model = session.model.lock().unwrap();
+            let text = model.term.bounds_to_string(
+                Point::new(Line(0), Column(0)),
+                Point::new(Line(29), Column(79)),
+            );
+            assert!(text.contains("demo@winarchy"));
+            assert!(!text.contains("personal-data"));
+            assert!(model.error.is_none());
+            assert!(session.control.0.lock().unwrap().size.is_none());
+        }
+    }
+    #[test]
     #[ignore = "starts a disposable Debian shell; requires WSL"]
     fn wsl_preserves_csi_u_ctrl_digits() {
         let (tx, rx) = mpsc::channel();
