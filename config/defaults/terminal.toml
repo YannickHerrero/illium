@@ -3,4 +3,5 @@ font_family = "JetBrainsMono Nerd Font Mono"
 font_size = 14.0 # points
 padding = 4 # logical pixels
 scrollback = 2000
+osc52_copy = true # applications may write the clipboard; reads remain disabled
 distribution = "Debian" # new windows only; launches WSL, never Herdr

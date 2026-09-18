@@ -10,6 +10,8 @@ pub struct Config {
     pub padding: u16,
     pub scrollback: usize,
     pub distribution: String,
+    /// Allow applications to write (never read) the Windows clipboard via OSC 52.
+    pub osc52_copy: bool,
 }
 impl Default for Config {
     fn default() -> Self {
@@ -19,6 +21,7 @@ impl Default for Config {
             padding: 4,
             scrollback: 2000,
             distribution: "Debian".into(),
+            osc52_copy: true,
         }
     }
 }
@@ -75,7 +78,9 @@ mod tests {
                 .distribution,
             "Ubuntu"
         );
+        assert!(!Config::parse("osc52_copy=false").unwrap().osc52_copy);
         for s in [
+            "osc52_copy='yes'",
             "font_size=nan",
             "font_size=5",
             "font_size=73",

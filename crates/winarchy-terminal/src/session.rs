@@ -39,7 +39,9 @@ pub struct Session {
 }
 impl Session {
     pub fn start(config: Config, size: Size, palette: Palette, wake: Wake) -> Self {
-        let model = Arc::new(Mutex::new(Model::new(size, config.scrollback)));
+        let mut model = Model::new(size, config.scrollback);
+        model.configure(config.scrollback, config.osc52_copy);
+        let model = Arc::new(Mutex::new(model));
         let palette = Arc::new(Mutex::new(palette));
         let control = Arc::new((Mutex::new(Control::default()), Condvar::new()));
         let (input, rx) = mpsc::sync_channel::<Vec<u8>>(32);
@@ -129,7 +131,7 @@ impl Session {
                                     .copied()
                                     .map(|rgb| format(overrides[i].unwrap_or(rgb))),
                                 Event::TextAreaSizeRequest(format) => Some(format(size)),
-                                _ => None, // No OSC52 clipboard access or untrusted window operations.
+                                _ => None, // Clipboard writes are queued by Model; window operations stay ignored.
                             };
                             if let Some(response) = response {
                                 // Backpressure on the reader is safe; never block the UI.

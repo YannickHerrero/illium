@@ -334,15 +334,11 @@ impl App {
             window.surface.padding = self.config.padding as f32;
             if let Some(session) = &window.session {
                 *session.palette.lock().unwrap() = self.palette.clone();
-                if snapshot.config.scrollback != self.snapshot.config.scrollback {
-                    session.model.lock().unwrap().term.set_options(
-                        alacritty_terminal::term::Config {
-                            scrolling_history: snapshot.config.scrollback,
-                            osc52: alacritty_terminal::term::Osc52::Disabled,
-                            ..Default::default()
-                        },
-                    );
-                }
+                session
+                    .model
+                    .lock()
+                    .unwrap()
+                    .configure(snapshot.config.scrollback, snapshot.config.osc52_copy);
                 window.resize();
                 window.paint(&self.palette);
             } else {
@@ -494,16 +490,43 @@ impl App {
     }
 }
 impl Window {
+    fn flush_clipboard(&self) {
+        let Some(session) = &self.session else { return };
+        // Never hold the model lock during Windows clipboard access.
+        let (writes, error) = {
+            let mut model = session.model.lock().unwrap();
+            let writes: Vec<_> = std::iter::from_fn(|| model.take_clipboard_write()).collect();
+            (writes, model.clipboard_error.take())
+        };
+        if let Some(error) = error {
+            crate::log(error);
+            title(self.hwnd, &format!("Winarchy Terminal — {error}"));
+        }
+        for text in writes {
+            if let Err(error) = clipboard_set(self.hwnd, &text) {
+                crate::log(&format!("OSC 52 clipboard write: {error}"));
+                title(self.hwnd, "Winarchy Terminal — clipboard write failed");
+            }
+        }
+    }
     fn schedule(&mut self) {
+        // Clear before draining: a concurrent copy must be able to wake us
+        // again, even if this window is minimized and will not paint.
+        self.pending.store(false, Ordering::Release);
+        self.flush_clipboard();
+        let sync_pending = self
+            .session
+            .as_ref()
+            .is_some_and(|s| s.model.lock().unwrap().sync_pending());
         unsafe {
-            if !IsWindowVisible(self.hwnd).as_bool() || IsIconic(self.hwnd).as_bool() {
-                self.pending.store(false, Ordering::Release);
+            if (!IsWindowVisible(self.hwnd).as_bool() || IsIconic(self.hwnd).as_bool())
+                && !sync_pending
+            {
                 return;
             }
             if !self.timer {
                 self.timer = SetTimer(Some(self.hwnd), 1, 8, None) != 0;
                 if !self.timer {
-                    self.pending.store(false, Ordering::Release);
                     crate::log("Unable to schedule terminal paint timer");
                 }
             }
@@ -511,10 +534,14 @@ impl Window {
     }
     fn paint(&mut self, palette: &Palette) {
         self.pending.store(false, Ordering::Release);
+        let sync_pending = self.session.as_ref().is_some_and(Session::expire_sync);
+        self.flush_clipboard();
+        if sync_pending {
+            self.schedule();
+        }
         if unsafe { !IsWindowVisible(self.hwnd).as_bool() || IsIconic(self.hwnd).as_bool() } {
             return;
         }
-        let sync_pending = self.session.as_ref().is_some_and(Session::expire_sync);
         let frame = if let Some(session) = &self.session {
             let m = session.model.lock().unwrap();
             if let Some(e) = &m.error {
@@ -529,9 +556,6 @@ impl Window {
         } else {
             Frame::new(None, palette)
         };
-        if sync_pending {
-            self.schedule();
-        }
         let editor_ready = self.startup_trace.as_ref().is_some_and(|t| t.paints < 8)
             && self.mode().contains(TermMode::BRACKETED_PASTE);
         if let Some(trace) = &mut self.startup_trace
@@ -887,7 +911,17 @@ fn clipboard_get(hwnd: HWND) -> Result<String, String> {
 }
 fn clipboard_set(hwnd: HWND, text: &str) -> Result<(), String> {
     unsafe {
-        OpenClipboard(Some(hwnd)).map_err(|e| e.to_string())?;
+        // Other applications may briefly own the clipboard. Bound retries to
+        // ten milliseconds total; never wait indefinitely on the UI thread.
+        let mut opened = OpenClipboard(Some(hwnd));
+        for _ in 0..2 {
+            if opened.is_ok() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            opened = OpenClipboard(Some(hwnd));
+        }
+        opened.map_err(|e| e.to_string())?;
         let _guard = Clipboard;
         let units: Vec<u16> = text.encode_utf16().chain([0]).collect();
         let handle = GlobalAlloc(GMEM_MOVEABLE, units.len() * 2).map_err(|e| e.to_string())?;
@@ -905,5 +939,46 @@ fn clipboard_set(hwnd: HWND, text: &str) -> Result<(), String> {
             return Err(e.to_string());
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod clipboard_tests {
+    use super::*;
+    use winarchy_terminal::model::{Model, Size};
+
+    #[test]
+    #[ignore = "overwrites the Windows clipboard; run only on a disposable desktop"]
+    fn osc52_windows_clipboard_roundtrip() {
+        unsafe {
+            let hwnd = CreateWindowExW(
+                WINDOW_EX_STYLE::default(),
+                w!("STATIC"),
+                w!("OSC52 test"),
+                WINDOW_STYLE::default(),
+                0,
+                0,
+                1,
+                1,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            struct HiddenWindow(HWND);
+            impl Drop for HiddenWindow {
+                fn drop(&mut self) {
+                    unsafe {
+                        let _ = DestroyWindow(self.0);
+                    }
+                }
+            }
+            let _window = HiddenWindow(hwnd);
+            let mut model = Model::new(Size::new(80, 24), 0);
+            model.feed(b"\x1b]52;c;aMOpbGxvCvCfmIA=\x07");
+            clipboard_set(hwnd, &model.take_clipboard_write().unwrap()).unwrap();
+            assert_eq!(clipboard_get(hwnd).unwrap(), "héllo\n😀");
+        }
     }
 }

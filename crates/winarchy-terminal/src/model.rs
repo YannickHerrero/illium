@@ -6,7 +6,13 @@ use alacritty_terminal::{
     term::{Config, Osc52},
     vte::ansi::Processor,
 };
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+};
+
+const MAX_CLIPBOARD_BYTES: usize = 65536;
+const MAX_CLIPBOARD_WRITES: usize = 8;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Size {
     pub cols: usize,
@@ -44,6 +50,8 @@ pub struct Model {
     events: Events,
     pub error: Option<String>,
     pub exited: bool,
+    clipboard_writes: VecDeque<String>,
+    pub clipboard_error: Option<&'static str>,
 }
 impl Model {
     pub fn new(size: Size, history: usize) -> Self {
@@ -52,7 +60,7 @@ impl Model {
             term: Term::new(
                 Config {
                     scrolling_history: history,
-                    osc52: Osc52::Disabled,
+                    osc52: Osc52::OnlyCopy,
                     kitty_keyboard: false,
                     ..Config::default()
                 },
@@ -63,12 +71,59 @@ impl Model {
             events,
             error: None,
             exited: false,
+            clipboard_writes: VecDeque::new(),
+            clipboard_error: None,
         }
+    }
+    pub fn configure(&mut self, history: usize, osc52_copy: bool) {
+        self.term.set_options(Config {
+            scrolling_history: history,
+            osc52: if osc52_copy {
+                Osc52::OnlyCopy
+            } else {
+                Osc52::Disabled
+            },
+            kitty_keyboard: false,
+            ..Config::default()
+        });
+        if !osc52_copy {
+            self.clipboard_writes.clear();
+            self.clipboard_error = None;
+        }
+    }
+    pub fn take_clipboard_write(&mut self) -> Option<String> {
+        self.clipboard_writes.pop_front()
+    }
+    fn drain_events(&mut self) -> Vec<Event> {
+        let events = std::mem::take(&mut *self.events.0.lock().unwrap());
+        events
+            .into_iter()
+            .filter(|event| {
+                if let Event::ClipboardStore(_, text) = event {
+                    if text.len() > MAX_CLIPBOARD_BYTES {
+                        self.clipboard_error = Some("OSC 52 copy exceeds 64 KiB");
+                    } else if text.contains('\0') {
+                        self.clipboard_error = Some("OSC 52 copy contains NUL");
+                    } else {
+                        // Keep recent copies without blocking the PTY reader.
+                        if self.clipboard_writes.len() == MAX_CLIPBOARD_WRITES {
+                            self.clipboard_writes.pop_front();
+                            self.clipboard_error =
+                                Some("OSC 52 copy queue overflow; oldest copy dropped");
+                        }
+                        self.clipboard_writes.push_back(text.clone());
+                    }
+                    false
+                } else {
+                    !matches!(event, Event::ClipboardLoad(..))
+                }
+            })
+            .collect()
     }
     /// Caller feeds bounded chunks and drains events before the next chunk.
     pub fn feed(&mut self, bytes: &[u8]) -> Vec<Event> {
         self.parser.advance(&mut self.term, bytes);
-        self.events.0.lock().unwrap().drain(..).collect()
+        self.drain_events()
     }
     /// A broken application must not freeze the screen by forgetting ESU.
     /// The UI arms a timer only while a synchronized update is pending.
@@ -81,7 +136,7 @@ impl Model {
         {
             self.parser.stop_sync(&mut self.term);
         }
-        self.events.0.lock().unwrap().drain(..).collect()
+        self.drain_events()
     }
     pub fn sync_pending(&self) -> bool {
         self.parser.sync_timeout().sync_timeout().is_some()
@@ -104,6 +159,80 @@ mod tests {
         selection::{Selection, SelectionType},
         term::TermMode,
     };
+    #[test]
+    fn osc52_unicode_fragmented_and_successive_writes() {
+        let mut m = Model::new(Size::new(80, 24), 0);
+        // héllo, newline, emoji. ST and BEL terminators, clipboard and selection.
+        for byte in b"\x1b]52;c;aMOpbGxvCvCfmIA=\x1b\\" {
+            assert!(m.feed(&[*byte]).is_empty());
+        }
+        m.feed(b"\x1b]52;p;dHdv\x07\x1b]52;c;dGhyZWU=\x07");
+        assert_eq!(m.take_clipboard_write().as_deref(), Some("héllo\n😀"));
+        assert_eq!(m.take_clipboard_write().as_deref(), Some("two"));
+        assert_eq!(m.take_clipboard_write().as_deref(), Some("three"));
+        assert!(m.take_clipboard_write().is_none());
+    }
+    #[test]
+    fn osc52_reads_invalid_data_and_disable() {
+        let mut m = Model::new(Size::new(80, 24), 0);
+        for sequence in [
+            "\x1b]52;c;?\x07",
+            "\x1b]52;p;?\x1b\\",
+            "\x1b]52;c;%%%\x07",
+            "\x1b]52;c;/w==\x07",
+        ] {
+            assert!(m.feed(sequence.as_bytes()).is_empty());
+            assert!(m.take_clipboard_write().is_none());
+        }
+        m.feed(b"\x1b]52;c;AA==\x07");
+        assert!(m.clipboard_error.take().is_some());
+        assert!(m.take_clipboard_write().is_none());
+        m.feed(b"\x1b]52;c;YQ==\x07");
+        m.configure(100, false);
+        assert!(m.take_clipboard_write().is_none());
+        assert!(m.feed(b"\x1b]52;c;YQ==\x07").iter().all(|event| !matches!(
+            event,
+            Event::ClipboardStore(..) | Event::ClipboardLoad(..) | Event::PtyWrite(..)
+        )));
+        assert!(m.take_clipboard_write().is_none());
+        m.configure(100, true);
+        m.feed(b"\x1b]52;c;YQ==\x07");
+        assert_eq!(m.take_clipboard_write().as_deref(), Some("a"));
+    }
+    #[test]
+    fn osc52_size_and_queue_are_bounded() {
+        let mut m = Model::new(Size::new(80, 24), 0);
+        for (suffix, accepted) in [("YQ==", true), ("YWE=", false)] {
+            let sequence = format!("\x1b]52;c;{}{suffix}\x07", "YWFh".repeat(21845));
+            for chunk in sequence.as_bytes().chunks(16384) {
+                m.feed(chunk);
+            }
+            assert_eq!(
+                m.take_clipboard_write().map(|s| s.len()),
+                accepted.then_some(65536)
+            );
+            assert_eq!(m.clipboard_error.take().is_some(), !accepted);
+        }
+        m.feed(b"\x1b]52;c;b2xk\x07");
+        for _ in 0..MAX_CLIPBOARD_WRITES {
+            m.feed(b"\x1b]52;c;bmV3\x07");
+        }
+        assert!(m.clipboard_error.is_some());
+        for _ in 0..MAX_CLIPBOARD_WRITES {
+            assert_eq!(m.take_clipboard_write().as_deref(), Some("new"));
+        }
+        assert!(m.take_clipboard_write().is_none());
+    }
+    #[test]
+    fn osc52_synchronized_update_end_and_timeout() {
+        let mut m = Model::new(Size::new(80, 24), 0);
+        m.feed(b"\x1b[?2026h\x1b]52;c;YQ==\x07\x1b[?2026l");
+        assert_eq!(m.take_clipboard_write().as_deref(), Some("a"));
+        m.feed(b"\x1b[?2026h\x1b]52;c;Yg==\x07");
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        m.expire_sync();
+        assert_eq!(m.take_clipboard_write().as_deref(), Some("b"));
+    }
     #[test]
     fn vt_unicode_alternate_resize_and_reports() {
         let mut m = Model::new(Size::new(80, 24), 100);
