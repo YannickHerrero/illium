@@ -1,9 +1,12 @@
 //! Windows-only prototype. All COM objects and filter evaluation stay on the UI STA.
 #![allow(unsafe_op_in_unsafe_fn)]
+use crate::leader_panel::LeaderPanel;
 use crate::picker::{EDIT_ID, LIST_ID, Picker};
 use crate::resident::{self, Exit, Request};
+use std::collections::{HashSet, VecDeque};
 use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Instant};
 use webview2_com::{Microsoft::Web::WebView2::Win32::*, *};
+use winarchy_browser::leader::{Action, Key, Leader, Outcome};
 use winarchy_browser::{Blocker, address, library::Library};
 use windows::{
     Win32::{
@@ -35,11 +38,21 @@ const LIBRARY_CHANGED: u32 = WM_APP + 6;
 // WM_APP + 7 is the resident pipe wakeup, handled by the same message loop.
 const THEME_CHANGED: u32 = WM_APP + 8;
 const DISMISS_PALETTE: u32 = WM_APP + 9;
+const LEADER_CHANGED: u32 = WM_APP + 10;
+const LEADER_TIMER: usize = 0x4c44;
+#[derive(Default)]
+struct LeaderInput {
+    state: Leader,
+    consumed: HashSet<u32>,
+    actions: VecDeque<Action>,
+}
 const _: () = assert!(THEME_CHANGED != crate::resident::REQUEST);
 #[derive(Clone)]
 struct App {
     hwnd: HWND,
     picker: Rc<RefCell<Picker>>,
+    leader: Rc<RefCell<LeaderInput>>,
+    leader_panel: Rc<RefCell<LeaderPanel>>,
     brush: HBRUSH,
     surface_brush: HBRUSH,
     text: COLORREF,
@@ -80,6 +93,254 @@ pub(crate) unsafe fn paint_picker(dc: HDC) {
         picker.paint(dc);
     }
 }
+pub(crate) unsafe fn paint_leader(dc: HDC) {
+    if let Some(app) = snapshot()
+        && let Ok(panel) = app.leader_panel.try_borrow()
+        && let Ok(input) = app.leader.try_borrow()
+    {
+        panel.paint(dc, &input.state);
+    }
+}
+unsafe fn sync_leader(app: &App) {
+    let active = app.leader.borrow().state.menu().is_some();
+    if active {
+        app.leader_panel.borrow_mut().notice = None;
+    }
+    let showing = active || app.leader_panel.borrow().notice.is_some();
+    if showing {
+        SetTimer(Some(app.hwnd), LEADER_TIMER, 100, None);
+    } else {
+        let _ = KillTimer(Some(app.hwnd), LEADER_TIMER);
+    }
+    app.leader_panel
+        .borrow()
+        .layout(app.hwnd, app.leader.borrow().state.menu());
+}
+unsafe fn leader_notice(app: &App, message: &str) {
+    app.leader_panel.borrow_mut().notice = Some((
+        message.into(),
+        Instant::now() + std::time::Duration::from_millis(1800),
+    ));
+    sync_leader(app);
+}
+/// Called from both native messages and WebView accelerators. Only mutate pure
+/// state and queue work here: never reenter WebView or move focus in its callback.
+unsafe fn leader_key(vk: u32, scan: u32, down: bool, repeat: bool) -> bool {
+    let Some(app) = snapshot() else {
+        return false;
+    };
+    if GetForegroundWindow() != app.hwnd {
+        return false;
+    }
+    let mut input = app.leader.borrow_mut();
+    if !down {
+        return input.consumed.remove(&vk);
+    }
+    if repeat && input.consumed.contains(&vk) {
+        return true;
+    }
+    // Modifier transitions must pass through, notably the second Ctrl+B.
+    if [
+        VK_CONTROL.0 as u32,
+        VK_SHIFT.0 as u32,
+        VK_MENU.0 as u32,
+        VK_LCONTROL.0 as u32,
+        VK_RCONTROL.0 as u32,
+        VK_LSHIFT.0 as u32,
+        VK_RSHIFT.0 as u32,
+    ]
+    .contains(&vk)
+    {
+        return false;
+    }
+    let ctrl = GetKeyState(VK_CONTROL.0 as i32) < 0;
+    let alt = GetKeyState(VK_MENU.0 as i32) < 0;
+    let win = GetKeyState(VK_LWIN.0 as i32) < 0 || GetKeyState(VK_RWIN.0 as i32) < 0;
+    let key = if ctrl && !alt && !win && GetKeyState(VK_SHIFT.0 as i32) >= 0 && vk == b'B' as u32 {
+        Key::Leader
+    } else if ctrl || alt || win {
+        Key::Other
+    } else if vk == VK_ESCAPE.0 as u32 {
+        Key::Escape
+    } else if vk == VK_BACK.0 as u32 {
+        Key::Backspace
+    } else {
+        let mut keyboard = [0u8; 256];
+        let mut chars = [0u16; 8];
+        let _ = GetKeyboardState(&mut keyboard);
+        // Flag 4 avoids changing dead-key state (Windows 10+).
+        let count = ToUnicodeEx(
+            vk,
+            scan,
+            &keyboard,
+            &mut chars,
+            4,
+            Some(GetKeyboardLayout(0)),
+        );
+        if count == 1 {
+            char::from_u32(chars[0] as u32)
+                .map(|c| Key::Character(c.to_ascii_lowercase()))
+                .unwrap_or(Key::Other)
+        } else {
+            Key::Other
+        }
+    };
+    let was_active = input.state.menu().is_some();
+    let outcome = input.state.input(key, repeat, Instant::now());
+    let handled = outcome != Outcome::Pass;
+    if outcome == Outcome::Cancelled && !matches!(key, Key::Escape | Key::Backspace) {
+        app.leader_panel.borrow_mut().notice = Some((
+            "Touche non reconnue — leader annulé".into(),
+            Instant::now() + std::time::Duration::from_millis(1200),
+        ));
+    }
+    if let Outcome::Execute(action) = outcome {
+        input.actions.push_back(action);
+    }
+    if handled {
+        input.consumed.insert(vk);
+    }
+    if handled || was_active {
+        let _ = PostMessageW(Some(app.hwnd), LEADER_CHANGED, WPARAM(0), LPARAM(0));
+    }
+    handled
+}
+unsafe fn copy_url(hwnd: HWND, value: &str) -> AppResult<()> {
+    use windows::Win32::System::{DataExchange::*, Memory::*};
+    OpenClipboard(Some(hwnd))?;
+    struct Clipboard;
+    impl Drop for Clipboard {
+        fn drop(&mut self) {
+            unsafe {
+                let _ = CloseClipboard();
+            }
+        }
+    }
+    let _clipboard = Clipboard;
+    let text = wide(value);
+    let memory = GlobalAlloc(GMEM_MOVEABLE, text.len() * 2)?;
+    let ptr = GlobalLock(memory);
+    if ptr.is_null() {
+        let _ = GlobalFree(Some(memory));
+        return Err("Clipboard allocation failed".into());
+    }
+    std::ptr::copy_nonoverlapping(text.as_ptr(), ptr.cast::<u16>(), text.len());
+    let _ = GlobalUnlock(memory);
+    if let Err(error) =
+        EmptyClipboard().and_then(|_| SetClipboardData(13, Some(HANDLE(memory.0))).map(|_| ()))
+    {
+        let _ = GlobalFree(Some(memory));
+        return Err(error.into());
+    }
+    Ok(())
+}
+unsafe fn execute_leader(
+    action: Action,
+    app: &App,
+    env: &ICoreWebView2Environment,
+    blocker: &Rc<RefCell<Blocker>>,
+    page: &Rc<RefCell<String>>,
+    filters: &std::path::Path,
+) -> AppResult<()> {
+    let web = app.web.as_ref().ok_or("WebView is not ready")?;
+    let controller = app.controller.as_ref().ok_or("Controller is not ready")?;
+    if action == Action::Address {
+        palette(true);
+        return Ok(());
+    }
+    if action == Action::Home {
+        home_mode(true);
+        return Ok(());
+    }
+    if app.home {
+        leader_notice(app, "Ouvrez une page pour utiliser cette action");
+        return Ok(());
+    }
+    match action {
+        Action::Address | Action::Home => unreachable!(),
+        Action::Back => {
+            web.GoBack()?;
+        }
+        Action::Forward => {
+            web.GoForward()?;
+        }
+        Action::Reload => {
+            web.Reload()?;
+        }
+        Action::Stop => {
+            web.Stop()?;
+        }
+        Action::Bookmark => {
+            PostMessageW(Some(app.hwnd), BOOKMARK, WPARAM(0), LPARAM(0))?;
+        }
+        Action::Find => {
+            let find = web.cast::<ICoreWebView2_28>()?.Find()?;
+            let options = env
+                .cast::<ICoreWebView2Environment15>()?
+                .CreateFindOptions()?;
+            options.SetFindTerm(w!(""))?;
+            options.SetSuppressDefaultFindDialog(false)?;
+            palette(false);
+            find.Start(
+                &options,
+                &FindStartCompletedHandler::create(Box::new(move |result| {
+                    if let Err(error) = result {
+                        eprintln!("Cannot open find: {error}");
+                        if let Some(app) = snapshot() {
+                            leader_notice(&app, "Recherche indisponible sur ce runtime");
+                        }
+                    }
+                    Ok(())
+                })),
+            )?;
+        }
+        Action::CopyUrl => {
+            copy_url(app.hwnd, &take_string(|s| web.Source(s))?)?;
+            leader_notice(app, "URL copiée");
+        }
+        Action::HardReload => {
+            web.CallDevToolsProtocolMethod(
+                w!("Page.reload"),
+                w!("{\"ignoreCache\":true}"),
+                &CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |result, _| {
+                    if let Err(error) = result {
+                        eprintln!("Cannot hard reload: {error}");
+                        if let Some(app) = snapshot() {
+                            leader_notice(&app, "Rechargement sans cache échoué");
+                        }
+                    }
+                    Ok(())
+                })),
+            )?;
+        }
+        Action::DevTools => {
+            web.OpenDevToolsWindow()?;
+        }
+        Action::ZoomIn | Action::ZoomOut | Action::ZoomReset => {
+            let mut zoom = 1.0;
+            controller.ZoomFactor(&mut zoom)?;
+            controller.SetZoomFactor(match action {
+                Action::ZoomIn => (zoom * 1.2).min(5.0),
+                Action::ZoomOut => (zoom / 1.2).max(0.25),
+                _ => 1.0,
+            })?;
+        }
+        Action::Blocking => {
+            blocker.borrow_mut().toggle(&page.borrow(), filters)?;
+            let enabled = blocker.borrow().enabled(&page.borrow());
+            web.Reload()?;
+            leader_notice(
+                app,
+                if enabled {
+                    "Blocage activé pour ce site"
+                } else {
+                    "Blocage désactivé pour ce site"
+                },
+            );
+        }
+    }
+    Ok(())
+}
 unsafe fn layout(app: &App) {
     let mut rect = RECT::default();
     let _ = GetClientRect(app.hwnd, &mut rect);
@@ -88,6 +349,9 @@ unsafe fn layout(app: &App) {
     }
     // Keep the native palette above the WebView child without resizing the page.
     app.picker.borrow().layout(app.hwnd);
+    app.leader_panel
+        .borrow()
+        .layout(app.hwnd, app.leader.borrow().state.menu());
 }
 unsafe fn palette(show: bool) {
     if let Some(app) = snapshot() {
@@ -136,6 +400,7 @@ unsafe fn apply_theme(theme: &winarchy_theme::Theme) -> AppResult<()> {
     if let Some(app) = snapshot() {
         apply_opacity(&app);
         app.picker.borrow_mut().set_theme(theme);
+        app.leader_panel.borrow_mut().set_theme(theme);
         let _ = RedrawWindow(Some(app.hwnd), None, None, RDW_INVALIDATE | RDW_ALLCHILDREN);
         if let Some(controller) = app
             .controller
@@ -270,6 +535,34 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             let _ = EndPaint(hwnd, &paint);
             LRESULT(0)
         }
+        WM_TIMER if wp.0 == LEADER_TIMER => {
+            if let Some(app) = snapshot() {
+                app.leader.borrow_mut().state.expire(Instant::now());
+                if app
+                    .leader_panel
+                    .borrow()
+                    .notice
+                    .as_ref()
+                    .is_some_and(|(_, until)| Instant::now() >= *until)
+                {
+                    app.leader_panel.borrow_mut().notice = None;
+                }
+                sync_leader(&app);
+            }
+            LRESULT(0)
+        }
+        WM_ACTIVATE if wp.0 & 0xffff == WA_INACTIVE as usize => {
+            if let Some(app) = snapshot() {
+                let mut input = app.leader.borrow_mut();
+                input.state.cancel();
+                input.consumed.clear();
+                input.actions.clear();
+                drop(input);
+                app.leader_panel.borrow_mut().notice = None;
+                sync_leader(&app);
+            }
+            DefWindowProcW(hwnd, msg, wp, lp)
+        }
         WM_SIZE => {
             if let Some(app) = snapshot() {
                 layout(&app);
@@ -280,6 +573,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             let rect = &*(lp.0 as *const RECT);
             if let Some(app) = snapshot() {
                 app.picker.borrow_mut().set_font(hwnd);
+                app.leader_panel.borrow_mut().set_font(hwnd);
             }
             let _ = SetWindowPos(
                 hwnd,
@@ -347,6 +641,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             if let Some(app) = snapshot()
                 && !app.home
                 && app.picker.borrow().visible
+                && app.leader.borrow().state.menu().is_none()
                 && GetFocus() != app.picker.borrow().edit
                 && GetFocus() != app.picker.borrow().list
             {
@@ -472,10 +767,13 @@ pub fn run(
         let picker = Rc::new(RefCell::new(Picker::new(hwnd, instance, library.clone())?));
         let edit = picker.borrow().edit;
         let list = picker.borrow().list;
+        let leader_panel = Rc::new(RefCell::new(LeaderPanel::new(hwnd, instance)?));
         APP.with(|a| {
             *a.borrow_mut() = Some(App {
                 hwnd,
                 picker: picker.clone(),
+                leader: Rc::new(RefCell::new(LeaderInput::default())),
+                leader_panel,
                 brush,
                 surface_brush,
                 text: color(&theme.text),
@@ -578,6 +876,7 @@ pub fn run(
                 COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
                 COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS_ALL,
             )?;
+        let action_env = env.clone();
         let request_blocker = blocker.clone();
         let request_page = page.clone();
         web.add_WebResourceRequested(
@@ -687,13 +986,19 @@ pub fn run(
                 if let Some(args) = args {
                     let mut event = COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN;
                     args.KeyEventKind(&mut event)?;
-                    if event != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
-                        && event != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN
-                    {
-                        return Ok(());
-                    }
+                    let down = event == COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
+                        || event == COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN;
                     let mut key = 0;
                     args.VirtualKey(&mut key)?;
+                    let mut status = COREWEBVIEW2_PHYSICAL_KEY_STATUS::default();
+                    args.PhysicalKeyStatus(&mut status)?;
+                    if leader_key(key, status.ScanCode, down, status.WasKeyDown.as_bool()) {
+                        args.SetHandled(true)?;
+                        return Ok(());
+                    }
+                    if !down {
+                        return Ok(());
+                    }
                     if GetKeyState(VK_CONTROL.0 as i32) < 0 && key == b'L' as u32 {
                         args.SetHandled(true)?;
                         // Never manipulate focus inside the synchronous accelerator callback.
@@ -827,6 +1132,47 @@ pub fn run(
                         let _ = request.reply.send(result);
                     }
                 }
+                continue;
+            }
+            if msg.message == LEADER_CHANGED {
+                if let Some(app) = snapshot() {
+                    sync_leader(&app);
+                    loop {
+                        let action = app.leader.borrow_mut().actions.pop_front();
+                        let Some(action) = action else {
+                            break;
+                        };
+                        if let Err(error) = execute_leader(
+                            action,
+                            &app,
+                            &action_env,
+                            &toggle_blocker,
+                            &toggle_page,
+                            &filters,
+                        ) {
+                            eprintln!("Leader action failed: {error}");
+                            leader_notice(&app, "Action indisponible ou échouée");
+                        }
+                    }
+                }
+                continue;
+            }
+            // WebView child input is handled exclusively by its accelerator callback.
+            // Native controls are intercepted before TranslateMessage (no stray WM_CHAR).
+            if matches!(
+                msg.message,
+                WM_KEYDOWN | WM_SYSKEYDOWN | WM_KEYUP | WM_SYSKEYUP
+            ) && (msg.hwnd == hwnd
+                || msg.hwnd == edit
+                || msg.hwnd == list
+                || msg.hwnd == picker.borrow().panel)
+                && leader_key(
+                    msg.wParam.0 as u32,
+                    ((msg.lParam.0 >> 16) & 0xff) as u32,
+                    matches!(msg.message, WM_KEYDOWN | WM_SYSKEYDOWN),
+                    msg.lParam.0 & (1 << 30) != 0,
+                )
+            {
                 continue;
             }
             route_home_input(&mut msg);

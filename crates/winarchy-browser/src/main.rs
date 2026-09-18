@@ -1,6 +1,8 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 #[cfg(windows)]
+mod leader_panel;
+#[cfg(windows)]
 mod native;
 #[cfg(windows)]
 mod picker;
