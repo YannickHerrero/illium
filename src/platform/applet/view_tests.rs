@@ -54,6 +54,68 @@ impl Platform for Headless {
         Ok(window)
     }
 }
+#[test]
+fn escape_closes_applet_even_when_its_cancel_callback_would_handle_it() {
+    let windows = Rc::new(RefCell::new(Vec::new()));
+    slint::platform::set_platform(Box::new(Headless(windows))).unwrap();
+    let home = std::env::temp_dir().join(format!("winarchy-escape-test-{}", std::process::id()));
+    Config::install(&home).unwrap();
+    let mut config = Config::load(&home).unwrap();
+    let dir = home.join("applets/escape-test");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("applet.toml"), "interval = \"1h\"\nicon = \"\"\n").unwrap();
+    std::fs::write(
+        dir.join("view.slint"),
+        r#"
+        export component View inherits Window {
+            width: 200px; height: 100px;
+            in property <bool> open;
+            out property <int> cancel-count;
+            out property <int> dismissed-count;
+            callback cancel() -> bool;
+            cancel => { root.cancel-count += 1; return true; }
+            callback dismissed();
+            dismissed => { root.dismissed-count += 1; }
+        }
+    "#,
+    )
+    .unwrap();
+    config.bar.left = vec!["escape-test".into()];
+    config.bar.center.clear();
+    config.bar.right.clear();
+    let (tx, _rx) = crate::queue::channel(8);
+    let mut runtime = Runtime::new(tx);
+    runtime.load(&config);
+    runtime
+        .toggle(
+            &config,
+            crate::layout::Rect { x: 0, y: 0, w: 800, h: 600 },
+            "escape-test",
+            100,
+        )
+        .unwrap();
+    runtime.focus_on_arrange();
+    assert!(runtime.open.is_some());
+    assert!(runtime.pending.is_some());
+    let view = runtime.entries[0].instance.as_ref().unwrap().clone_strong();
+    runtime.escape();
+    assert!(runtime.open.is_none());
+    assert!(runtime.pending.is_none());
+    assert!(!runtime.keyboard_focus);
+    assert!(matches!(view.get_property("open").unwrap(), Value::Bool(false)));
+    assert!(matches!(
+        view.get_property("cancel-count").unwrap(), Value::Number(0.0)
+    ));
+    assert!(matches!(
+        view.get_property("dismissed-count").unwrap(), Value::Number(1.0)
+    ));
+    runtime.escape();
+    assert!(matches!(
+        view.get_property("dismissed-count").unwrap(), Value::Number(1.0)
+    ));
+    std::fs::remove_dir_all(home).unwrap();
+}
+
 fn press(window: &MinimalSoftwareWindow, text: slint::SharedString) {
     window.dispatch_event(WindowEvent::KeyPressed { text: text.clone() });
     window.dispatch_event(WindowEvent::KeyReleased { text });

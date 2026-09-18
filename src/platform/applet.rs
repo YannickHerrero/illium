@@ -350,19 +350,9 @@ impl Runtime {
         self.open = Some(name.to_owned());
         Ok(())
     }
-    /// Let an applet cancel an inner dialog before Escape closes its window.
+    /// Global Escape always dismisses the entire applet, including inner dialogs.
     pub fn escape(&mut self) {
-        let handled = self
-            .open
-            .as_ref()
-            .and_then(|name| self.entries.iter().find(|e| e.applet.name == *name))
-            .and_then(|e| e.instance.as_ref())
-            .is_some_and(|instance| {
-                matches!(instance.invoke("cancel", &[]), Ok(Value::Bool(true)))
-            });
-        if !handled {
-            self.close();
-        }
+        self.close();
     }
     pub fn close(&mut self) {
         if let Some(name) = self.open.take()

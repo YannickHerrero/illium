@@ -27,6 +27,59 @@ static CONSUMED: std::sync::Mutex<[Consumed; 256]> = std::sync::Mutex::new([Cons
 static HELD: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static MODIFIERS: std::sync::Mutex<crate::modifiers::Modifiers> =
     std::sync::Mutex::new(crate::modifiers::Modifiers::new());
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::Ordering::Relaxed;
+
+    #[test]
+    fn escape_remains_global_across_hint_selection_and_swallows_repeats() {
+        let (tx, rx) = crate::queue::channel(8);
+        assert!(STATE.set((tx, RwLock::new(vec![]))).is_ok());
+        // Call the hook directly: no system-wide input injection or live hooks.
+        let key = |vk, message| {
+            let event = KBDLLHOOKSTRUCT {
+                vkCode: vk,
+                ..Default::default()
+            };
+            let result = unsafe {
+                keyboard(
+                    0,
+                    WPARAM(message as usize),
+                    LPARAM(&event as *const _ as isize),
+                )
+            };
+            assert_eq!(result, LRESULT(1));
+        };
+        BAR_HINTS.store(1, Relaxed);
+        key(0x1b, WM_KEYDOWN);
+        assert!(matches!(rx.try_recv().unwrap(), Event::Escape));
+        key(0x1b, WM_KEYUP);
+
+        // Select, then Escape, before the UI thread has processed either key.
+        key(0x31, WM_KEYDOWN);
+        key(0x1b, WM_KEYDOWN);
+        assert!(matches!(
+            rx.try_recv().unwrap(),
+            Event::BarHintKey(1, crate::bar_hints::Input::Select(0))
+        ));
+        assert!(matches!(rx.try_recv().unwrap(), Event::Escape));
+        BAR_HINTS.store(0, Relaxed);
+        POPUP_OPEN.store(true, Relaxed);
+        key(0x1b, WM_KEYDOWN);
+        assert!(
+            rx.try_recv().is_err(),
+            "held Escape must not repeat into the old window"
+        );
+        key(0x1b, WM_KEYUP);
+        key(0x31, WM_KEYUP);
+        key(0x1b, WM_KEYDOWN);
+        assert!(matches!(rx.try_recv().unwrap(), Event::Escape));
+        key(0x1b, WM_KEYUP);
+        POPUP_OPEN.store(false, Relaxed);
+    }
+}
+
 fn resync_modifiers() {
     let mut state = MODIFIERS.lock().unwrap_or_else(|e| e.into_inner());
     for key in [0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0x5b, 0x5c] {
@@ -94,6 +147,16 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                         return LRESULT(1);
                     }
                     let epoch = BAR_HINTS.load(std::sync::atomic::Ordering::Relaxed);
+                    // Escape is global, not generation-tagged selection input:
+                    // queued just after selecting (or during view compilation),
+                    // it must still close the newly opened applet.
+                    if k.vkCode == 0x1b
+                        && (epoch != 0 || POPUP_OPEN.load(std::sync::atomic::Ordering::Relaxed))
+                    {
+                        consumed[k.vkCode as usize] = Consumed::Modal;
+                        let _ = tx.send(Event::Escape);
+                        return LRESULT(1);
+                    }
                     if epoch != 0 {
                         consumed[k.vkCode as usize] = Consumed::Modal;
                         // New modifier presses must not open Start/menus in the
@@ -105,17 +168,12 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                         if binding.is_some_and(|b| b.command == crate::command::Command::BarHints) {
                             let _ =
                                 tx.send(Event::Command(crate::command::Command::BarHints, None));
-                        } else if (modifiers & !crate::keyboard::SHIFT == 0 || k.vkCode == 0x1b)
+                        } else if modifiers & !crate::keyboard::SHIFT == 0
                             && let Some(input) = crate::bar_hints::input(k.vkCode)
                         {
                             let _ = tx.send(Event::BarHintKey(epoch, input));
                         }
                         // Invalid keys do not type into the previous application.
-                        return LRESULT(1);
-                    }
-                    if k.vkCode == 0x1b && POPUP_OPEN.load(std::sync::atomic::Ordering::Relaxed) {
-                        consumed[k.vkCode as usize] = Consumed::Modal;
-                        let _ = tx.send(Event::Escape);
                         return LRESULT(1);
                     }
                 }

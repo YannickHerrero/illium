@@ -51,7 +51,7 @@ the previous application.
 Selecting hides the hints, opens the same popup as a click, and gives it keyboard
 focus. Existing applet controls remain available (for example arrows for volume,
 and Up/Down then Enter for Wi-Fi). **Escape** closes it and restores the previous
-window; an applet's inner dialog can consume Escape first. While hints are shown,
+window in one press, even if the applet has an inner dialog open. While hints are shown,
 Escape or the toggle shortcut cancels. Clicking outside, reconfiguring the bar,
 or changing displays also cancels selection. Custom applets still need to provide
 their own keyboard controls.

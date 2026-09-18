@@ -159,8 +159,10 @@ Optional view callbacks let the applet clean up transient UI state:
 
 - `completed()`: invoked after a provider result, including failures.
 - `dismissed()`: invoked before hiding the popup (clear password input here).
-- `cancel() -> bool`: invoked for the global Escape key; return true to cancel an
-  inner dialog without closing the popup, false to let Winarchy close it.
+
+Global Escape always closes the entire popup, including any inner dialog. The
+`dismissed()` callback handles cleanup. A legacy `cancel() -> bool` callback may
+remain in a view for its own controls, but no longer intercepts global Escape.
 
 The opt-in native unit test `wifi_view_renders_and_pins_password_target` compiles and
 renders the real Slint view headlessly and exercises connection, password-target
