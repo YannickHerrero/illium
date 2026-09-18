@@ -59,6 +59,10 @@ The field suggests up to eight local results, matching case-insensitive ordered 
 | Other text, then Enter | DuckDuckGo search; no remote autocomplete |
 | Up / Down, then Enter | Select and open a history/bookmark suggestion |
 | `Ctrl+D` | Add the current page to favorites (safe to repeat) |
+| `Ctrl+T` / `Ctrl+W` | New tab / close active tab (selected result in the tab palette) |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab, wrapping in list order |
+| `Ctrl+Shift+T` | Reopen the last closed tab |
+| `Ctrl+Shift+A` | Open the fuzzy tab palette |
 | Escape | Close editor and restore page focus; on home, clear input |
 | `:block` in editor, then Enter | Toggle blocking for the current exact hostname, persist, reload |
 | `Alt+Left` / `Alt+Right` | Back / forward |
@@ -67,7 +71,7 @@ The field suggests up to eight local results, matching case-insensitive ordered 
 
 Winarchy gives each newly opened browser window on the active workspace foreground focus and centers the pointer after applying its tile geometry. This is a one-shot launch action, not a cursor warp on every resize. Both the browser and the daemon must be updated for this behavior.
 
-There is no caption or tab strip. Use Winarchy's window management or Windows' system menu (`Alt+Space`) to move the window. The palette is a native child panel placed above the WebView child in the window's z-order; it neither reserves page space nor allocates another WebView. It remains inside its browser window and inherits its minimize/move/resize lifecycle. No tab action is advertised because tabs are not implemented. `target=_blank` currently navigates the same window; popup-based OAuth flows may not work. Only one window is kept prepared; additional simultaneous windows use standalone hosts.
+There is no caption or tab strip. Use Winarchy's window management or Windows' system menu (`Alt+Space`) to move the window. The palette is a native child panel placed above the WebView child in the window's z-order; it neither reserves page space nor allocates another WebView. It remains inside its browser window and inherits its minimize/move/resize lifecycle. Tabs are retained in the background; only the active tab's controller is visible. User-initiated HTTP(S) `target=_blank` / `window.open` requests open a new active tab. Unsolicited script popups are blocked instead of allocating controllers. These are URL-only popup opens, not a complete opener/window-object implementation; popup-based OAuth and scripted about:blank popups remain unsupported. Only one window is kept prepared; additional simultaneous windows use standalone hosts.
 
 ## Leader key
 
@@ -92,6 +96,9 @@ leader is open. Resizing and DPI changes keep the leader anchored bottom-right.
 | `f` | WebView2's native find bar |
 | `r` | Reload |
 | `d` | Add bookmark |
+| `t` / `w` | New tab / close tab |
+| `j` / `k` | Previous / next tab |
+| `o` | Tabs: `o` select, `r` reopen closed, `d` duplicate, `e` pin/unpin, `m` mute/unmute |
 | `n` | Navigation: `p` previous, `s` next, `a` home |
 | `p` | Page: `u` copy URL, `r` reload ignoring cache, `s` stop, `i` DevTools |
 | `z` | Zoom: `+` or `=` in, `-` out, `0` reset |
@@ -134,9 +141,54 @@ shows an unavailable-action message; the existing `Ctrl+F` remains available.
 Hard reload uses WebView2's `Page.reload` DevTools protocol method with
 `ignoreCache: true`, not a persistent cache setting.
 
-Tabs, filtered history/bookmark views, command search and configurable bindings
-are intentionally not part of this version. Tab shortcuts are not displayed or
-repurposed as window-closing actions.
+Filtered history/bookmark views, command search and configurable bindings
+are intentionally not part of this version.
+
+## Background tabs and tab palette
+
+There is **no permanent tab strip**. `Ctrl+B`, `o`, `o` (or `Ctrl+Shift+A`)
+opens a centered native tab palette using the same compact font, spacing and
+live theme as the URL palette. It shows a search field, matched/total count,
+page titles above URLs, relative last-activation times, and active (`↵`), pinned
+(`◆`), audible (`♫`) or muted indicators. The list scrolls after eight visible
+rows; results are not capped at eight and duplicate URLs remain distinct tabs.
+
+- Search is local, case-insensitive fuzzy matching on both title and URL.
+  Empty search follows tab order with pinned tabs first. The current tab is
+  selected initially; typing selects the best match without navigating.
+- Up/Down select; Enter or a single click activates a result. Escape returns to
+  the page (or the URL field on home). No match means Enter and Ctrl+W do nothing.
+- Ctrl+W closes the selected result while keeping the palette and query open.
+  Selection follows stable tab IDs when titles, sound state or ordering change.
+  The leader close/duplicate/pin/mute actions also target the selected result
+  while this palette is visible; otherwise they target the active tab.
+- Pinned tabs are grouped first and protected against accidental close; unpin
+  before closing. Pinning and mute state last for this browser session only.
+- New tabs open native home with the URL field focused. Closing the final tab
+  creates a fresh home tab rather than closing the browser window. Alt+F4 still
+  closes the whole window and all its tabs.
+- Reopen remembers the last **20 closed tabs** in this window and restores the
+  URL and mute state. Duplicate opens another instance of the URL. Neither
+  operation restores form contents, scroll position or back/forward history
+  from a destroyed controller. Closing/restarting the browser clears the tab
+  session and recently-closed stack; persistent history/bookmarks are unchanged.
+
+Each open tab owns a separate WebView2 controller in the same environment and
+profile. Switching only hides/shows controllers: navigation history, DOM/form
+state, scroll, zoom and media remain in their original tab. Background pages
+continue running and may play audio unless muted; there is no suspension or
+memory eviction yet. Tab count is not artificially limited, so memory grows
+with the number and contents of open tabs. Closing releases the controller;
+closing the host releases all of them. Only one home/controller is prewarmed by
+the resident, not a pool of spare tabs.
+
+Filtering callbacks keep a separate page context per tab while sharing the
+filter engine and profile. Background title/source/audio changes update their
+own tab by stable ID, never another tab's active URL or focus. Tab creation and
+actions run outside synchronous accelerator/popup callbacks; controller
+initialization briefly pumps COM messages on the host thread. Switching existing
+tabs does not create controllers or navigate pages. Browser launch IPC retains
+its existing separate-window behavior when the resident is already occupied.
 
 ## Blocking scope and security
 
@@ -201,6 +253,31 @@ screenshot is saved alongside the temporary logs. It adds no test IPC or script
 bridge to the browser. Security software may block keyboard automation; do not
 disable protection to run it. In that case, perform the same checks manually.
 
+For the new **non-keyboard tab smoke test**, with the same local fixture server:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/test-browser-tabs.ps1 `
+  -Exe "$PWD/target/release/winarchy-browser.exe"
+```
+
+It starts its own standalone browser with a disposable profile/config; the
+explicit `tabs.html?auto=1` fixture attempts an unsolicited popup, which must
+be blocked. The test then invokes its own fixture button via UI Automation to
+open a user-initiated second HTTP tab (no keyboard/mouse injection). It verifies two
+retained native controllers, exactly one visible full-size view, independent
+history entries, ad requests blocked in both tabs and clean host shutdown. It
+never stops or uses the user's resident. `-TestUrl` accepts another fixture
+server port and updates the disposable filter rules accordingly.
+
+The opt-in keyboard suite additionally covers tabs with `-CheckTabs` (which
+includes `-CheckLeader`). It checks new/previous/next/select, retained page input,
+empty fuzzy results, duplicate/close/reopen, pin protection, restored mute and
+closing the final tab to a fresh home. It requires an unattended interactive
+desktop and is subject to the same security-software restrictions as the leader
+suite. Otherwise use `tests/browser/tabs.html` manually; also test background
+audio, tab-specific back/forward/zoom, title changes, live themes, rapid creation,
+large/scrolling lists, resizing and mixed DPI. There is no production test bridge.
+
 For resident lifecycle and latency/memory checks, close and stop any existing resident first, then run:
 
 ```powershell
@@ -230,7 +307,7 @@ Run at least ten repetitions and report median/p95, Windows/runtime version, CPU
 - stable idle at 5/15/60 seconds, minimized/restored, and ten open/close cycles;
 - all associated runtime processes eventually exit after normal closure. Report residual processes rather than forcibly killing them to hide the result.
 
-Prepared mode keeps one browser host and its empty WebView ready. There is no polling timer, preloaded site, software-rendering override or manual working-set trimming. The single WebView is hidden while the native home surface is shown. One WebView per host; no unbounded spare pool. No suspension or reduced-memory override is applied without measurements showing a benefit.
+Prepared mode keeps one browser host and its empty WebView ready. There is no polling timer, preloaded site, software-rendering override or manual working-set trimming. The single WebView is hidden while the native home surface is shown. One WebView per open tab (one for the idle resident); no spare tab pool. Additional tabs retain their own renderer state and must be included in memory measurements. No suspension or reduced-memory override is applied without measurements showing a benefit.
 
 ## Validation performed
 
@@ -242,19 +319,25 @@ Prepared mode keeps one browser host and its empty WebView ready. There is no po
 - The full workspace test run stops on the unchanged `theme_picker::loader::tests::parallel_render_preserves_paint_order_and_reuses_frames` timeout, including with one test thread. No unrelated theme-picker code was changed.
 - The home/history/bookmark desktop smoke script passes on Windows via WSL interop, including add-only bookmarking, combined suggestions, and the opt-in tiling focus/cursor check. The native frame inset was also verified to be zero on Windows. The resident lifecycle script also passes, including rebuilding a spare in the same process, independent extra windows, and idle/deferred shutdown. Initial process-tree memory samples and warm-open timings are recorded above; the broader acceptance matrix and statistically meaningful performance comparisons remain **unverified**.
 
-### Leader implementation validation
+### Leader and tabs implementation validation
 
-- All twelve browser unit tests pass, including command-map reachability/uniqueness,
+- All sixteen browser unit tests pass, including command-map reachability/uniqueness,
   submenu navigation, cancellation, unknown-key persistence, repeat handling, double
   leader passthrough, the zoom alias and queue-aware key-release tracking
-  (including hook repeats and reopening after actions).
+  (including hook repeats and reopening after actions), plus tab identity,
+  selection/wrapping, close/reopen metadata, pin protection, fuzzy search and
+  the bounded recently-closed stack.
 - Browser Clippy with warnings denied passes on Linux, Windows GNU and Windows
   MSVC. The Windows GNU release binary builds. The updated PowerShell smoke
   script parses successfully.
-- **The new desktop leader test has not run successfully in the implementation
+- The MSVC release build passes the standalone initial-home/shutdown check and
+  `test-browser-tabs.ps1` on Windows: two retained controllers, one visible view,
+  full client bounds, per-tab history and filtering, unsolicited-popup blocking,
+  a user-initiated popup tab, and a clean shutdown.
+- **The keyboard desktop leader/tab suite has not run successfully in the implementation
   environment:** Windows antivirus rejected the script before execution. No
   protection was bypassed. The desktop claims in earlier sections describe
-  the previous browser, not validation of this leader implementation.
+  the previous browser, not comprehensive validation of this leader/tab implementation.
 - Still manually validate the new shortcuts and find UI on Windows, especially
   cross-origin frames, real rich-text editors, AZERTY/QWERTY, light/dark live
   theme changes, mixed DPI, small windows, focus loss and rapid/repeated input.
@@ -264,7 +347,7 @@ Prepared mode keeps one browser host and its empty WebView ready. There is no po
 
 ## Status / remaining gates
 
-Implemented: native host, translucent home, DuckDuckGo/address editor, local fuzzy suggestions, persistent history/bookmarks/profile, startup theme, native filtering, basic cosmetics, persistent exceptions, filter provisioning, fixtures, unit tests and measurement script.
+Implemented: background tabs and fuzzy tab palette, native host, translucent home, DuckDuckGo/address editor, local fuzzy suggestions, persistent history/bookmarks/profile, startup theme, native filtering, basic cosmetics, persistent exceptions, filter provisioning, fixtures, unit tests and measurement script.
 
 Still required before declaring the V1 validated:
 
