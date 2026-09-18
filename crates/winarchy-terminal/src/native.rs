@@ -488,7 +488,7 @@ impl App {
                 SetPropW(
                     hwnd,
                     w!("WinarchyDemoReady"),
-                    Some(windows::Win32::Foundation::HANDLE(1usize as *mut _)),
+                    Some(windows::Win32::Foundation::HANDLE(std::ptr::dangling_mut())),
                 )
                 .map_err(|e| e.to_string())?;
             }

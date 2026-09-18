@@ -1306,7 +1306,7 @@ fn run_inner(
             SetPropW(
                 hwnd,
                 w!("WinarchyDemoReady"),
-                Some(HANDLE(1usize as *mut _)),
+                Some(HANDLE(std::ptr::dangling_mut())),
             )?;
         }
         let mut msg = MSG::default();
