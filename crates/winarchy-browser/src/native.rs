@@ -45,6 +45,18 @@ struct LeaderInput {
     state: Leader,
     consumed: HashSet<u32>,
     actions: VecDeque<Action>,
+    hook: Option<HHOOK>,
+    held: HashSet<u32>,
+    pass_leader_once: bool,
+}
+impl Drop for LeaderInput {
+    fn drop(&mut self) {
+        if let Some(hook) = self.hook.take() {
+            unsafe {
+                let _ = UnhookWindowsHookEx(hook);
+            }
+        }
+    }
 }
 const _: () = assert!(THEME_CHANGED != crate::resident::REQUEST);
 #[derive(Clone)]
@@ -106,7 +118,20 @@ unsafe fn sync_leader(app: &App) {
     if active {
         app.leader_panel.borrow_mut().notice = None;
     }
-    let showing = active || app.leader_panel.borrow().notice.is_some();
+    let obsolete_hook = {
+        let mut input = app.leader.borrow_mut();
+        if !active && input.consumed.is_empty() {
+            input.held.clear();
+            input.hook.take()
+        } else {
+            None
+        }
+    };
+    if let Some(hook) = obsolete_hook {
+        let _ = UnhookWindowsHookEx(hook);
+    }
+    let showing =
+        active || app.leader_panel.borrow().notice.is_some() || app.leader.borrow().hook.is_some();
     if showing {
         SetTimer(Some(app.hwnd), LEADER_TIMER, 100, None);
     } else {
@@ -123,9 +148,36 @@ unsafe fn leader_notice(app: &App, message: &str) {
     ));
     sync_leader(app);
 }
-/// Called from both native messages and WebView accelerators. Only mutate pure
-/// state and queue work here: never reenter WebView or move focus in its callback.
-unsafe fn leader_key(vk: u32, scan: u32, down: bool, repeat: bool) -> bool {
+// WebView2 accelerators do NOT include unmodified character keys. During a
+// leader sequence only, a low-level hook captures them before they reach the
+// renderer's separate input queue. It never takes focus, injects keys, records
+// other applications' input or processes input outside our foreground window.
+unsafe extern "system" fn leader_hook(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    if code == HC_ACTION as i32
+        && let Some(app) = snapshot()
+        && GetForegroundWindow() == app.hwnd
+    {
+        let key = &*(lp.0 as *const KBDLLHOOKSTRUCT);
+        let down = matches!(wp.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
+        let repeat = {
+            let mut input = app.leader.borrow_mut();
+            if down {
+                !input.held.insert(key.vkCode)
+            } else {
+                input.held.remove(&key.vkCode);
+                false
+            }
+        };
+        if leader_key(key.vkCode, key.scanCode, down, repeat, true) {
+            return LRESULT(1);
+        }
+    }
+    CallNextHookEx(None, code, wp, lp)
+}
+/// Only mutate keyboard state and queue UI/COM work here. Installing the
+/// short-lived hook is safe in WebView's synchronous accelerator callback;
+/// focus manipulation and outgoing WebView calls are not.
+unsafe fn leader_key(vk: u32, scan: u32, down: bool, repeat: bool, from_hook: bool) -> bool {
     let Some(app) = snapshot() else {
         return false;
     };
@@ -134,7 +186,15 @@ unsafe fn leader_key(vk: u32, scan: u32, down: bool, repeat: bool) -> bool {
     }
     let mut input = app.leader.borrow_mut();
     if !down {
-        return input.consumed.remove(&vk);
+        let consumed = input.consumed.remove(&vk);
+        if consumed {
+            let _ = PostMessageW(Some(app.hwnd), LEADER_CHANGED, WPARAM(0), LPARAM(0));
+        }
+        return consumed;
+    }
+    if !from_hook && vk == b'B' as u32 && input.pass_leader_once {
+        input.pass_leader_once = false;
+        return false;
     }
     if repeat && input.consumed.contains(&vk) {
         return true;
@@ -150,6 +210,8 @@ unsafe fn leader_key(vk: u32, scan: u32, down: bool, repeat: bool) -> bool {
         VK_CONTROL.0 as u32,
         VK_SHIFT.0 as u32,
         VK_MENU.0 as u32,
+        VK_LMENU.0 as u32,
+        VK_RMENU.0 as u32,
         VK_LCONTROL.0 as u32,
         VK_RCONTROL.0 as u32,
         VK_LSHIFT.0 as u32,
@@ -159,11 +221,19 @@ unsafe fn leader_key(vk: u32, scan: u32, down: bool, repeat: bool) -> bool {
     {
         return false;
     }
-    let ctrl = GetKeyState(VK_CONTROL.0 as i32) < 0;
-    let alt = GetKeyState(VK_MENU.0 as i32) < 0;
-    let win = GetKeyState(VK_LWIN.0 as i32) < 0 || GetKeyState(VK_RWIN.0 as i32) < 0;
-    let is_leader =
-        ctrl && !alt && !win && GetKeyState(VK_SHIFT.0 as i32) >= 0 && vk == b'B' as u32;
+    // A low-level hook runs before the queued keyboard state is updated.
+    let pressed = |key: VIRTUAL_KEY| {
+        if from_hook {
+            GetAsyncKeyState(key.0 as i32) < 0
+        } else {
+            GetKeyState(key.0 as i32) < 0
+        }
+    };
+    let ctrl = pressed(VK_CONTROL);
+    let alt = pressed(VK_MENU);
+    let shift = pressed(VK_SHIFT);
+    let win = pressed(VK_LWIN) || pressed(VK_RWIN);
+    let is_leader = ctrl && !alt && !win && !shift && vk == b'B' as u32;
     if input.state.menu().is_none() && !is_leader {
         return false;
     }
@@ -179,6 +249,12 @@ unsafe fn leader_key(vk: u32, scan: u32, down: bool, repeat: bool) -> bool {
         let mut keyboard = [0u8; 256];
         let mut chars = [0u16; 8];
         let _ = GetKeyboardState(&mut keyboard);
+        if from_hook {
+            for (key, down) in [(VK_CONTROL, ctrl), (VK_MENU, alt), (VK_SHIFT, shift)] {
+                keyboard[key.0 as usize] =
+                    (keyboard[key.0 as usize] & 1) | if down { 0x80 } else { 0 };
+            }
+        }
         // Flag 4 avoids changing dead-key state (Windows 10+).
         let count = ToUnicodeEx(
             vk,
@@ -199,6 +275,11 @@ unsafe fn leader_key(vk: u32, scan: u32, down: bool, repeat: bool) -> bool {
     let was_active = input.state.menu().is_some();
     let outcome = input.state.input(key, repeat, Instant::now());
     let handled = outcome != Outcome::Pass;
+    if from_hook && was_active && key == Key::Leader && !handled {
+        // The hook passes the real second chord through. Its later native/
+        // WebView accelerator delivery must not start another leader session.
+        input.pass_leader_once = true;
+    }
     if outcome == Outcome::Cancelled && !matches!(key, Key::Escape | Key::Backspace) {
         app.leader_panel.borrow_mut().notice = Some((
             "Touche non reconnue — leader annulé".into(),
@@ -210,6 +291,30 @@ unsafe fn leader_key(vk: u32, scan: u32, down: bool, repeat: bool) -> bool {
     }
     if handled {
         input.consumed.insert(vk);
+    }
+    if input.state.menu().is_some() && input.hook.is_none() {
+        input.held = (0..256)
+            .filter(|key| GetAsyncKeyState(*key as i32) < 0)
+            .collect();
+        match GetModuleHandleW(None).and_then(|module| {
+            SetWindowsHookExW(
+                WH_KEYBOARD_LL,
+                Some(leader_hook),
+                Some(HINSTANCE(module.0)),
+                0,
+            )
+        }) {
+            Ok(hook) => input.hook = Some(hook),
+            Err(error) => {
+                eprintln!("Cannot capture leader keys: {error}");
+                input.state.cancel();
+                input.consumed.clear();
+                app.leader_panel.borrow_mut().notice = Some((
+                    "Interception clavier indisponible".into(),
+                    Instant::now() + std::time::Duration::from_millis(1800),
+                ));
+            }
+        }
     }
     if handled || was_active {
         let _ = PostMessageW(Some(app.hwnd), LEADER_CHANGED, WPARAM(0), LPARAM(0));
@@ -568,6 +673,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
                 input.state.cancel();
                 input.consumed.clear();
                 input.actions.clear();
+                input.pass_leader_once = false;
                 drop(input);
                 app.leader_panel.borrow_mut().notice = None;
                 sync_leader(&app);
@@ -1003,7 +1109,13 @@ pub fn run(
                     args.VirtualKey(&mut key)?;
                     let mut status = COREWEBVIEW2_PHYSICAL_KEY_STATUS::default();
                     args.PhysicalKeyStatus(&mut status)?;
-                    if leader_key(key, status.ScanCode, down, status.WasKeyDown.as_bool()) {
+                    if leader_key(
+                        key,
+                        status.ScanCode,
+                        down,
+                        status.WasKeyDown.as_bool(),
+                        false,
+                    ) {
                         args.SetHandled(true)?;
                         return Ok(());
                     }
@@ -1168,8 +1280,9 @@ pub fn run(
                 }
                 continue;
             }
-            // WebView child input is handled exclusively by its accelerator callback.
-            // Native controls are intercepted before TranslateMessage (no stray WM_CHAR).
+            // WebView starts the leader through its accelerator callback; the
+            // temporary hook captures subsequent unmodified keys. Native controls
+            // are intercepted before TranslateMessage (no stray WM_CHAR).
             if matches!(
                 msg.message,
                 WM_KEYDOWN | WM_SYSKEYDOWN | WM_KEYUP | WM_SYSKEYUP
@@ -1182,6 +1295,7 @@ pub fn run(
                     ((msg.lParam.0 >> 16) & 0xff) as u32,
                     matches!(msg.message, WM_KEYDOWN | WM_SYSKEYDOWN),
                     msg.lParam.0 & (1 << 30) != 0,
+                    false,
                 )
             {
                 continue;
