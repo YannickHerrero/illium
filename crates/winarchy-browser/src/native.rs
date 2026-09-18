@@ -1,12 +1,14 @@
 //! Windows-only prototype. All COM objects and filter evaluation stay on the UI STA.
 #![allow(unsafe_op_in_unsafe_fn)]
+use crate::browser_view::{BrowserView, ViewContext};
 use crate::leader_panel::LeaderPanel;
 use crate::picker::{EDIT_ID, LIST_ID, Picker};
 use crate::resident::{self, Exit, Request};
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Instant};
 use webview2_com::{Microsoft::Web::WebView2::Win32::*, *};
 use winarchy_browser::leader::{Action, CapturedKeys, Key, Leader, Outcome};
+use winarchy_browser::tabs::{self, TabId, Tabs};
 use winarchy_browser::{Blocker, address, library::Library};
 use windows::{
     Win32::{
@@ -40,6 +42,8 @@ const THEME_CHANGED: u32 = WM_APP + 8;
 const DISMISS_PALETTE: u32 = WM_APP + 9;
 const LEADER_CHANGED: u32 = WM_APP + 10;
 const LEADER_TIMER: usize = 0x4c44;
+const TABS_CHANGED: u32 = WM_APP + 11;
+const OPEN_POPUP: u32 = WM_APP + 12;
 #[derive(Default)]
 struct LeaderInput {
     state: Leader,
@@ -73,6 +77,10 @@ struct App {
     controller: Option<ICoreWebView2Controller>,
     web: Option<ICoreWebView2>,
     home: bool,
+    tabs: Rc<RefCell<Tabs>>,
+    views: Rc<RefCell<HashMap<TabId, Rc<BrowserView>>>>,
+    view_context: Option<ViewContext>,
+    popups: Rc<RefCell<VecDeque<(TabId, String)>>>,
     background_opacity: f32,
 }
 thread_local! { static APP: RefCell<Option<App>> = const { RefCell::new(None) }; }
@@ -345,14 +353,270 @@ unsafe fn copy_url(hwnd: HWND, value: &str) -> AppResult<()> {
     }
     Ok(())
 }
+pub(crate) unsafe fn tabs_changed(hwnd: HWND) {
+    let _ = PostMessageW(Some(hwnd), TABS_CHANGED, WPARAM(0), LPARAM(0));
+}
+pub(crate) unsafe fn queue_popup(source: TabId, url: String) {
+    if let Some(app) = snapshot() {
+        app.popups.borrow_mut().push_back((source, url));
+        let _ = PostMessageW(Some(app.hwnd), OPEN_POPUP, WPARAM(0), LPARAM(0));
+    }
+}
+pub(crate) unsafe fn tab_got_focus(id: TabId, hwnd: HWND) {
+    if snapshot().is_some_and(|app| app.tabs.borrow().active() == Some(id)) {
+        let _ = PostMessageW(Some(hwnd), DISMISS_PALETTE, WPARAM(0), LPARAM(0));
+    }
+}
+unsafe fn queue_action(action: Action) {
+    if let Some(app) = snapshot() {
+        app.leader.borrow_mut().actions.push_back(action);
+        let _ = PostMessageW(Some(app.hwnd), LEADER_CHANGED, WPARAM(0), LPARAM(0));
+    }
+}
+unsafe fn tab_shortcut(key: u32) -> Option<Action> {
+    if GetKeyState(VK_CONTROL.0 as i32) >= 0 || GetKeyState(VK_MENU.0 as i32) < 0 {
+        return None;
+    }
+    let shift = GetKeyState(VK_SHIFT.0 as i32) < 0;
+    match (key, shift) {
+        (84, false) => Some(Action::NewTab),
+        (84, true) => Some(Action::ReopenTab),
+        (87, false) => Some(Action::CloseTab),
+        (9, false) => Some(Action::NextTab),
+        (9, true) => Some(Action::PreviousTab),
+        (65, true) => Some(Action::SelectTab),
+        _ => None,
+    }
+}
+pub(crate) unsafe fn web_accelerator(
+    id: TabId,
+    args: &ICoreWebView2AcceleratorKeyPressedEventArgs,
+) -> windows::core::Result<()> {
+    let Some(app) = snapshot().filter(|app| app.tabs.borrow().active() == Some(id)) else {
+        return Ok(());
+    };
+    let mut event = COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN;
+    args.KeyEventKind(&mut event)?;
+    let down = event == COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
+        || event == COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN;
+    let mut key = 0;
+    args.VirtualKey(&mut key)?;
+    let mut status = COREWEBVIEW2_PHYSICAL_KEY_STATUS::default();
+    args.PhysicalKeyStatus(&mut status)?;
+    if leader_key(
+        key,
+        status.ScanCode,
+        down,
+        status.WasKeyDown.as_bool(),
+        false,
+    ) {
+        args.SetHandled(true)?;
+        return Ok(());
+    }
+    if !down {
+        return Ok(());
+    }
+    if let Some(action) = tab_shortcut(key) {
+        args.SetHandled(true)?;
+        if !status.WasKeyDown.as_bool() {
+            queue_action(action);
+        }
+    } else if GetKeyState(VK_CONTROL.0 as i32) < 0 && key == b'L' as u32 {
+        args.SetHandled(true)?;
+        PostMessageW(Some(app.hwnd), PALETTE, WPARAM(0), LPARAM(0))?;
+    } else if GetKeyState(VK_CONTROL.0 as i32) < 0 && key == b'D' as u32 {
+        args.SetHandled(true)?;
+        if !status.WasKeyDown.as_bool() {
+            PostMessageW(Some(app.hwnd), BOOKMARK, WPARAM(0), LPARAM(0))?;
+        }
+    } else if GetKeyState(VK_MENU.0 as i32) < 0
+        && (key == VK_LEFT.0 as u32 || key == VK_RIGHT.0 as u32)
+    {
+        args.SetHandled(true)?;
+        PostMessageW(Some(app.hwnd), HISTORY, WPARAM(key as usize), LPARAM(0))?;
+    }
+    Ok(())
+}
+unsafe fn activate_tab(id: TabId, keep_picker: bool) -> AppResult<()> {
+    let app = snapshot().ok_or("Browser closed")?;
+    let view = app.views.borrow().get(&id).cloned().ok_or("Unknown tab")?;
+    let home = app.tabs.borrow().get(id).ok_or("Unknown tab")?.home;
+    app.tabs.borrow_mut().activate(id, tabs::now());
+    let views: Vec<_> = app.views.borrow().values().cloned().collect();
+    for other in views {
+        other.controller.SetIsVisible(false)?;
+    }
+    APP.with(|state| {
+        let mut state = state.borrow_mut();
+        let app = state.as_mut().unwrap();
+        app.controller = Some(view.controller.clone());
+        app.web = Some(view.web.clone());
+        app.home = home;
+    });
+    let app = snapshot().unwrap();
+    apply_opacity(&app);
+    layout(&app);
+    view.controller.SetIsVisible(!home)?;
+    if keep_picker {
+        app.picker.borrow_mut().refresh_tabs(app.hwnd, true);
+    } else {
+        app.picker.borrow_mut().hide();
+        if home {
+            palette(true);
+        } else if IsWindowVisible(app.hwnd).as_bool() {
+            view.controller
+                .MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC)?;
+        }
+    }
+    tabs_changed(app.hwnd);
+    Ok(())
+}
+unsafe fn create_tab(target: &str, keep_picker: bool) -> AppResult<TabId> {
+    let app = snapshot().ok_or("Browser closed")?;
+    let context = app
+        .view_context
+        .as_ref()
+        .ok_or("WebView environment is not ready")?;
+    let id = app.tabs.borrow_mut().add(target, tabs::now());
+    let view = match context.create(id) {
+        Ok(view) => view,
+        Err(error) => {
+            app.tabs.borrow_mut().discard(id);
+            // The initialization pump may have consumed WM_QUIT.
+            if !IsWindow(Some(app.hwnd)).as_bool() {
+                PostQuitMessage(0);
+            }
+            return Err(error);
+        }
+    };
+    if !IsWindow(Some(app.hwnd)).as_bool() {
+        app.tabs.borrow_mut().discard(id);
+        PostQuitMessage(0);
+        return Err("Browser closed during tab initialization".into());
+    }
+    app.views.borrow_mut().insert(id, view.clone());
+    activate_tab(id, keep_picker)?;
+    if target != "about:blank" {
+        view.web.Navigate(PCWSTR(wide(target).as_ptr()))?;
+    }
+    // Controller creation pumps messages. Re-signal queued host work so a
+    // message consumed by that pump cannot strand an action/popup/theme update.
+    for message in [LEADER_CHANGED, OPEN_POPUP, THEME_CHANGED, resident::REQUEST] {
+        let _ = PostMessageW(Some(app.hwnd), message, WPARAM(0), LPARAM(0));
+    }
+    Ok(id)
+}
+unsafe fn close_tab(id: TabId) -> AppResult<()> {
+    let app = snapshot().ok_or("Browser closed")?;
+    if app.tabs.borrow().get(id).is_some_and(|tab| tab.pinned) {
+        leader_notice(&app, "Désépinglez cet onglet avant de le fermer");
+        return Ok(());
+    }
+    if app.tabs.borrow().entries().len() == 1 {
+        create_tab("about:blank", false)?;
+    }
+    if app.tabs.borrow_mut().close(id).is_none() {
+        return Ok(());
+    }
+    let removed = app.views.borrow_mut().remove(&id);
+    drop(removed); // Close outside the RefCell borrow: COM can deliver callbacks.
+    let active = app.tabs.borrow().active();
+    let keep_picker = app.picker.borrow().visible && app.picker.borrow().tabs_mode;
+    if let Some(active) = active {
+        activate_tab(active, keep_picker)?;
+    } else {
+        create_tab("about:blank", false)?;
+    }
+    Ok(())
+}
+unsafe fn selected_or_active(app: &App) -> Option<TabId> {
+    let picker = app.picker.borrow();
+    if picker.visible && picker.tabs_mode {
+        picker.selected_tab()
+    } else {
+        app.tabs.borrow().active()
+    }
+}
 unsafe fn execute_leader(
     action: Action,
     app: &App,
     env: &ICoreWebView2Environment,
     blocker: &Rc<RefCell<Blocker>>,
-    page: &Rc<RefCell<String>>,
     filters: &std::path::Path,
 ) -> AppResult<()> {
+    match action {
+        Action::NewTab => {
+            create_tab("about:blank", false)?;
+            return Ok(());
+        }
+        Action::SelectTab => {
+            app.picker.borrow_mut().show_tabs(app.hwnd);
+            layout(app);
+            return Ok(());
+        }
+        Action::CloseTab => {
+            if let Some(id) = selected_or_active(app) {
+                close_tab(id)?;
+            }
+            return Ok(());
+        }
+        Action::PreviousTab | Action::NextTab => {
+            let id = app
+                .tabs
+                .borrow()
+                .adjacent(if action == Action::PreviousTab { -1 } else { 1 });
+            if let Some(id) = id {
+                activate_tab(id, false)?;
+            }
+            return Ok(());
+        }
+        Action::ReopenTab => {
+            let closed = app.tabs.borrow().recently_closed().cloned();
+            if let Some(closed) = closed {
+                let id = create_tab(
+                    if closed.home {
+                        "about:blank"
+                    } else {
+                        &closed.url
+                    },
+                    false,
+                )?;
+                app.tabs.borrow_mut().finish_reopen();
+                let view = app.views.borrow().get(&id).cloned().unwrap();
+                view.web
+                    .cast::<ICoreWebView2_8>()?
+                    .SetIsMuted(closed.muted)?;
+            }
+            return Ok(());
+        }
+        Action::DuplicateTab => {
+            let tab = selected_or_active(app).and_then(|id| app.tabs.borrow().get(id).cloned());
+            if let Some(tab) = tab {
+                create_tab(if tab.home { "about:blank" } else { &tab.url }, false)?;
+            }
+            return Ok(());
+        }
+        Action::PinTab => {
+            if let Some(id) = selected_or_active(app) {
+                app.tabs.borrow_mut().toggle_pin(id);
+                tabs_changed(app.hwnd);
+            }
+            return Ok(());
+        }
+        Action::MuteTab => {
+            if let Some(id) = selected_or_active(app) {
+                let muted = app.tabs.borrow().get(id).is_some_and(|tab| tab.muted);
+                let view = app.views.borrow().get(&id).cloned().ok_or("Unknown tab")?;
+                view.web.cast::<ICoreWebView2_8>()?.SetIsMuted(!muted)?;
+                if let Some(tab) = app.tabs.borrow_mut().get_mut(id) {
+                    tab.muted = !muted;
+                }
+                tabs_changed(app.hwnd);
+            }
+            return Ok(());
+        }
+        _ => {}
+    }
     let web = app.web.as_ref().ok_or("WebView is not ready")?;
     let controller = app.controller.as_ref().ok_or("Controller is not ready")?;
     if action == Action::Address {
@@ -361,6 +625,7 @@ unsafe fn execute_leader(
     }
     if action == Action::Home {
         home_mode(true);
+        web.Navigate(w!("about:blank"))?;
         return Ok(());
     }
     if app.home {
@@ -368,7 +633,17 @@ unsafe fn execute_leader(
         return Ok(());
     }
     match action {
-        Action::Address | Action::Home => unreachable!(),
+        Action::Address
+        | Action::Home
+        | Action::NewTab
+        | Action::CloseTab
+        | Action::PreviousTab
+        | Action::NextTab
+        | Action::SelectTab
+        | Action::ReopenTab
+        | Action::DuplicateTab
+        | Action::PinTab
+        | Action::MuteTab => unreachable!(),
         Action::Back => {
             web.GoBack()?;
         }
@@ -437,8 +712,9 @@ unsafe fn execute_leader(
             })?;
         }
         Action::Blocking => {
-            blocker.borrow_mut().toggle(&page.borrow(), filters)?;
-            let enabled = blocker.borrow().enabled(&page.borrow());
+            let source = take_string(|s| web.Source(s))?;
+            blocker.borrow_mut().toggle(&source, filters)?;
+            let enabled = blocker.borrow().enabled(&source);
             web.Reload()?;
             leader_notice(
                 app,
@@ -513,10 +789,9 @@ unsafe fn apply_theme(theme: &winarchy_theme::Theme) -> AppResult<()> {
         app.picker.borrow_mut().set_theme(theme);
         app.leader_panel.borrow_mut().set_theme(theme);
         let _ = RedrawWindow(Some(app.hwnd), None, None, RDW_INVALIDATE | RDW_ALLCHILDREN);
-        if let Some(controller) = app
-            .controller
-            .and_then(|c| c.cast::<ICoreWebView2Controller2>().ok())
-        {
+        let views: Vec<_> = app.views.borrow().values().cloned().collect();
+        for view in views {
+            let controller = view.controller.cast::<ICoreWebView2Controller2>()?;
             let (r, g, b) = winarchy_theme::rgb(&theme.background).unwrap();
             controller.SetDefaultBackgroundColor(COREWEBVIEW2_COLOR {
                 A: 255,
@@ -552,6 +827,16 @@ unsafe fn home_mode(home: bool) {
     APP.with(|a| {
         if let Some(a) = a.borrow_mut().as_mut() {
             a.home = home;
+            let id = a.tabs.borrow().active();
+            if let Some(id) = id
+                && let Some(tab) = a.tabs.borrow_mut().get_mut(id)
+            {
+                tab.home = home;
+                if home {
+                    tab.url = "about:blank".into();
+                    tab.title.clear();
+                }
+            }
         }
     });
     if let Some(app) = snapshot() {
@@ -791,22 +1076,6 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         _ => DefWindowProcW(hwnd, msg, wp, lp),
     }
 }
-fn kind(context: COREWEBVIEW2_WEB_RESOURCE_CONTEXT) -> &'static str {
-    match context {
-        COREWEBVIEW2_WEB_RESOURCE_CONTEXT_DOCUMENT => "subdocument",
-        COREWEBVIEW2_WEB_RESOURCE_CONTEXT_STYLESHEET => "stylesheet",
-        COREWEBVIEW2_WEB_RESOURCE_CONTEXT_IMAGE => "image",
-        COREWEBVIEW2_WEB_RESOURCE_CONTEXT_MEDIA => "media",
-        COREWEBVIEW2_WEB_RESOURCE_CONTEXT_FONT => "font",
-        COREWEBVIEW2_WEB_RESOURCE_CONTEXT_SCRIPT => "script",
-        COREWEBVIEW2_WEB_RESOURCE_CONTEXT_XML_HTTP_REQUEST
-        | COREWEBVIEW2_WEB_RESOURCE_CONTEXT_FETCH => "xmlhttprequest",
-        COREWEBVIEW2_WEB_RESOURCE_CONTEXT_WEBSOCKET => "websocket",
-        COREWEBVIEW2_WEB_RESOURCE_CONTEXT_PING => "ping",
-        _ => "other",
-    }
-}
-
 struct Apartment;
 impl Drop for Apartment {
     fn drop(&mut self) {
@@ -875,7 +1144,13 @@ pub fn run(
             Some(instance),
             None,
         )?;
-        let picker = Rc::new(RefCell::new(Picker::new(hwnd, instance, library.clone())?));
+        let tabs = Rc::new(RefCell::new(Tabs::default()));
+        let picker = Rc::new(RefCell::new(Picker::new(
+            hwnd,
+            instance,
+            library.clone(),
+            tabs.clone(),
+        )?));
         let edit = picker.borrow().edit;
         let list = picker.borrow().list;
         let leader_panel = Rc::new(RefCell::new(LeaderPanel::new(hwnd, instance)?));
@@ -893,6 +1168,10 @@ pub fn run(
                 controller: None,
                 web: None,
                 home: start_home,
+                tabs: tabs.clone(),
+                views: Rc::new(RefCell::new(HashMap::new())),
+                view_context: None,
+                popups: Rc::new(RefCell::new(VecDeque::new())),
                 background_opacity: theme.background_opacity,
             })
         });
@@ -923,242 +1202,17 @@ pub fn run(
             }),
         )?;
         let env = rx.recv()??;
-        let (tx, rx) = std::sync::mpsc::channel();
-        let controller_env = env.clone();
-        CreateCoreWebView2ControllerCompletedHandler::wait_for_async_operation(
-            Box::new(move |handler| {
-                controller_env
-                    .CreateCoreWebView2Controller(hwnd, &handler)
-                    .map_err(webview2_com::Error::WindowsError)
-            }),
-            Box::new(move |result, controller| {
-                result?;
-                let _ = tx.send(controller.ok_or_else(|| windows::core::Error::from(E_POINTER)));
-                Ok(())
-            }),
-        )?;
-        let controller = rx.recv()??;
-        controller.SetIsVisible(!start_home)?;
-        let web = controller.CoreWebView2()?;
-        if let Ok(c) = controller.cast::<ICoreWebView2Controller2>() {
-            let (r, g, b) = winarchy_theme::rgb(&theme.background).unwrap();
-            c.SetDefaultBackgroundColor(COREWEBVIEW2_COLOR {
-                A: 255,
-                R: r,
-                G: g,
-                B: b,
-            })?;
-        }
-        let profile_api = web.cast::<ICoreWebView2_13>()?.Profile()?;
-        profile_api.SetPreferredColorScheme(if theme.mode.as_deref() == Some("light") {
-            COREWEBVIEW2_PREFERRED_COLOR_SCHEME_LIGHT
-        } else {
-            COREWEBVIEW2_PREFERRED_COLOR_SCHEME_DARK
-        })?;
-        let settings = web.Settings()?;
-        settings.SetIsStatusBarEnabled(false)?;
-        settings.SetAreDefaultScriptDialogsEnabled(true)?;
-        settings.SetIsWebMessageEnabled(false)?;
-        // Keep built-in browser shortcuts (find, zoom, reload), sandbox and GPU defaults.
-        let page = Rc::new(RefCell::new("about:blank".to_owned()));
-        let mut token = 0;
-        let page_nav = page.clone();
-        web.add_NavigationStarting(
-            &NavigationStartingEventHandler::create(Box::new(move |_, args| {
-                if let Some(args) = args {
-                    let uri = take_string(|s| args.Uri(s))?;
-                    if !(uri.starts_with("https://")
-                        || uri.starts_with("http://")
-                        || uri == "about:blank")
-                    {
-                        args.SetCancel(true)?;
-                    } else {
-                        *page_nav.borrow_mut() = uri;
-                    }
-                }
-                Ok(())
-            })),
-            &mut token,
-        )?;
-        // Include worker-originated requests as well as document/frame requests.
-        web.cast::<ICoreWebView2_22>()?
-            .AddWebResourceRequestedFilterWithRequestSourceKinds(
-                w!("*"),
-                COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
-                COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS_ALL,
-            )?;
-        let action_env = env.clone();
-        let request_blocker = blocker.clone();
-        let request_page = page.clone();
-        web.add_WebResourceRequested(
-            &WebResourceRequestedEventHandler::create(Box::new(move |_, args| {
-                if let Some(args) = args {
-                    let request = args.Request()?;
-                    let uri = take_string(|s| request.Uri(s))?;
-                    let mut context = COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL;
-                    args.ResourceContext(&mut context)?;
-                    let current = request_page.borrow();
-                    // Do not block the top-level navigation itself. Referer gives a better
-                    // frame source when available; referrer policy can omit or reduce it.
-                    if context == COREWEBVIEW2_WEB_RESOURCE_CONTEXT_DOCUMENT && uri == *current {
-                        return Ok(());
-                    }
-                    let source = take_string(|s| request.Headers()?.GetHeader(w!("Referer"), s))
-                        .ok()
-                        .filter(|s| !s.is_empty())
-                        .unwrap_or_else(|| current.clone());
-                    let method = take_string(|s| request.Method(s))?;
-                    if request_blocker.borrow_mut().check(
-                        &uri,
-                        &source,
-                        kind(context),
-                        &method,
-                        &current,
-                    ) {
-                        let response = env.CreateWebResourceResponse(
-                            None,
-                            403,
-                            w!("Blocked by Winarchy"),
-                            w!("Content-Type: text/plain\r\nCache-Control: no-store"),
-                        )?;
-                        args.SetResponse(&response)?;
-                    }
-                }
-                Ok(())
-            })),
-            &mut token,
-        )?;
-        let cosmetic_blocker = blocker.clone();
-        let visit_library = library.clone();
-        web.add_NavigationCompleted(
-            &NavigationCompletedEventHandler::create(Box::new(move |sender, args| {
-                if let Some(web) = sender {
-                    let source = take_string(|s| web.Source(s))?;
-                    let mut success = BOOL(0);
-                    if let Some(args) = args {
-                        args.IsSuccess(&mut success)?;
-                    }
-                    if success.as_bool() {
-                        let title = take_string(|s| web.DocumentTitle(s)).unwrap_or_default();
-                        if let Err(e) = visit_library.borrow_mut().visit(&source, &title) {
-                            eprintln!("Cannot save history: {e}");
-                        }
-                    }
-                    if let Some(script) = cosmetic_blocker.borrow().cosmetic_script(&source) {
-                        web.ExecuteScript(PCWSTR(wide(&script).as_ptr()), None)?;
-                    }
-                }
-                eprintln!(
-                    "metric navigation_completed_ms={}",
-                    started.elapsed().as_millis()
-                );
-                Ok(())
-            })),
-            &mut token,
-        )?;
-        // Prototype policy: target=_blank navigates this window; no hidden popup views.
-        web.add_NewWindowRequested(
-            &NewWindowRequestedEventHandler::create(Box::new(move |sender, args| {
-                if let Some(args) = args {
-                    args.SetHandled(true)?;
-                    let uri = take_string(|s| args.Uri(s))?;
-                    if let Some(web) = sender
-                        && (uri.starts_with("https://") || uri.starts_with("http://"))
-                    {
-                        web.Navigate(PCWSTR(wide(&uri).as_ptr()))?;
-                    }
-                }
-                Ok(())
-            })),
-            &mut token,
-        )?;
-        // Until native permission UI exists, deny instead of silently granting access.
-        web.add_PermissionRequested(
-            &PermissionRequestedEventHandler::create(Box::new(move |_, args| {
-                if let Some(args) = args {
-                    args.SetState(COREWEBVIEW2_PERMISSION_STATE_DENY)?;
-                }
-                Ok(())
-            })),
-            &mut token,
-        )?;
-        let toggle_blocker = blocker.clone();
-        let toggle_page = page.clone();
-        controller.add_GotFocus(
-            &FocusChangedEventHandler::create(Box::new(move |_, _| {
-                // Queue this: WebView callbacks must not reenter a borrowed picker.
-                let _ = PostMessageW(Some(hwnd), DISMISS_PALETTE, WPARAM(0), LPARAM(0));
-                Ok(())
-            })),
-            &mut 0,
-        )?;
-        controller.add_AcceleratorKeyPressed(
-            &AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
-                if let Some(args) = args {
-                    let mut event = COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN;
-                    args.KeyEventKind(&mut event)?;
-                    let down = event == COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
-                        || event == COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN;
-                    let mut key = 0;
-                    args.VirtualKey(&mut key)?;
-                    let mut status = COREWEBVIEW2_PHYSICAL_KEY_STATUS::default();
-                    args.PhysicalKeyStatus(&mut status)?;
-                    if leader_key(
-                        key,
-                        status.ScanCode,
-                        down,
-                        status.WasKeyDown.as_bool(),
-                        false,
-                    ) {
-                        args.SetHandled(true)?;
-                        return Ok(());
-                    }
-                    if !down {
-                        return Ok(());
-                    }
-                    if GetKeyState(VK_CONTROL.0 as i32) < 0 && key == b'L' as u32 {
-                        args.SetHandled(true)?;
-                        // Never manipulate focus inside the synchronous accelerator callback.
-                        PostMessageW(Some(hwnd), PALETTE, WPARAM(0), LPARAM(0))?;
-                    } else if GetKeyState(VK_CONTROL.0 as i32) < 0 && key == b'D' as u32 {
-                        args.SetHandled(true)?;
-                        let mut status = COREWEBVIEW2_PHYSICAL_KEY_STATUS::default();
-                        args.PhysicalKeyStatus(&mut status)?;
-                        if !status.WasKeyDown.as_bool() {
-                            PostMessageW(Some(hwnd), BOOKMARK, WPARAM(0), LPARAM(0))?;
-                        }
-                    } else if GetKeyState(VK_MENU.0 as i32) < 0
-                        && (key == VK_LEFT.0 as u32 || key == VK_RIGHT.0 as u32)
-                    {
-                        args.SetHandled(true)?;
-                        PostMessageW(Some(hwnd), HISTORY, WPARAM(key as usize), LPARAM(0))?;
-                    }
-                }
-                Ok(())
-            })),
-            &mut token,
-        )?;
-        APP.with(|a| {
-            let mut a = a.borrow_mut();
-            let a = a.as_mut().unwrap();
-            a.controller = Some(controller.clone());
-            a.web = Some(web.clone());
-        });
-        if let Some(app) = snapshot() {
-            layout(&app);
-        }
-        controller.SetIsVisible(!start_home)?;
-        if !hidden {
-            if start_home {
-                let _ = SetFocus(Some(edit));
-            } else {
-                controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC)?;
-            }
-        }
+        let context = ViewContext {
+            hwnd,
+            env: env.clone(),
+            blocker: blocker.clone(),
+            library: library.clone(),
+            tabs: tabs.clone(),
+            started,
+        };
+        APP.with(|a| a.borrow_mut().as_mut().unwrap().view_context = Some(context));
+        create_tab(&target, false)?;
         eprintln!("metric webview_ready_ms={}", started.elapsed().as_millis());
-        if !start_home {
-            web.Navigate(PCWSTR(wide(&target).as_ptr()))?;
-        }
         let mut opened = !hidden;
         let mut quit = false;
         let mut warm_open_ms: Option<u128> = None;
@@ -1196,6 +1250,49 @@ pub fn run(
             let result = GetMessageW(&mut msg, None, 0, 0).0;
             if result <= 0 {
                 break;
+            }
+            let web = snapshot()
+                .and_then(|app| app.web)
+                .ok_or("No active WebView")?;
+            if msg.message == TABS_CHANGED {
+                if let Some(app) = snapshot() {
+                    let active = app
+                        .tabs
+                        .borrow()
+                        .active()
+                        .and_then(|id| app.tabs.borrow().get(id).cloned());
+                    if let Some(tab) = active {
+                        if tab.home != app.home {
+                            let keep = app.picker.borrow().visible && app.picker.borrow().tabs_mode;
+                            if let Err(error) = activate_tab(tab.id, keep) {
+                                eprintln!("Cannot update active tab: {error}");
+                            }
+                        }
+                        let _ = SetWindowTextW(
+                            hwnd,
+                            PCWSTR(wide(&format!("{} — Winarchy Browser", tab.label())).as_ptr()),
+                        );
+                    }
+                    if app.picker.borrow().visible && app.picker.borrow().tabs_mode {
+                        app.picker.borrow_mut().refresh_tabs(hwnd, true);
+                    }
+                }
+                continue;
+            }
+            if msg.message == OPEN_POPUP {
+                if let Some(app) = snapshot() {
+                    loop {
+                        let popup = app.popups.borrow_mut().pop_front();
+                        let Some((source, url)) = popup else {
+                            break;
+                        };
+                        let source_exists = app.tabs.borrow().get(source).is_some();
+                        if source_exists && let Err(error) = create_tab(&url, false) {
+                            eprintln!("Cannot open popup tab: {error}");
+                        }
+                    }
+                }
+                continue;
             }
             if msg.message == THEME_CHANGED {
                 if let Some(theme) = pending_theme.lock().unwrap().take()
@@ -1237,7 +1334,7 @@ pub fn run(
                                     let _ = ShowWindow(hwnd, SW_SHOW);
                                     let _ = SetForegroundWindow(hwnd);
                                     if target == "about:blank" { let _ = SetFocus(Some(edit)); }
-                                    else { web.Navigate(PCWSTR(wide(&target).as_ptr())).map_err(|e| e.to_string())?; }
+                                    web.Navigate(PCWSTR(wide(&target).as_ptr())).map_err(|e| e.to_string())?;
                                     warm_open_ms = Some(show_started.elapsed().as_millis());
                                     resident::log(&format!("warm_open pid={} show_ms={}", std::process::id(), warm_open_ms.unwrap()));
                                     Ok(serde_json::json!({"pid": std::process::id(), "warm": true, "show_ms": warm_open_ms}).to_string())
@@ -1259,14 +1356,10 @@ pub fn run(
                         let Some(action) = action else {
                             break;
                         };
-                        if let Err(error) = execute_leader(
-                            action,
-                            &app,
-                            &action_env,
-                            &toggle_blocker,
-                            &toggle_page,
-                            &filters,
-                        ) {
+                        let current = snapshot().ok_or("Browser closed")?;
+                        if let Err(error) =
+                            execute_leader(action, &current, &env, &blocker, &filters)
+                        {
                             eprintln!("Leader action failed: {error}");
                             leader_notice(&app, "Action indisponible ou échouée");
                         }
@@ -1292,6 +1385,18 @@ pub fn run(
                     false,
                 )
             {
+                continue;
+            }
+            if msg.message == WM_KEYDOWN
+                && (msg.hwnd == hwnd
+                    || msg.hwnd == edit
+                    || msg.hwnd == list
+                    || msg.hwnd == picker.borrow().panel)
+                && let Some(action) = tab_shortcut(msg.wParam.0 as u32)
+            {
+                if msg.lParam.0 & (1 << 30) == 0 {
+                    queue_action(action);
+                }
                 continue;
             }
             route_home_input(&mut msg);
@@ -1337,11 +1442,19 @@ pub fn run(
                 continue;
             }
             if msg.message == SUBMIT || (picker_key && msg.wParam.0 == VK_RETURN.0 as usize) {
+                if picker.borrow().tabs_mode {
+                    let id = picker.borrow().selected_tab();
+                    if let Some(id) = id
+                        && let Err(error) = activate_tab(id, false)
+                    {
+                        eprintln!("Cannot activate tab: {error}");
+                    }
+                    continue;
+                }
                 let input = picker.borrow().input();
                 if input.trim() == ":block" {
-                    let result = toggle_blocker
-                        .borrow_mut()
-                        .toggle(&toggle_page.borrow(), &filters);
+                    let source = take_string(|s| web.Source(s))?;
+                    let result = blocker.borrow_mut().toggle(&source, &filters);
                     match result {
                         Ok(()) => {
                             web.Reload()?;
@@ -1352,9 +1465,7 @@ pub fn run(
                 } else {
                     let target = address(&input);
                     home_mode(target == "about:blank");
-                    if target != "about:blank" {
-                        web.Navigate(PCWSTR(wide(&target).as_ptr()))?;
-                    }
+                    web.Navigate(PCWSTR(wide(&target).as_ptr()))?;
                 }
                 continue;
             }
@@ -1377,7 +1488,13 @@ pub fn run(
                         continue;
                     }
                     27 => {
-                        if snapshot().is_some_and(|a| a.home) {
+                        if picker.borrow().tabs_mode {
+                            if snapshot().is_some_and(|a| a.home) {
+                                palette(true);
+                            } else {
+                                palette(false);
+                            }
+                        } else if snapshot().is_some_and(|a| a.home) {
                             let _ = SetWindowTextW(edit, w!(""));
                             let _ = SetFocus(Some(edit));
                         } else {
@@ -1392,8 +1509,9 @@ pub fn run(
             DispatchMessageW(&msg);
         }
         eprintln!("metric blocked_requests={}", blocker.borrow().blocked);
-        controller.Close()?;
         if let Some(app) = APP.with(|a| a.borrow_mut().take()) {
+            let views = std::mem::take(&mut *app.views.borrow_mut());
+            drop(views);
             let _ = DeleteObject(app.brush.into());
             let _ = DeleteObject(app.surface_brush.into());
         }

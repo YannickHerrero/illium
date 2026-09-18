@@ -44,6 +44,15 @@ pub enum Action {
     ZoomOut,
     ZoomReset,
     Blocking,
+    NewTab,
+    CloseTab,
+    PreviousTab,
+    NextTab,
+    SelectTab,
+    ReopenTab,
+    DuplicateTab,
+    PinTab,
+    MuteTab,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Menu {
@@ -52,6 +61,7 @@ pub enum Menu {
     Page,
     Zoom,
     Blocking,
+    Tabs,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Target {
@@ -77,6 +87,7 @@ impl Menu {
             Self::Page => "Page",
             Self::Zoom => "Zoom",
             Self::Blocking => "Blocage",
+            Self::Tabs => "Onglets",
         }
     }
     pub fn prefix(self) -> &'static str {
@@ -86,6 +97,7 @@ impl Menu {
             Self::Page => "p",
             Self::Zoom => "z",
             Self::Blocking => "b",
+            Self::Tabs => "o",
         }
     }
     pub fn entries(self) -> &'static [Entry] {
@@ -96,6 +108,11 @@ impl Menu {
                 'f', "Rechercher dans la page", Action(Find);
                 'r', "Recharger", Action(Reload);
                 'd', "Ajouter aux favoris", Action(Bookmark);
+                't', "Nouvel onglet", Action(NewTab);
+                'w', "Fermer l’onglet", Action(CloseTab);
+                'j', "Onglet précédent", Action(PreviousTab);
+                'k', "Onglet suivant", Action(NextTab);
+                'o', "Onglets", Menu(Tabs);
                 'n', "Navigation", Menu(Navigation);
                 'p', "Page", Menu(Page);
                 'z', "Zoom", Menu(Zoom);
@@ -118,6 +135,13 @@ impl Menu {
                 '0', "Réinitialiser à 100 %", Action(ZoomReset);
             },
             Self::Blocking => entries! { 'b', "Activer / désactiver ce site", Action(Blocking); },
+            Self::Tabs => entries! {
+                'o', "Sélectionner un onglet", Action(SelectTab);
+                'r', "Rouvrir l’onglet fermé", Action(ReopenTab);
+                'd', "Dupliquer l’onglet", Action(DuplicateTab);
+                'e', "Épingler / désépingler", Action(PinTab);
+                'm', "Couper / rétablir le son", Action(MuteTab);
+            },
         }
     }
 }
@@ -245,6 +269,7 @@ mod tests {
             Menu::Page,
             Menu::Zoom,
             Menu::Blocking,
+            Menu::Tabs,
         ] {
             let mut keys = std::collections::HashSet::new();
             for entry in menu.entries() {

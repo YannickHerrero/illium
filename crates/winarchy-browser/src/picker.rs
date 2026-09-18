@@ -3,6 +3,7 @@
 use super::native::wide;
 use std::{cell::RefCell, rc::Rc};
 use winarchy_browser::library::{Library, Suggestion};
+use winarchy_browser::tabs::{self, Tab, TabId, Tabs};
 use windows::{
     Win32::{
         Foundation::*,
@@ -61,6 +62,9 @@ pub struct Picker {
     pub home: bool,
     pub library: Rc<RefCell<Library>>,
     suggestions: Vec<Suggestion>,
+    pub tabs_mode: bool,
+    tabs: Rc<RefCell<Tabs>>,
+    tab_rows: Vec<Tab>,
     theme: winarchy_theme::Theme,
     status: RefCell<String>,
 }
@@ -69,6 +73,7 @@ impl Picker {
         parent: HWND,
         instance: HINSTANCE,
         library: Rc<RefCell<Library>>,
+        tabs: Rc<RefCell<Tabs>>,
     ) -> Result<Self> {
         let class = w!("WinarchyNavigationPalette");
         RegisterClassW(&WNDCLASSW {
@@ -127,6 +132,9 @@ impl Picker {
             home: false,
             library,
             suggestions: Vec::new(),
+            tabs_mode: false,
+            tabs,
+            tab_rows: Vec::new(),
             theme: winarchy_theme::Theme::current(&winarchy_theme::config_home()),
             status: RefCell::new(String::new()),
         };
@@ -192,6 +200,14 @@ impl Picker {
         String::from_utf16_lossy(&text[..len as usize])
     }
     pub unsafe fn show(&mut self, parent: HWND, home: bool, current: &str) {
+        self.tabs_mode = false;
+        SendMessageW(
+            self.edit,
+            0x1501,
+            Some(WPARAM(1)),
+            Some(LPARAM(w!("Rechercher ou saisir une adresse…").0 as isize)),
+        );
+        let _ = SetWindowTextW(self.panel, w!("Navigation"));
         self.visible = true;
         self.home = home;
         if let Err(e) = self.library.borrow_mut().reload() {
@@ -206,6 +222,100 @@ impl Picker {
         }
         SendMessageW(self.edit, 0x00B1, Some(WPARAM(0)), Some(LPARAM(-1)));
     }
+    pub unsafe fn show_tabs(&mut self, parent: HWND) {
+        self.tabs_mode = true;
+        self.visible = true;
+        self.status.borrow_mut().clear();
+        let _ = SetWindowTextW(self.panel, w!("Onglets ouverts"));
+        SendMessageW(
+            self.edit,
+            0x1501,
+            Some(WPARAM(1)),
+            Some(LPARAM(w!("Rechercher un onglet ouvert…").0 as isize)),
+        );
+        let _ = SetWindowTextW(self.edit, w!(""));
+        self.refresh_tabs(parent, false);
+        let _ = ShowWindow(self.panel, SW_SHOWNA);
+        let _ = SetFocus(Some(self.edit));
+    }
+    pub unsafe fn selected_tab(&self) -> Option<TabId> {
+        if !self.tabs_mode {
+            return None;
+        }
+        let index = SendMessageW(self.list, LB_GETCURSEL, None, None).0;
+        self.tab_rows
+            .get(usize::try_from(index).ok()?)
+            .map(|tab| tab.id)
+    }
+    pub unsafe fn refresh_tabs(&mut self, parent: HWND, preserve_selection: bool) {
+        if !self.tabs_mode {
+            return;
+        }
+        let previous = self.selected_tab();
+        let index = SendMessageW(self.list, LB_GETCURSEL, None, None).0.max(0) as usize;
+        let query = self.text();
+        self.tab_rows = self.tabs.borrow().search(&query);
+        let preferred = if preserve_selection {
+            previous
+        } else if query.is_empty() {
+            self.tabs.borrow().active()
+        } else {
+            None
+        };
+        let selection = preferred
+            .and_then(|id| self.tab_rows.iter().position(|tab| tab.id == id))
+            .unwrap_or(if preserve_selection {
+                index.min(self.tab_rows.len().saturating_sub(1))
+            } else {
+                0
+            });
+        SendMessageW(self.list, WM_SETREDRAW, Some(WPARAM(0)), None);
+        SendMessageW(self.list, LB_RESETCONTENT, None, None);
+        for tab in &self.tab_rows {
+            let value = wide(&format!(
+                "{}{}{}{} — {}",
+                if self.tabs.borrow().active() == Some(tab.id) {
+                    "[actif] "
+                } else {
+                    ""
+                },
+                if tab.pinned { "[épinglé] " } else { "" },
+                if tab.muted {
+                    "[muet] "
+                } else if tab.audible {
+                    "[audio] "
+                } else {
+                    ""
+                },
+                tab.label(),
+                tab.url
+            ));
+            SendMessageW(
+                self.list,
+                LB_ADDSTRING,
+                None,
+                Some(LPARAM(value.as_ptr() as isize)),
+            );
+        }
+        if !self.tab_rows.is_empty() {
+            SendMessageW(self.list, LB_SETCURSEL, Some(WPARAM(selection)), None);
+        }
+        SendMessageW(self.list, WM_SETREDRAW, Some(WPARAM(1)), None);
+        self.layout(parent);
+        let _ = RedrawWindow(
+            Some(self.panel),
+            None,
+            None,
+            RDW_INVALIDATE | RDW_ALLCHILDREN,
+        );
+    }
+    fn row_count(&self) -> usize {
+        if self.tabs_mode {
+            self.tab_rows.len()
+        } else {
+            self.suggestions.len()
+        }
+    }
     pub unsafe fn hide(&mut self) {
         self.visible = false;
         let _ = ShowWindow(self.panel, SW_HIDE);
@@ -215,6 +325,10 @@ impl Picker {
         let _ = InvalidateRect(Some(self.panel), None, false);
     }
     pub unsafe fn refresh(&mut self, parent: HWND) {
+        if self.tabs_mode {
+            self.refresh_tabs(parent, false);
+            return;
+        }
         self.suggestions = self.library.borrow().suggestions(&self.text());
         // Preserve fuzzy relevance within each category.
         self.suggestions.sort_by_key(|s| !s.bookmarked);
@@ -244,8 +358,9 @@ impl Picker {
         let _ = GetClientRect(parent, &mut r);
         let p = |n| self.px(n);
         let width = p(850).min((r.right - p(32)).max(1));
-        let height =
-            p(172 + self.suggestions.len().max(1) as i32 * 88).min((r.bottom - p(32)).max(1));
+        let row_height = if self.tabs_mode { 64 } else { 88 };
+        let height = p(172 + self.row_count().clamp(1, 8) as i32 * row_height)
+            .min((r.bottom - p(32)).max(1));
         let _ = SetWindowPos(
             self.panel,
             Some(HWND_TOP),
@@ -260,7 +375,7 @@ impl Picker {
             None,
             p(48),
             p(24),
-            (width - p(130)).max(1),
+            (width - p(if self.tabs_mode { 210 } else { 130 })).max(1),
             p(28),
             SWP_NOZORDER | SWP_NOACTIVATE,
         );
@@ -268,7 +383,7 @@ impl Picker {
             self.list,
             LB_SETITEMHEIGHT,
             Some(WPARAM(0)),
-            Some(LPARAM(p(88) as isize)),
+            Some(LPARAM(p(row_height) as isize)),
         );
         let _ = SetWindowPos(
             self.list,
@@ -281,7 +396,7 @@ impl Picker {
         );
         let _ = ShowWindow(
             self.list,
-            if self.suggestions.is_empty() {
+            if self.row_count() == 0 {
                 SW_HIDE
             } else {
                 SW_SHOWNA
@@ -333,21 +448,45 @@ impl Picker {
             p(82),
             r.right - p(24),
             p(28),
-            "WINARCHY BROWSER › Navigation",
+            if self.tabs_mode {
+                "WINARCHY BROWSER › Onglets ouverts"
+            } else {
+                "WINARCHY BROWSER › Navigation"
+            },
             &self.theme.accent,
         );
-        if self.suggestions.is_empty() {
+        if self.tabs_mode {
+            label(
+                r.right - p(155),
+                p(24),
+                r.right - p(80),
+                p(28),
+                &format!(
+                    "{}/{}",
+                    self.tab_rows.len(),
+                    self.tabs.borrow().entries().len()
+                ),
+                &self.theme.subtext,
+            );
+        }
+        if self.row_count() == 0 {
             label(
                 p(24),
                 p(120),
                 r.right - p(24),
                 p(40),
-                "Aucun résultat local · Entrée pour rechercher",
+                if self.tabs_mode {
+                    "Aucun onglet correspondant"
+                } else {
+                    "Aucun résultat local · Entrée pour rechercher"
+                },
                 &self.theme.subtext,
             );
         }
         let status = self.status.borrow();
-        let footer = if status.is_empty() {
+        let footer = if self.tabs_mode {
+            "Onglets · ↑↓ choisir · Entrée activer · Ctrl+W fermer".into()
+        } else if status.is_empty() {
             format!(
                 "{} résultats · ↑↓ choisir · Entrée ouvrir",
                 self.suggestions.len()
@@ -366,6 +505,10 @@ impl Picker {
         SelectObject(dc, old);
     }
     pub unsafe fn draw_item(&self, item: &DRAWITEMSTRUCT) {
+        if self.tabs_mode {
+            self.draw_tab(item);
+            return;
+        }
         let Some(s) = self.suggestions.get(item.itemID as usize) else {
             return;
         };
@@ -458,9 +601,98 @@ impl Picker {
         );
         SelectObject(item.hDC, old);
     }
+    unsafe fn draw_tab(&self, item: &DRAWITEMSTRUCT) {
+        let Some(tab) = self.tab_rows.get(item.itemID as usize) else {
+            return;
+        };
+        let r = item.rcItem;
+        let p = |n| self.px(n);
+        let selected = item.itemState.0 & ODS_SELECTED.0 != 0;
+        fill(
+            item.hDC,
+            &r,
+            color(if selected {
+                &self.theme.overlay
+            } else {
+                &self.theme.surface
+            }),
+        );
+        let old = SelectObject(item.hDC, self.font.into());
+        let label = |x, y, right, height, value: &str, tint: &str| {
+            text(
+                item.hDC,
+                RECT {
+                    left: x,
+                    top: y,
+                    right,
+                    bottom: y + height,
+                },
+                value,
+                color(tint),
+            )
+        };
+        let active = self.tabs.borrow().active() == Some(tab.id);
+        let state = format!(
+            "{}{}{}",
+            if tab.pinned { "◆ " } else { "" },
+            if tab.muted {
+                "muet "
+            } else if tab.audible {
+                "♫ "
+            } else {
+                ""
+            },
+            if active { "↵" } else { "" }
+        );
+        label(
+            r.left + p(12),
+            r.top + p(6),
+            r.right - p(150),
+            p(28),
+            tab.label(),
+            if selected {
+                &self.theme.accent
+            } else {
+                &self.theme.text
+            },
+        );
+        label(
+            r.right - p(140),
+            r.top + p(6),
+            r.right - p(12),
+            p(28),
+            &state,
+            &self.theme.accent,
+        );
+        let url = if tab.home {
+            "Accueil"
+        } else {
+            tab.url
+                .strip_prefix("https://")
+                .or_else(|| tab.url.strip_prefix("http://"))
+                .unwrap_or(&tab.url)
+        };
+        label(
+            r.left + p(12),
+            r.top + p(34),
+            r.right - p(150),
+            p(24),
+            url,
+            &self.theme.subtext,
+        );
+        label(
+            r.right - p(140),
+            r.top + p(34),
+            r.right - p(12),
+            p(24),
+            &tab.age(tabs::now()),
+            &self.theme.subtext,
+        );
+        SelectObject(item.hDC, old);
+    }
     pub unsafe fn choose(&self, direction: i32) {
         let current = SendMessageW(self.list, LB_GETCURSEL, None, None).0 as i32;
-        let last = self.suggestions.len() as i32 - 1;
+        let last = self.row_count() as i32 - 1;
         if last < 0 {
             return;
         }
