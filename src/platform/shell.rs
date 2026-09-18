@@ -373,6 +373,7 @@ impl Shell {
                 b.set_fg(color(&c.theme.text));
                 b.set_accent(color(&c.theme.accent));
                 b.set_muted(color(&c.theme.subtext));
+                b.set_bottom(c.bar.position == "bottom");
                 b.set_transparent(self.bar_transparent);
                 b.set_background_opacity(Self::background_opacity(c));
                 let tx = self.tx.clone();

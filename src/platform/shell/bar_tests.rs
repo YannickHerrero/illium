@@ -68,8 +68,8 @@ fn bar_fades_only_its_background_and_honors_shared_override() {
         let image = pixels();
         assert!((i32::from(image[250].alpha) - expected).abs() <= 1);
         // Empty corner of the inactive workspace must not add another layer.
-        assert!((i32::from(image[5 * 500 + 38].alpha) - expected).abs() <= 1);
-        assert_eq!(image[5 * 500 + 5].alpha, 255, "active indicator faded");
+        assert!((i32::from(image[12 * 500 + 44].alpha) - expected).abs() <= 1);
+        assert_eq!(image[12 * 500 + 14].alpha, 255, "active indicator faded");
         assert_eq!(bar.get_fg().alpha(), 255);
         assert_eq!(bar.get_muted().alpha(), 255);
         assert_eq!(
@@ -85,7 +85,7 @@ fn bar_fades_only_its_background_and_honors_shared_override() {
     assert!((i32::from(pixels()[250].alpha) - 217).abs() <= 1);
 
     // Modules before and after the workspace group keep their positions and
-    // report the correct anchors. The active workspace is no longer x=4.
+    // report the correct anchors. The active workspace is no longer at the left inset.
     bar.set_before_workspace_items(ModelRc::new(VecModel::from(vec![StatusItem {
         kind: "pet".into(),
         value: "Pet".into(),
@@ -100,7 +100,7 @@ fn bar_fades_only_its_background_and_honors_shared_override() {
     let accent = bar.get_accent();
     let active_x = (0..500)
         .find(|x| {
-            let pixel = image[5 * 500 + x];
+            let pixel = image[12 * 500 + x];
             pixel.red == accent.red()
                 && pixel.green == accent.green()
                 && pixel.blue == accent.blue()
@@ -127,14 +127,14 @@ fn bar_fades_only_its_background_and_honors_shared_override() {
             button: slint::platform::PointerEventButton::Left,
         });
     };
-    click(8.);
+    click(16.);
     assert_eq!(modules.borrow()[0].0, "pet");
     assert!(modules.borrow()[0].1 < active_x as f32);
     click(active_x as f32 + 5.);
     assert_eq!(*selected.borrow(), 1);
-    click(active_x as f32 + 66. + 5.);
+    click(active_x as f32 + 56. + 10.);
     assert_eq!(modules.borrow()[1].0, "clock");
-    assert!(modules.borrow()[1].1 > active_x as f32 + 58.);
+    assert!(modules.borrow()[1].1 > active_x as f32 + 52.);
 
     let home =
         std::env::temp_dir().join(format!("winarchy-bar-opacity-test-{}", std::process::id()));

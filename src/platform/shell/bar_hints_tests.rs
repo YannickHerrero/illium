@@ -110,6 +110,76 @@ fn hint_centers_follow_layout_and_only_report_actionable_modules() {
     );
 }
 
+#[test]
+fn styled_clock_keeps_one_click_target_and_border_follows_surface() {
+    let adapter = Rc::new(RefCell::new(None));
+    slint::platform::set_platform(Box::new(Headless(adapter.clone()))).unwrap();
+    let bar = Bar::new().unwrap();
+    bar.set_surface_width(800.);
+    bar.set_surface_height(38.);
+    bar.set_bg(slint::Color::from_rgb_u8(12, 32, 56));
+    bar.set_fg(slint::Color::from_rgb_u8(219, 233, 246));
+    bar.set_muted(slint::Color::from_rgb_u8(126, 156, 184));
+    bar.set_center_items(ModelRc::new(VecModel::from(vec![StatusItem {
+        kind: "clock".into(),
+        value: "17:01".into(),
+        secondary: "Fri 18 Sept".into(),
+        hint_id: 1,
+        ..Default::default()
+    }])));
+    let clicked = Rc::new(RefCell::new(vec![]));
+    let result = clicked.clone();
+    bar.on_module(move |kind, x| result.borrow_mut().push((kind.to_string(), x)));
+    bar.show().unwrap();
+    let window = adapter.borrow().as_ref().unwrap().clone();
+    window.dispatch_event(WindowEvent::Resized {
+        size: slint::LogicalSize::new(800., 38.),
+    });
+    let draw = || {
+        window.request_redraw();
+        let mut pixels = vec![PremultipliedRgbaColor::default(); 800 * 38];
+        window.draw_if_needed(|renderer| {
+            renderer.render(&mut pixels, 800);
+        });
+        pixels
+    };
+    draw();
+    // Time and date both invoke the same calendar callback at the module center.
+    for x in [350., 440.] {
+        let position = slint::LogicalPosition::new(x, 19.);
+        for event in [
+            WindowEvent::PointerPressed {
+                position,
+                button: slint::platform::PointerEventButton::Left,
+            },
+            WindowEvent::PointerReleased {
+                position,
+                button: slint::platform::PointerEventButton::Left,
+            },
+        ] {
+            window.dispatch_event(event);
+        }
+    }
+    assert_eq!(clicked.borrow().len(), 2);
+    assert!(
+        clicked
+            .borrow()
+            .iter()
+            .all(|(kind, x)| kind == "clock" && (*x - 400.).abs() < 1.)
+    );
+    for bottom in [false, true] {
+        bar.set_bottom(bottom);
+        let pixels = draw();
+        let edge = if bottom { 0 } else { 37 * 800 };
+        assert_ne!(pixels[edge].red, pixels[19 * 800].red);
+        bar.set_transparent(true);
+        let pixels = draw();
+        assert_eq!(pixels[edge].alpha, 0);
+        assert_eq!(pixels[19 * 800].alpha, 0);
+        bar.set_transparent(false);
+    }
+}
+
 #[cfg(windows)]
 #[test]
 fn hint_sessions_reject_stale_input_and_wait_for_all_centers() {

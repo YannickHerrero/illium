@@ -51,6 +51,24 @@ quick command/reset whose file notifications can coalesce:
 It briefly decreases opacity, restores only its own temporary override, and
 checks that the status bar follows both updates without changing workspaces.
 
+## Status bar design
+
+The bar uses embedded JetBrains Mono, rounded workspace markers, vertical separators,
+and an optional `clock_date_format` secondary label (see [configuration](configuration.md#bartoml)).
+The clock remains one click target and one hint even with two labels.
+
+```powershell
+cargo test -p winarchy --lib bar_ -- --test-threads=1
+```
+
+The offscreen checks cover workspace/module order, click anchors, clock/date clicks,
+top/bottom border placement and transparency, background alpha and hint geometry.
+The eight matching tests passed on Windows after the redesign. The two portable
+layout tests also passed in a temporary Linux harness compiling the production Slint.
+Still check actual DWM composition, hover feedback and different monitor DPIs on Windows.
+The independently centered groups do not implement overflow menus: very long custom
+labels or narrow displays may require reducing configured modules or label lengths.
+
 ## Status bar keyboard hints
 
 Portable tests cover the hint vocabulary (1–9, A–Z, numpad), navigation wrapping,

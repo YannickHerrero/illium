@@ -1,3 +1,6 @@
+import "fonts/JetBrainsMono-Regular.ttf";
+import "fonts/JetBrainsMono-Bold.ttf";
+
 export { ThemePicker, PreviewCard } from "theme-picker.slint";
 export { KeybindingsEditor, KeyRow } from "keybindings.slint";
 
@@ -35,13 +38,17 @@ component StatusModule inherits Rectangle {
     property <bool> has-icon: item.has-icon || item.kind == "cpu" || item.kind == "memory";
     property <bool> separator: item.kind == "separator";
     width: layout.preferred-width;
+    border-radius: 5px;
+    background: touch.has-hover && !separator ? fg.with-alpha(0.08) : Colors.transparent;
     layout := HorizontalLayout {
-        spacing: 6px;
-        // A purely visual dot between neighbouring modules; it may be listed several times.
+        spacing: 7px;
+        padding-left: root.separator ? 6px : 4px;
+        padding-right: root.separator ? 6px : 4px;
+        // Purely visual; repeated separators retain the background click behavior.
         if separator: Rectangle {
-            width: 4px; height: 4px; border-radius: 2px;
+            width: 1px; height: min(16px, parent.height);
             y: (parent.height - self.height) / 2;
-            background: muted;
+            background: muted.with-alpha(0.3);
         }
         // Battery drawn from its level: outline, terminal, fill and a bolt while charging.
         if item.kind == "battery": Rectangle {
@@ -61,7 +68,7 @@ component StatusModule inherits Rectangle {
             }
         }
         if has-icon: Image {
-            width: 14px; height: 14px;
+            width: 16px; height: 16px;
             y: (parent.height - self.height) / 2;
             source: item.kind == "cpu" ? @image-url("icons/cpu.svg")
                 : item.kind == "memory" ? @image-url("icons/memory.svg")
@@ -77,10 +84,17 @@ component StatusModule inherits Rectangle {
         }
     }
     // A separator is not clickable: the press reaches the bar background like an empty area.
-    TouchArea { enabled: !root.separator; clicked => { root.clicked(root.x + root.width / 2); } }
+    touch := TouchArea {
+        enabled: !root.separator;
+        mouse-cursor: root.separator ? MouseCursor.default : MouseCursor.pointer;
+        clicked => { root.clicked(root.x + root.width / 2); }
+    }
 }
 export component Bar inherits Window {
     no-frame: true;
+    default-font-family: "JetBrains Mono";
+    default-font-size: 13px;
+    in property <bool> bottom: false;
     in property <length> surface-width;
     in property <length> surface-height;
     width: surface-width;
@@ -110,11 +124,16 @@ export component Bar inherits Window {
     background: root.transparent ? Colors.transparent : root.bg.with-alpha(root.background-opacity);
     // Declared first so the module and workspace touch areas stay above it.
     TouchArea { clicked => { root.toggle-background(); } }
+    Rectangle {
+        y: root.bottom ? 0px : root.height - 1px;
+        width: root.width; height: 1px;
+        background: root.transparent ? Colors.transparent : root.muted.with-alpha(0.25 * root.background-opacity);
+    }
     // Each group is anchored on its own, so the center group is centered on
     // the screen whatever the side groups measure.
     center-group := HorizontalLayout {
         x: (root.width - self.width) / 2; height: root.height; width: self.preferred-width;
-        padding-top: 4px; padding-bottom: 4px; spacing: 16px;
+        padding-top: 4px; padding-bottom: 4px; spacing: 6px;
         for item in root.center-items: StatusModule {
             item: item; fg: root.fg; muted: root.muted; bg: root.bg;
             hint-request: root.hint-request;
@@ -124,7 +143,7 @@ export component Bar inherits Window {
     }
     left-group := HorizontalLayout {
         x: 0; height: root.height; width: self.preferred-width;
-        padding-left: 4px; padding-top: 4px; padding-bottom: 4px; spacing: 8px;
+        padding-left: 10px; padding-top: 4px; padding-bottom: 4px; spacing: 2px;
         for item in root.before-workspace-items: StatusModule {
             item: item; fg: root.fg; muted: root.muted; bg: root.bg;
             hint-request: root.hint-request;
@@ -132,12 +151,24 @@ export component Bar inherits Window {
             clicked(x) => { root.module(item.kind, left-group.x + x); }
         }
         for n in root.workspaces: Rectangle {
-            width: 25px;
-            // Inactive workspaces reveal the single base surface, avoiding a
-            // second opacity layer. The active indicator and all text stay opaque.
-            background: root.active == n ? root.accent : Colors.transparent;
-            Text { text: "\{n}"; color: root.active == n ? root.bg : root.fg; horizontal-alignment: center; vertical-alignment: center; }
-            TouchArea { clicked => { root.workspace(n); } }
+            width: 26px;
+            Rectangle {
+                width: parent.width; height: min(24px, parent.height);
+                y: (parent.height - self.height) / 2;
+                border-radius: 6px;
+                // Keep the active indicator opaque even on a transparent surface.
+                background: root.active == n ? root.accent : workspace-touch.has-hover ? root.fg.with-alpha(0.08) : Colors.transparent;
+                Text {
+                    text: "\{n}";
+                    color: root.active == n ? root.bg : root.muted;
+                    font-weight: root.active == n ? 700 : 400;
+                    horizontal-alignment: center; vertical-alignment: center;
+                }
+            }
+            workspace-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.workspace(n); }
+            }
         }
         for item in root.left-items: StatusModule {
             item: item; fg: root.fg; muted: root.muted; bg: root.bg;
@@ -148,7 +179,7 @@ export component Bar inherits Window {
     }
     right-group := HorizontalLayout {
         x: root.width - self.width; height: root.height; width: self.preferred-width;
-        padding-right: 12px; padding-top: 4px; padding-bottom: 4px; spacing: 16px;
+        padding-right: 10px; padding-top: 4px; padding-bottom: 4px; spacing: 6px;
         for item in root.right-items: StatusModule {
             item: item; fg: root.fg; muted: root.muted; bg: root.bg;
             hint-request: root.hint-request;
