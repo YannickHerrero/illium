@@ -7,6 +7,8 @@ use windows::Win32::{Foundation::*, UI::WindowsAndMessaging::*};
 slint::include_modules!();
 #[cfg(test)]
 mod bar_tests;
+#[cfg(test)]
+mod bar_hints_tests;
 pub(super) fn color(s: &str) -> slint::Color {
     let c = u32::from_str_radix(&s[1..], 16).unwrap_or_default();
     slint::Color::from_rgb_u8((c >> 16) as u8, (c >> 8) as u8, c as u8)
@@ -75,7 +77,7 @@ pub(super) fn tool(w: &slint::Window, no_activate: bool) {
         SetWindowLongPtrW(
             h,
             GWL_EXSTYLE,
-            (ex | WS_EX_TOOLWINDOW.0 as isize
+            ((ex & !(WS_EX_NOACTIVATE.0 as isize)) | WS_EX_TOOLWINDOW.0 as isize
                 | if no_activate {
                     WS_EX_NOACTIVATE.0 as isize
                 } else {
@@ -146,10 +148,12 @@ pub enum MetaEntry {
     Menu(MetaMenu),
     Run(crate::command::Command),
 }
+pub(super) mod bar_hints;
 pub(super) mod keybindings;
 pub(super) mod theme_picker;
 mod wallpaper;
 pub struct Shell {
+    pub hints: bar_hints::Hints,
     pub picker: theme_picker::Picker,
     pub editor: keybindings::Editor,
     pub backgrounds: Vec<Background>,
@@ -162,6 +166,7 @@ pub struct Shell {
     /// Kind of the module whose popup is open.
     pub popup_open: Option<String>,
     popup_pending: Option<Rect>,
+    popup_keyboard: bool,
     pub apps: Vec<App>,
     pub results: Vec<App>,
     pub visible: bool,
@@ -232,6 +237,7 @@ impl Shell {
         });
         let popup = Popup::new().map_err(|e| e.to_string())?;
         Ok(Self {
+            hints: bar_hints::Hints::new()?,
             picker: theme_picker::Picker::new(tx.clone())?,
             editor: keybindings::Editor::new(tx.clone())?,
             backgrounds: vec![],
@@ -242,6 +248,7 @@ impl Shell {
             popup,
             popup_open: None,
             popup_pending: None,
+            popup_keyboard: false,
             apps: vec![],
             results: vec![],
             visible: false,
@@ -284,6 +291,7 @@ impl Shell {
     }
     /// Update existing surfaces in place; application index, geometry and UI state stay intact.
     pub fn apply_theme(&mut self, c: &Config) {
+        self.hints.close();
         self.picker.apply_theme(c);
         self.editor.apply_theme(c);
         self.home = c.home.clone();
@@ -309,6 +317,7 @@ impl Shell {
         self.refresh_wallpaper();
     }
     pub fn configure(&mut self, c: &Config, monitors: &[Rect]) -> Result<(), String> {
+        self.hints.close();
         self.pending = true;
         self.picker.apply_theme(c);
         self.editor.apply_theme(c);
@@ -371,6 +380,10 @@ impl Shell {
                 let tx = self.tx.clone();
                 b.on_module(move |kind, x| {
                     let _ = tx.send(Event::Module(kind.to_string(), x as i32, index));
+                });
+                let tx = self.tx.clone();
+                b.on_hint_position(move |epoch, index, x| {
+                    let _ = tx.send(Event::BarHintPosition(epoch as u32, index as usize - 1, x));
                 });
                 b.set_surface_width(super::dpi::logical(*r, r.w));
                 b.set_surface_height(c.bar.height as f32);
@@ -496,8 +509,11 @@ impl Shell {
         if let Some(r) = self.popup_pending
             && id(self.popup.window()) != 0
         {
-            tool(self.popup.window(), true);
+            tool(self.popup.window(), !self.popup_keyboard);
             native::position(id(self.popup.window()), r, Some(HWND_TOPMOST));
+            if self.popup_keyboard {
+                native::focus(id(self.popup.window()), false);
+            }
             self.popup_pending = None;
         }
         self.picker.arrange();
@@ -555,7 +571,11 @@ impl Shell {
         self.popup_open = Some(kind);
         self.popup_pending = Some(r);
     }
+    pub fn focus_popup_on_arrange(&mut self) {
+        self.popup_keyboard = self.popup_open.is_some();
+    }
     pub fn close_popup(&mut self) {
+        self.popup_keyboard = false;
         if self.popup_open.take().is_some() {
             let _ = self.popup.hide();
         }
@@ -609,7 +629,7 @@ impl Shell {
             ))));
     }
     pub fn interactive(&self) -> bool {
-        self.visible || self.picker.opened || self.editor.opened
+        self.hints.opened || self.visible || self.picker.opened || self.editor.opened
     }
     pub fn dismiss(&mut self) {
         let _ = self.launcher.hide();
@@ -763,7 +783,26 @@ impl Shell {
         self.visible = true;
         Ok(())
     }
+    pub fn open_hints(&mut self, c: &Config, r: Rect, monitor: usize) {
+        let Some(models) = self.models.get(monitor) else {
+            return;
+        };
+        let kinds = [&models.left, &models.center, &models.right]
+            .into_iter()
+            .flat_map(|model| model.iter())
+            .filter(|item| item.hint_id > 0)
+            .map(|item| item.kind.to_string())
+            .collect();
+        self.hints.open(c, r, monitor, kinds);
+        if self.hints.opened {
+            self.bars[monitor].set_hint_request(self.hints.generation as i32);
+        }
+    }
     pub fn refresh(&self, m: &Model, c: &Config, applets: &super::applet::Runtime) {
+        // Freeze both numbering and geometry for the entire selection session.
+        if self.hints.opened {
+            return;
+        }
         let workspaces: Vec<i32> = if c.bar.left.iter().any(|s| s == "workspaces") {
             (1..=9u8)
                 .filter(|n| *n == m.active || m.clients.iter().any(|w| w.workspace == *n))
@@ -784,6 +823,7 @@ impl Shell {
                         value: label.into(),
                         has_icon: icon.is_some(),
                         icon: icon.unwrap_or_default(),
+                        hint_id: 0,
                         level: 0,
                         charging: false,
                     }
@@ -798,6 +838,7 @@ impl Shell {
                         icon: slint::Image::default(),
                         level: i32::from(percent),
                         charging: plugged,
+                        hint_id: 0,
                     }
                 } else if name == "volume" {
                     let Some((_, muted)) = super::audio::volume_state() else {
@@ -808,6 +849,7 @@ impl Shell {
                         value: "".into(),
                         has_icon: true,
                         icon: self.volume_icons[usize::from(muted)].clone(),
+                        hint_id: 0,
                         level: 0,
                         charging: false,
                     }
@@ -815,6 +857,7 @@ impl Shell {
                     StatusItem {
                         kind: name.clone().into(),
                         value: value.into(),
+                        hint_id: 0,
                         has_icon: false,
                         icon: slint::Image::default(),
                         level: 0,
@@ -827,9 +870,20 @@ impl Shell {
             }
             out
         };
-        let left = items(&c.bar.left);
-        let center = items(&c.bar.center);
-        let right = items(&c.bar.right);
+        let mut left = items(&c.bar.left);
+        let mut center = items(&c.bar.center);
+        let mut right = items(&c.bar.right);
+        let mut hint_id = 0;
+        for item in left.iter_mut().chain(&mut center).chain(&mut right) {
+            let kind = item.kind.as_str();
+            let interactive = matches!(kind, "clock" | "battery" | "cpu" | "memory")
+                || applets.is_applet(kind)
+                || applets.attached(kind).is_some();
+            if interactive && hint_id < crate::bar_hints::LABELS.len() as i32 {
+                hint_id += 1;
+                item.hint_id = hint_id;
+            }
+        }
         for (b, models) in self.bars.iter().zip(&self.models) {
             b.set_active(m.active as i32);
             sync(&models.workspaces, &workspaces);

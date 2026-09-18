@@ -45,7 +45,10 @@ mod tests {
     #[test]
     fn labels_and_keys_agree_without_shift_or_character_translation() {
         for index in 0..LABELS.len() {
-            assert_eq!(input(label(index).unwrap() as u32), Some(Input::Select(index)));
+            assert_eq!(
+                input(label(index).unwrap() as u32),
+                Some(Input::Select(index))
+            );
         }
         assert_eq!(label(8), Some('9'));
         assert_eq!(label(9), Some('A'));

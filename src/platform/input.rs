@@ -10,10 +10,18 @@ static STATE: OnceLock<(EventSender, RwLock<Vec<Binding>>)> = OnceLock::new();
 /// Set while a bar popup is shown so Escape is consumed and closes it instead
 /// of reaching the foreground application.
 pub static POPUP_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Nonzero opening generation while bar hints consume keyboard input.
+pub static BAR_HINTS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 /// Set while the keybindings editor records a chord: every key is consumed
 /// and reported as `Event::Capture` instead of running its binding.
 pub static CAPTURE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static CONSUMED: std::sync::Mutex<[bool; 256]> = std::sync::Mutex::new([false; 256]);
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Consumed {
+    No,
+    Binding,
+    Modal,
+}
+static CONSUMED: std::sync::Mutex<[Consumed; 256]> = std::sync::Mutex::new([Consumed::No; 256]);
 /// Virtual key plus one of the `dictate` binding currently held, 0 otherwise:
 /// its repeats are swallowed and its release is reported instead of consumed.
 static HELD: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -49,17 +57,8 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                 {
                     if down || up {
                         let mut consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner());
-                        consumed[k.vkCode as usize] = false;
+                        consumed[k.vkCode as usize] = Consumed::No;
                         let _ = tx.send(Event::Capture(k.vkCode, modifiers, down));
-                    }
-                    return LRESULT(1);
-                }
-                if k.vkCode == 0x1b
-                    && POPUP_OPEN.load(std::sync::atomic::Ordering::Relaxed)
-                    && let Some((tx, _)) = STATE.get()
-                {
-                    if down {
-                        let _ = tx.send(Event::Escape);
                     }
                     return LRESULT(1);
                 }
@@ -73,8 +72,50 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                 }
                 if up {
                     let mut consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner());
-                    if consumed[k.vkCode as usize] {
-                        consumed[k.vkCode as usize] = false;
+                    if consumed[k.vkCode as usize] != Consumed::No {
+                        consumed[k.vkCode as usize] = Consumed::No;
+                        return LRESULT(1);
+                    }
+                }
+                if down && let Some((tx, bindings)) = STATE.get() {
+                    let bindings = bindings.read().unwrap_or_else(|e| e.into_inner());
+                    let binding = bindings
+                        .iter()
+                        .find(|b| b.key == k.vkCode && b.modifiers == modifiers);
+                    let mut consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner());
+                    // A hint selection must swallow repeats until release, even
+                    // after selecting has already closed the mode.
+                    if consumed[k.vkCode as usize] == Consumed::Modal
+                        || (consumed[k.vkCode as usize] == Consumed::Binding
+                            && !binding.is_some_and(|b| {
+                                matches!(b.command, crate::command::Command::Resize { .. })
+                            }))
+                    {
+                        return LRESULT(1);
+                    }
+                    let epoch = BAR_HINTS.load(std::sync::atomic::Ordering::Relaxed);
+                    if epoch != 0 {
+                        consumed[k.vkCode as usize] = Consumed::Modal;
+                        // New modifier presses must not open Start/menus in the
+                        // previous app. Releases of modifiers held before entering
+                        // still pass through, so Ctrl/Alt cannot become stuck.
+                        if crate::keyboard::is_modifier(k.vkCode) {
+                            return LRESULT(1);
+                        }
+                        if binding.is_some_and(|b| b.command == crate::command::Command::BarHints) {
+                            let _ =
+                                tx.send(Event::Command(crate::command::Command::BarHints, None));
+                        } else if (modifiers & !crate::keyboard::SHIFT == 0 || k.vkCode == 0x1b)
+                            && let Some(input) = crate::bar_hints::input(k.vkCode)
+                        {
+                            let _ = tx.send(Event::BarHintKey(epoch, input));
+                        }
+                        // Invalid keys do not type into the previous application.
+                        return LRESULT(1);
+                    }
+                    if k.vkCode == 0x1b && POPUP_OPEN.load(std::sync::atomic::Ordering::Relaxed) {
+                        consumed[k.vkCode as usize] = Consumed::Modal;
+                        let _ = tx.send(Event::Escape);
                         return LRESULT(1);
                     }
                 }
@@ -97,14 +138,14 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                     }
                     let mut consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner());
                     // Only resize repeats: toggles and other actions stay one-shot.
-                    if (!consumed[k.vkCode as usize]
+                    if (consumed[k.vkCode as usize] == Consumed::No
                         || matches!(b.command, crate::command::Command::Resize { .. }))
                         && tx.send(Event::Command(b.command.clone(), None)).is_err()
                     {
                         drop(consumed);
                         return CallNextHookEx(None, code, w, l);
                     }
-                    consumed[k.vkCode as usize] = true;
+                    consumed[k.vkCode as usize] = Consumed::Binding;
                     return LRESULT(1);
                 }
             }
