@@ -26,6 +26,36 @@ ConPTY. A visible desktop probe uses a temporary theme and asserts that live
 reload retains both the native HWND and WSL PID. Do not run visible probes
 while interacting with their test windows.
 
+## Theme demo scene
+
+Regular tests cover `demo` parsing/serialization, the three-tile geometry,
+static terminal fixtures and independent temporary browser libraries/filter lists.
+Windows adds a no-shell terminal session test and a hidden WebView home regression:
+
+```powershell
+cargo test -p winarchy-terminal demo_ignores_input_and_redraws_without_a_shell
+cargo test -p winarchy-browser --bin winarchy-browser demo_home_never_loads_the_normal_library -- --ignored --test-threads=1 --nocapture
+```
+
+The browser regression deliberately provides an unreadable normal library,
+opens the synthetic home in an isolated profile, checks its five fixture entries,
+then verifies cleanup and that the normal file remains unchanged. Both of these
+Windows tests passed for the demo implementation; neither starts a user's shell.
+
+For the complete menu/daemon scene, use matching rebuilt binaries and an empty
+workspace on an unlocked Windows desktop:
+
+```powershell
+.\scripts\test-demo-desktop.ps1 -Bin .\target\debug -KeepScene
+```
+
+The opt-in probe checks startup readiness, ordering, 50/50 geometry, focus and
+occupied-workspace rejection. Without `-KeepScene` it closes only the demo HWNDs
+whose process ownership and ready marker still match. It never restarts the
+normal daemon. Full desktop geometry, menu selection, live theme switching,
+startup cancellation/failure, and mixed-DPI appearance still need this desktop
+check/manual validation. See [demo privacy limits](themes.md#demo-scene-for-theme-screenshots).
+
 ## Desktop tests
 
 Desktop tests are `#[ignore]`d and never run in CI. **Save your work first: they rearrange, hide and close windows.** Use a disposable configuration directory:

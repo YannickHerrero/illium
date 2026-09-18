@@ -132,6 +132,52 @@ Existing keybinding files are not overwritten on upgrade. Add under `[keybinding
 "Ctrl+Alt+Shift+Space" = "theme picker"
 ```
 
+## Demo scene for theme screenshots
+
+On an **empty workspace**, choose **Alt+Shift+Space → Demo**, or run:
+
+```powershell
+winarchyctl demo
+```
+
+Winarchy opens three dedicated windows using the active theme and opacity:
+
+- **Left half:** native terminal with a fixed, colored fictional Rust build/test log.
+- **Top right:** native terminal with a built-in demo fetch, fictional machine data
+  and all sixteen ANSI colors (not the user's installed `fetch` command).
+- **Bottom right:** browser home with synthetic public bookmarks/history.
+
+The terminal fixtures never start WSL, a shell, or a real build. Keyboard/paste
+input cannot execute commands. Their output is static, with no blinking cursor.
+The browser runs separately from the normal resident, with a fresh temporary
+WebView profile, library and filter directory. It does not load personal
+bookmarks, history, cookies or sessions; the demo home does not navigate to the
+listed sites automatically. Following a link still performs a real navigation
+inside the isolated profile. Normal browser windows/data remain unchanged.
+
+Switch themes while the scene stays open to take several previews. The existing
+live theme/opacity watchers remain active. Close the three windows normally when
+finished; the browser attempts to remove its temporary data on exit. Forced
+termination/crashes can leave temporary files under the system temp directory.
+
+`demo` acknowledges startup, not completion. `winarchyctl status` exposes
+`demo_pending` and `demo_error`; wait until pending is false and error is null
+before capturing. The windows are identified by their owned processes and ready
+markers, not titles or fixed sleep delays. The final scene uses 50/50 splits and
+focuses the left terminal. Existing gaps/borders and the workspace's monitor are
+preserved. Startup overrides placement rules for these three windows only.
+
+Occupied workspaces (including minimized windows) and concurrent startups are
+rejected. Changing workspace or adding an unrelated window during startup cancels
+it. Missing/failed applications or a 30-second readiness timeout close only the
+new demo processes, leaving existing windows alone. Install matching daemon,
+CLI, terminal and browser binaries before using this command.
+
+**Screenshot privacy is limited to these demo windows:** the bar, notifications,
+other monitors, wallpaper and custom theme/font names may still reveal personal
+information. Check the capture before publishing it. No automatic screenshot or
+preview-file replacement is performed.
+
 ## External theme packs
 
 Themes do not need to be compiled into Winarchy. A local pack is a folder named with 1–64 lowercase ASCII letters, digits, hyphens or underscores:
