@@ -78,6 +78,21 @@ fn bar_fades_only_its_background_and_honors_shared_override() {
             "active label color must stay opaque"
         );
     }
+    // The visual marker is 24×22, centered inside the unchanged 26px hit target.
+    let image = pixels();
+    let accent = bar.get_accent();
+    let marker: Vec<_> = image
+        .iter()
+        .enumerate()
+        .filter_map(|(i, p)| {
+            (p.red == accent.red() && p.green == accent.green() && p.blue == accent.blue())
+                .then_some((i % 500, i / 500))
+        })
+        .collect();
+    assert_eq!(marker.iter().map(|p| p.0).min(), Some(11));
+    assert_eq!(marker.iter().map(|p| p.0).max(), Some(34));
+    assert_eq!(marker.iter().map(|p| p.1).min(), Some(9));
+    assert_eq!(marker.iter().map(|p| p.1).max(), Some(30));
     bar.set_background_opacity(0.85);
     bar.set_transparent(true);
     assert_eq!(pixels()[250].alpha, 0);

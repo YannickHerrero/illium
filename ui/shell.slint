@@ -153,9 +153,11 @@ export component Bar inherits Window {
         for n in root.workspaces: Rectangle {
             width: 26px;
             Rectangle {
-                width: parent.width; height: min(24px, parent.height);
+                // Smaller visual pill, without shrinking its full-height click target.
+                width: 24px; height: min(22px, parent.height);
+                x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
-                border-radius: 6px;
+                border-radius: 5px;
                 // Keep the active indicator opaque even on a transparent surface.
                 background: root.active == n ? root.accent : workspace-touch.has-hover ? root.fg.with-alpha(0.08) : Colors.transparent;
                 Text {
