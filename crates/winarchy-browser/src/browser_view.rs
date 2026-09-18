@@ -247,7 +247,13 @@ impl ViewContext {
                 if let Some(args) = args {
                     args.SetHandled(true)?;
                     let uri = string(|s| args.Uri(s))?;
-                    if uri.starts_with("https://") || uri.starts_with("http://") {
+                    let mut user_initiated = BOOL(0);
+                    args.IsUserInitiated(&mut user_initiated)?;
+                    // Do not let an untrusted background script allocate an
+                    // unbounded stream of tab controllers without a user gesture.
+                    if user_initiated.as_bool()
+                        && (uri.starts_with("https://") || uri.starts_with("http://"))
+                    {
                         native::queue_popup(id, uri);
                     }
                 }
