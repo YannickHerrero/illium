@@ -537,6 +537,28 @@ unsafe fn selected_or_active(app: &App) -> Option<TabId> {
         app.tabs.borrow().active()
     }
 }
+unsafe fn bookmark(app: &App) -> AppResult<()> {
+    if app.home {
+        return Ok(());
+    }
+    let web = app.web.as_ref().ok_or("No active page")?;
+    let source = take_string(|s| web.Source(s))?;
+    let title = take_string(|s| web.DocumentTitle(s)).unwrap_or_default();
+    let library = app.picker.borrow().library.clone();
+    let result = library.borrow_mut().add_bookmark(&source, &title)?;
+    if let Some(added) = result {
+        eprintln!("metric bookmark_added={added}");
+        if app.picker.borrow().visible && !app.picker.borrow().tabs_mode {
+            app.picker.borrow_mut().refresh(app.hwnd);
+            app.picker.borrow().status(if added {
+                "★ Favori ajouté"
+            } else {
+                "★ Déjà dans les favoris"
+            });
+        }
+    }
+    Ok(())
+}
 unsafe fn execute_leader(
     action: Action,
     app: &App,
@@ -657,7 +679,8 @@ unsafe fn execute_leader(
             web.Stop()?;
         }
         Action::Bookmark => {
-            PostMessageW(Some(app.hwnd), BOOKMARK, WPARAM(0), LPARAM(0))?;
+            // Execute against this tab before the next queued switch action.
+            bookmark(app)?;
         }
         Action::Find => {
             let find = web.cast::<ICoreWebView2_28>()?.Find()?;
@@ -1416,28 +1439,11 @@ pub fn run(
                     && msg.wParam.0 == b'D' as usize
                     && msg.lParam.0 & (1 << 30) == 0)
             {
-                if !snapshot().is_some_and(|a| a.home) {
-                    let source = take_string(|s| web.Source(s))?;
-                    let title = take_string(|s| web.DocumentTitle(s)).unwrap_or_default();
-                    let result = library.borrow_mut().add_bookmark(&source, &title);
-                    match result {
-                        Ok(Some(added)) => {
-                            eprintln!("metric bookmark_added={added}");
-                            if picker.borrow().visible {
-                                picker.borrow_mut().refresh(hwnd);
-                                picker.borrow().status(if added {
-                                    "★ Favori ajouté"
-                                } else {
-                                    "★ Déjà dans les favoris"
-                                });
-                            }
-                        }
-                        Ok(None) => {}
-                        Err(e) => {
-                            eprintln!("Cannot save bookmark: {e}");
-                            picker.borrow().status("Impossible d’enregistrer le favori");
-                        }
-                    }
+                if let Some(app) = snapshot()
+                    && let Err(error) = bookmark(&app)
+                {
+                    eprintln!("Cannot save bookmark: {error}");
+                    picker.borrow().status("Impossible d’enregistrer le favori");
                 }
                 continue;
             }
