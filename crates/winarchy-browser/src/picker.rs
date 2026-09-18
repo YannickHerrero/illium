@@ -447,7 +447,12 @@ impl Picker {
             r.top + p(56),
             r.right - p(12),
             p(24),
-            &s.site.title,
+            &s.description(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or_default(),
+            ),
             &self.theme.subtext,
         );
         SelectObject(item.hDC, old);

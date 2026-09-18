@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, OpenOptions},
     path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 use url::Url;
 
@@ -11,6 +12,9 @@ const HISTORY_LIMIT: usize = 500;
 pub struct Site {
     pub url: String,
     pub title: String,
+    /// Unix seconds; absent in libraries written before the navigation palette.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visited_at: Option<u64>,
 }
 #[derive(Default, Serialize, Deserialize)]
 struct Data {
@@ -21,6 +25,26 @@ struct Data {
 pub struct Suggestion {
     pub site: Site,
     pub bookmarked: bool,
+}
+impl Suggestion {
+    pub fn description(&self, now: u64) -> String {
+        let Some(visited_at) = self.site.visited_at.filter(|_| !self.bookmarked) else {
+            return self.site.title.clone();
+        };
+        let age = now.saturating_sub(visited_at);
+        let relative = match age {
+            0..60 => "Visité à l’instant".to_owned(),
+            60..3600 => format!("Visité il y a {} min", age / 60),
+            3600..86400 => format!("Visité il y a {} h", age / 3600),
+            86400..172800 => "Visité il y a 1 jour".to_owned(),
+            _ => format!("Visité il y a {} jours", age / 86400),
+        };
+        if self.site.title.is_empty() {
+            relative
+        } else {
+            format!("{} · {relative}", self.site.title)
+        }
+    }
 }
 pub struct Library {
     dir: PathBuf,
@@ -37,6 +61,7 @@ fn site(url: &str, title: &str) -> Option<Site> {
     let _ = url.set_password(None);
     Some(Site {
         url: url.into(),
+        visited_at: None,
         title: title
             .chars()
             .filter(|c| !c.is_control())
@@ -78,9 +103,13 @@ impl Library {
         Ok(())
     }
     pub fn visit(&mut self, url: &str, title: &str) -> Result<()> {
-        let Some(site) = site(url, title) else {
+        let Some(mut site) = site(url, title) else {
             return Ok(());
         };
+        site.visited_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .map(|d| d.as_secs());
         self.update(|data| {
             data.history.retain(|s| s.url != site.url);
             data.history.insert(0, site);
@@ -167,6 +196,37 @@ mod tests {
         assert!(fuzzy("é", "CAFÉ").is_some());
     }
     #[test]
+    fn legacy_library_and_relative_dates() {
+        let data: Data = serde_json::from_str(
+            r#"{"history":[{"url":"https://example.com/","title":"Example"}],"bookmarks":[]}"#,
+        )
+        .unwrap();
+        let mut suggestion = Suggestion {
+            site: data.history[0].clone(),
+            bookmarked: false,
+        };
+        assert_eq!(suggestion.site.visited_at, None);
+        assert_eq!(suggestion.description(100), "Example");
+        suggestion.site.visited_at = Some(100);
+        for (elapsed, expected) in [
+            (0, "à l’instant"),
+            (59, "à l’instant"),
+            (60, "1 min"),
+            (3599, "59 min"),
+            (3600, "1 h"),
+            (86400, "1 jour"),
+            (259200, "3 jours"),
+        ] {
+            assert!(suggestion.description(100 + elapsed).ends_with(expected));
+        }
+        assert!(suggestion.description(0).ends_with("à l’instant"));
+        suggestion.bookmarked = true;
+        assert_eq!(suggestion.description(1000), "Example");
+        let roundtrip: Site =
+            serde_json::from_str(&serde_json::to_string(&suggestion.site).unwrap()).unwrap();
+        assert_eq!(roundtrip.visited_at, Some(100));
+    }
+    #[test]
     fn persist_merge_deduplicate_and_bound() {
         let dir = std::env::temp_dir().join(format!("browser-library-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
@@ -190,6 +250,7 @@ mod tests {
         );
         let reloaded = Library::load(&dir).unwrap();
         assert_eq!(reloaded.data.bookmarks.len(), 1);
+        assert!(reloaded.data.history.iter().all(|s| s.visited_at.is_some()));
         // One shared fuzzy search returns both sources, without duplicating GitHub.
         let mixed = reloaded.suggestions("https");
         assert_eq!(mixed.len(), 2);
@@ -208,6 +269,7 @@ mod tests {
                 .map(|n| Site {
                     url: format!("https://example.com/{n}"),
                     title: n.to_string(),
+                    visited_at: None,
                 })
                 .collect();
         })
