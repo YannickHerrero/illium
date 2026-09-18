@@ -1,0 +1,74 @@
+struct Cell { label: string, daytime: bool, night: bool, current: bool }
+struct Zone { name: string, zone: string, time: string, detail: string, cells: [Cell] }
+struct Data { rows: [Zone], position: float }
+export component View inherits Window {
+    no-frame: true;
+    default-font-family: "JetBrains Mono";
+    default-font-size: 12px;
+    in property <length> popup-width: 1120px;
+    in property <length> popup-height: 310px;
+    width: popup-width;
+    height: popup-height;
+    in property <color> bg: #1e1e2e;
+    in property <color> surface: #313244;
+    in property <color> overlay: #45475a;
+    in property <color> fg: #cdd6f4;
+    in property <color> muted: #a6adc8;
+    in property <color> accent: #cba6f7;
+    in property <Data> data;
+    in property <bool> open;
+    in property <string> provider-error;
+    callback action(string);
+    changed open => { if root.open { root.action("refresh"); } }
+    background: bg;
+    Rectangle {
+        border-width: 1px; border-color: root.overlay;
+        if root.provider-error != "" || root.data.rows.length == 0: Text {
+            x: 20px; y: 20px; width: parent.width - 40px;
+            text: root.provider-error != "" ? root.provider-error : "Loading time zones…";
+            color: root.muted; wrap: word-wrap;
+        }
+        VerticalLayout {
+            padding: 20px; spacing: 8px;
+            for zone in root.data.rows: HorizontalLayout {
+                spacing: 16px;
+                VerticalLayout {
+                    width: 230px; spacing: 4px;
+                    alignment: center;
+                    HorizontalLayout {
+                        spacing: 8px; alignment: start;
+                        Text { text: zone.name; color: root.fg; font-size: 14px; font-weight: 600; }
+                        Text { text: zone.zone; color: root.muted; font-size: 11px; }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px; alignment: start;
+                        Text { text: zone.time; color: root.accent; font-size: 14px; font-weight: 700; }
+                        Text { text: zone.detail; color: root.muted; font-size: 10px; }
+                    }
+                }
+                Rectangle {
+                    HorizontalLayout {
+                        spacing: 2px;
+                        for cell in zone.cells: Rectangle {
+                            border-radius: 4px;
+                            background: cell.current ? root.accent.with-alpha(0.45)
+                                : cell.daytime ? root.accent.with-alpha(0.22)
+                                : cell.night ? root.surface.with-alpha(0.4) : root.surface;
+                            Text {
+                                text: cell.label;
+                                color: cell.night ? root.muted : root.fg;
+                                font-size: 11px;
+                                horizontal-alignment: center; vertical-alignment: center;
+                            }
+                        }
+                    }
+                    Rectangle {
+                        x: parent.width * root.data.position / 24;
+                        width: 2px; height: parent.height;
+                        background: root.accent;
+                    }
+                }
+            }
+        }
+    }
+}

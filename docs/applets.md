@@ -15,9 +15,11 @@ Built-in module names are reserved (`separator` among them; see
 [configuration](configuration.md#bartoml)); any other name must match an applet
 folder holding an `applet.toml`, or the configuration is rejected.
 
-Winarchy ships `weather`, `wifi`, `calendar`, `volume` and `_template`; they
+Winarchy ships `weather`, `wifi`, `calendar`, `timezones`, `volume` and `_template`; they
 are installed with the other defaults and never overwritten. `calendar` uses
-`attach = "clock"`: it has no icon and opens when the clock is clicked;
+`attach = "clock"`: it has no icon and opens when the date is clicked;
+`timezones` uses `attach = "time"` and opens from the separate time target. Both
+are loaded by the bar's `clock` entry, without changing existing calendar files;
 `volume` attaches to the volume module the same way: an audio panel with the
 output level and devices, the input level, a live input meter and devices, and
 one slider per application playing sound. Clicking a device makes it the
@@ -57,7 +59,7 @@ applets/weather/
 | `wifi_traffic` | `false` | Merge native Wi-Fi traffic counters using the script's `connected` and `interface_guid` fields; independent of script cadence |
 | `provider` | none | `builtin:clock`, `builtin:system` or `builtin:volume` instead of a process |
 | `focusable` | `false` | Let the popup take keyboard focus |
-| `attach` | none | Built-in module (`clock`, `battery`, `cpu`, `memory`, `volume`, `window-title`) whose click opens this applet; it then has no icon and is loaded whenever that module is in a section |
+| `attach` | none | Built-in module (`clock`, `time`, `battery`, `cpu`, `memory`, `volume`, `window-title`) whose click opens this applet; it then has no icon and is loaded whenever that module is in a section |
 | `[settings]` | empty | Passed to the provider as `WINARCHY_APPLET_<KEY>` variables |
 
 ### The provider
@@ -92,6 +94,24 @@ Built-in providers avoid a process for fast cadences:
   use) and `session <percent> <id>`. Setting a level above zero also unmutes;
   `refresh` only reads. The bar reads the same endpoint for its speaker icon,
   crossed out while muted.
+
+### Timezone viewer
+
+The time popup compares Local, London, Paris and Tokyo across 24 shared hourly
+columns. Accent shading marks daytime (08–18), muted cells mark night, the current
+hour is highlighted and a vertical accent line indicates the current minute.
+Midnight cells show the new date. All colors come from the active Winarchy theme.
+The view refreshes on opening and every minute; Windows time zone rules handle
+summer/winter time, including skipped or repeated hours.
+
+Edit `[settings].zones` in `applets/timezones/applet.toml` to change cities:
+`City|Windows time zone identifier`, separated by semicolons. For example,
+`London|GMT Standard Time;Paris|Romance Standard Time;Tokyo|Tokyo Standard Time`.
+Adjust the popup height if adding more rows. The new folder is installed alongside
+existing applets without overwriting the calendar or bar configuration.
+
+Provider regression checks (including DST and date rollover):
+`powershell -NoProfile -ExecutionPolicy Bypass -File tests/timezones-provider.ps1`.
 
 ### Wi-Fi panel
 

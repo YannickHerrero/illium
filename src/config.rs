@@ -39,7 +39,7 @@ pub struct Bar {
     pub center: Vec<String>,
     pub right: Vec<String>,
     pub clock_format: String,
-    /// Optional secondary date label beside the clock; old configurations keep a single label.
+    /// Date half of the clock; empty uses the short weekday/day/month format.
     #[serde(default)]
     pub clock_date_format: String,
 }
@@ -103,12 +103,13 @@ pub struct Config {
     pub theme: Theme,
 }
 /// Bar module names handled by the daemon itself; anything else is an applet.
-pub const BUILTIN_MODULES: [&str; 8] = [
+pub const BUILTIN_MODULES: [&str; 9] = [
     "workspaces",
     "window-title",
     "volume",
     "battery",
     "clock",
+    "time",
     "cpu",
     "memory",
     "separator",
@@ -193,6 +194,18 @@ const DEFAULTS: &[(&str, &str)] = &[
     (
         "applets/wifi/lock.svg",
         include_str!("../config/applets/wifi/lock.svg"),
+    ),
+    (
+        "applets/timezones/applet.toml",
+        include_str!("../config/applets/timezones/applet.toml"),
+    ),
+    (
+        "applets/timezones/view.slint",
+        include_str!("../config/applets/timezones/view.slint"),
+    ),
+    (
+        "applets/timezones/timezones.ps1",
+        include_str!("../config/applets/timezones/timezones.ps1"),
     ),
     (
         "applets/calendar/applet.toml",

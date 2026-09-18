@@ -85,15 +85,30 @@ pub fn clock_labels(c: &Config) -> (String, String) {
         second: t.wSecond as u8,
     };
     (
-        crate::clock::format(&c.bar.clock_format, moment),
-        crate::clock::format(&c.bar.clock_date_format, moment),
+        crate::clock::format(
+            if c.bar.clock_format == "%A %d %b - %H:%M" {
+                "%H:%M"
+            } else {
+                &c.bar.clock_format
+            },
+            moment,
+        ),
+        crate::clock::format(
+            if c.bar.clock_date_format.is_empty() {
+                "%a %d %b"
+            } else {
+                &c.bar.clock_date_format
+            },
+            moment,
+        ),
     )
 }
 /// Rendered text of a built-in module, when it has something to show.
 pub fn item(c: &Config, title: &str, module: &str) -> Option<String> {
     match module {
         "window-title" => Some(title.to_owned()),
-        "clock" => Some(clock_labels(c).0),
+        "clock" => Some(clock_labels(c).1),
+        "time" => Some(clock_labels(c).0),
         "cpu" => cpu(),
         "memory" => memory(),
         "separator" => Some(String::new()),

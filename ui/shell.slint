@@ -76,8 +76,8 @@ component StatusModule inherits Rectangle {
             colorize: muted;
         }
         if !separator && item.value != "": Text {
-            text: item.value; color: fg; vertical-alignment: center;
-            font-weight: item.kind == "clock" && item.secondary != "" ? 700 : 400;
+            text: item.value; color: item.kind == "clock" ? muted : fg; vertical-alignment: center;
+            font-weight: item.kind == "time" ? 700 : 400;
         }
         if !separator && item.secondary != "": Text {
             text: item.secondary; color: muted; vertical-alignment: center;

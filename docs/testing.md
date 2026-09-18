@@ -54,8 +54,10 @@ checks that the status bar follows both updates without changing workspaces.
 ## Status bar design
 
 The bar uses embedded JetBrains Mono, rounded workspace markers, vertical separators,
-and an optional `clock_date_format` secondary label (see [configuration](configuration.md#bartoml)).
-The clock remains one click target and one hint even with two labels.
+and configurable time/date labels (see [configuration](configuration.md#bartoml)).
+Time and date have independent click targets, popup anchors and keyboard hints.
+The timezone provider's DST/date-rollover checks run with
+`powershell -NoProfile -ExecutionPolicy Bypass -File tests/timezones-provider.ps1`.
 
 ```powershell
 cargo test -p winarchy --lib bar_ -- --test-threads=1

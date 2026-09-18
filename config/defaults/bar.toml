@@ -4,4 +4,4 @@ height = 28
 left = ["workspaces"]
 center = ["clock"]
 right = ["battery", "cpu", "memory", "volume", "wifi"]
-clock_format = "%A %d %b - %H:%M"
+clock_format = "%H:%M"

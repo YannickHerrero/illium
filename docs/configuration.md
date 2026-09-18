@@ -120,7 +120,7 @@ height = 28
 left = ["workspaces"]
 center = ["clock"]
 right = ["battery", "cpu", "memory", "wifi"]
-clock_format = "%A %d %b - %H:%M"
+clock_format = "%H:%M"
 ```
 
 Positions: top/bottom. Height: 16–100 logical pixels. Each section lists built-in modules and applet names in display order; an applet name must match a folder under `applets/` with an `applet.toml` (see [applets](applets.md)). Built-in modules: window-title, volume, battery, clock, cpu (overall load in percent since the previous refresh), memory (available RAM in GB with one decimal) and separator, a fine vertical divider in the subtext color that widens the gap between its neighbours, has no module action when clicked and may be listed as many times as wanted. Workspaces are supported on the left, at their listed position: for example, `left = ["winagotchi", "workspaces"]` places an installed `winagotchi` applet before the workspace buttons. The center is centered on the screen regardless of the side groups' widths. battery, cpu and memory show a monochrome icon in the theme's subtext color next to their value. Battery disappears when unavailable; audio is read from the default render endpoint. Clock substitutions, in English: `%A` weekday, `%a` short weekday, `%d` day, `%B` month, `%b` short month (Jan, Feb, Mar, Apr, May, June, July, Aug, Sept, Oct, Nov, Dec), `%H`, `%M`, `%S`. A bar is created on every monitor; its reservation is calculated directly, never from Explorer's taskbar work area. The bar's surface uses the theme's shared `background_opacity`, including live opacity shortcuts, while text, icons and the active workspace indicator stay opaque. Clicking an empty area of the bar toggles its background between that translucent surface color and fully transparent (the wallpaper shows through); a click that closes an open popup does not toggle. The toggle is not persisted across daemon restarts. The bar uses bundled JetBrains Mono,
@@ -128,16 +128,19 @@ rounded workspace indicators and subtle hover feedback. A fine border faces the 
 (bottom edge for a top bar, top edge for a bottom bar) and disappears with the background.
 For the airier design, use `height = 38`; existing heights remain supported.
 
-For a bold time followed by a muted date, use the optional secondary label:
+The `clock` entry renders a bold time and a muted date as independent click targets.
+Their labels can be customized:
 
 ```toml
 clock_format = "%H:%M"
 clock_date_format = "%a %d %b"
 ```
 
-`clock_date_format` accepts the same tokens and defaults to empty, preserving existing
-clock layouts. Both labels remain one clickable module with one keyboard hint and
-open the existing calendar applet.
+`clock_date_format` accepts the same tokens; empty uses `%a %d %b`.
+The old default combined `clock_format` is treated as `%H:%M`; other custom formats
+are preserved. The date opens the existing calendar (`attach = "clock"`), while
+the time opens the timezone viewer (`attach = "time"`). Each has its own keyboard
+hint and popup anchor. The reserved `time` module can also be listed alone.
 
 ## launcher.toml
 

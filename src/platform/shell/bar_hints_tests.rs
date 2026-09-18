@@ -111,7 +111,7 @@ fn hint_centers_follow_layout_and_only_report_actionable_modules() {
 }
 
 #[test]
-fn styled_clock_keeps_one_click_target_and_border_follows_surface() {
+fn split_clock_has_independent_targets_and_border_follows_surface() {
     let adapter = Rc::new(RefCell::new(None));
     slint::platform::set_platform(Box::new(Headless(adapter.clone()))).unwrap();
     let bar = Bar::new().unwrap();
@@ -120,13 +120,20 @@ fn styled_clock_keeps_one_click_target_and_border_follows_surface() {
     bar.set_bg(slint::Color::from_rgb_u8(12, 32, 56));
     bar.set_fg(slint::Color::from_rgb_u8(219, 233, 246));
     bar.set_muted(slint::Color::from_rgb_u8(126, 156, 184));
-    bar.set_center_items(ModelRc::new(VecModel::from(vec![StatusItem {
-        kind: "clock".into(),
-        value: "17:01".into(),
-        secondary: "Fri 18 Sept".into(),
-        hint_id: 1,
-        ..Default::default()
-    }])));
+    bar.set_center_items(ModelRc::new(VecModel::from(vec![
+        StatusItem {
+            kind: "time".into(),
+            value: "17:01".into(),
+            hint_id: 1,
+            ..Default::default()
+        },
+        StatusItem {
+            kind: "clock".into(),
+            value: "Fri 18 Sept".into(),
+            hint_id: 2,
+            ..Default::default()
+        },
+    ])));
     let clicked = Rc::new(RefCell::new(vec![]));
     let result = clicked.clone();
     bar.on_module(move |kind, x| result.borrow_mut().push((kind.to_string(), x)));
@@ -144,7 +151,7 @@ fn styled_clock_keeps_one_click_target_and_border_follows_surface() {
         pixels
     };
     draw();
-    // Time and date both invoke the same calendar callback at the module center.
+    // Each half anchors its own popup at its own center.
     for x in [350., 440.] {
         let position = slint::LogicalPosition::new(x, 19.);
         for event in [
@@ -161,12 +168,9 @@ fn styled_clock_keeps_one_click_target_and_border_follows_surface() {
         }
     }
     assert_eq!(clicked.borrow().len(), 2);
-    assert!(
-        clicked
-            .borrow()
-            .iter()
-            .all(|(kind, x)| kind == "clock" && (*x - 400.).abs() < 1.)
-    );
+    assert_eq!(clicked.borrow()[0].0, "time");
+    assert_eq!(clicked.borrow()[1].0, "clock");
+    assert!(clicked.borrow()[0].1 < clicked.borrow()[1].1);
     for bottom in [false, true] {
         bar.set_bottom(bottom);
         let pixels = draw();

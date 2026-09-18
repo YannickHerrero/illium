@@ -136,7 +136,8 @@ pub fn referenced(home: &Path, sections: &[&Vec<String>]) -> Vec<Result<Applet, 
     for name in folders(home) {
         if let Ok(a) = load(home, &name)
             && let Some(module) = &a.manifest.attach
-            && modules.contains(&module)
+            && (modules.contains(&module)
+                || (module == "time" && modules.iter().any(|m| m.as_str() == "clock")))
         {
             push(&name, &mut out);
         }
@@ -336,6 +337,18 @@ mod tests {
         assert_eq!(
             loaded[0].as_ref().unwrap().manifest.attach.as_deref(),
             Some("clock")
+        );
+        assert!(referenced(&home, &[&vec!["cpu".to_owned()]]).is_empty());
+        std::fs::write(dir.join("applet.toml"), "attach = \"time\"\n").unwrap();
+        let loaded = referenced(&home, &[&clock]);
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(
+            loaded[0].as_ref().unwrap().manifest.attach.as_deref(),
+            Some("time")
+        );
+        assert_eq!(
+            referenced(&home, &[&clock, &vec!["time".to_owned()]]).len(),
+            1
         );
         assert!(referenced(&home, &[&vec!["cpu".to_owned()]]).is_empty());
         std::fs::write(dir.join("applet.toml"), "attach = \"workspaces\"\n").unwrap();

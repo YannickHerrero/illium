@@ -1,0 +1,8 @@
+# The time half of the clock opens the world-time comparison.
+attach = "time"
+interval = "1m"
+popup = { width = 1120, height = 310 }
+
+[settings]
+# Windows time zone identifiers; daylight saving is handled by the OS.
+zones = "London|GMT Standard Time;Paris|Romance Standard Time;Tokyo|Tokyo Standard Time"

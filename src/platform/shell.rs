@@ -824,8 +824,8 @@ impl Shell {
             vec![]
         };
         let title = m.focused.map(native::title).unwrap_or_default();
-        // One item per configured entry, in configured order, so a module such
-        // as the separator may appear several times in a section.
+        // Preserve configured order and repeated separators. The clock expands
+        // into independently actionable time and date items.
         let items = |modules: &[String]| {
             let mut out = Vec::new();
             for name in modules {
@@ -869,11 +869,16 @@ impl Shell {
                         charging: false,
                     }
                 } else if name == "clock" {
-                    let (value, secondary) = super::status::clock_labels(c);
+                    let (time, date) = super::status::clock_labels(c);
+                    out.push(StatusItem {
+                        kind: "time".into(),
+                        value: time.into(),
+                        ..Default::default()
+                    });
+                    // Keep the calendar's existing `attach = "clock"` contract.
                     StatusItem {
                         kind: "clock".into(),
-                        value: value.into(),
-                        secondary: secondary.into(),
+                        value: date.into(),
                         ..Default::default()
                     }
                 } else if let Some(value) = super::status::item(c, &title, name) {
