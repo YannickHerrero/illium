@@ -51,6 +51,50 @@ quick command/reset whose file notifications can coalesce:
 It briefly decreases opacity, restores only its own temporary override, and
 checks that the status bar follows both updates without changing workspaces.
 
+## Status bar keyboard hints
+
+Portable tests cover the hint vocabulary (1–9, A–Z, numpad), navigation wrapping,
+command parsing and the default configurable shortcut:
+
+```sh
+cargo test -p winarchy -p winarchy-ipc --lib --tests
+```
+
+The production Slint layout also has an offscreen test for module-center reports,
+reopening, non-actionable exclusions and transparent strip/opaque badge pixels.
+Windows adds a session test for stale generations, incomplete geometry, invalid
+selections and cancellation before the strip is ready:
+
+```powershell
+cargo test -p winarchy --lib bar_hints
+```
+
+Implementation validation: the portable suite passed (105 tests); the Slint
+layout/pixel test passed in a temporary Linux headless harness compiling the same
+`ui/shell.slint` and importing `platform/shell/bar_hints_tests.rs`. Windows code
+and tests passed `cargo check -p winarchy --tests --target x86_64-pc-windows-gnu`.
+**Native Windows hook, focus and mixed-DPI behavior still need desktop validation.**
+
+On an unlocked Windows desktop, with the updated default binding installed:
+
+1. Focus an editor. Press Ctrl+Alt+B; check badges align with each actionable
+   applet. Press an invalid key, then Escape: no text should appear in the editor.
+2. Reopen and select volume/Wi-Fi by digit, and by Left/Right + Enter. Check the
+   applet responds to its normal keys and Escape restores the editor's focus.
+   Wi-Fi's password/confirmation dialog must cancel before its outer popup closes.
+3. Hold the selection key or Escape: repeats must neither type into the editor
+   nor immediately close an applet's inner and outer dialogs together.
+4. Toggle twice, click outside, reload configuration and change display geometry
+   while hints are open; check that hints and key capture disappear. Check Ctrl,
+   Alt, Shift and Windows keys still work normally after exiting.
+5. Try an AZERTY number row without Shift, numpad with Num Lock, more than nine
+   modules, duplicate modules, no actionable modules and a disabled bar. Wait
+   through provider refreshes: labels must not move or change during selection.
+6. Repeat with a bottom bar and monitors at different DPIs, focusing a client on
+   each monitor first. Only its bar should show hints; popups must stay anchored.
+
+`winarchyctl status` exposes `bar_hints` and `bar_applet` (name or null) for probes.
+
 ## Theme demo scene
 
 Regular tests cover `demo` parsing/serialization, the three-tile geometry,
