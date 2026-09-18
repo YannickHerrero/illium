@@ -6,7 +6,10 @@ param(
     [string]$TestUrl = 'http://127.0.0.1:8765/index.html',
     [switch]$CheckTilingFocus,
     # Allows palette/navigation checks when the desktop cannot grant foreground focus.
-    [switch]$SkipFocusChecks
+    [switch]$SkipFocusChecks,
+    # Opt-in real keyboard input, restricted to this test's foreground window.
+    # Do not use the keyboard/mouse while running this check.
+    [switch]$CheckLeader
 )
 $ErrorActionPreference = 'Stop'
 Add-Type @'
@@ -162,6 +165,106 @@ try {
     $before = New-Object BrowserTest+Rect
     $after = New-Object BrowserTest+Rect
     [void][BrowserTest]::GetWindowRect($web, [ref]$before)
+    if ($CheckLeader) {
+        if ($SkipFocusChecks) { throw '-CheckLeader requires foreground focus checks' }
+        Add-Type -AssemblyName System.Windows.Forms, UIAutomationClient, UIAutomationTypes, System.Drawing
+        [void][BrowserTest]::SetForegroundWindow($window)
+        Wait-For { [BrowserTest]::GetForegroundWindow() -eq $window } 'Leader test requires foreground focus'
+        $leaderPanel = [BrowserTest]::FindWindowEx($window,[IntPtr]::Zero,'WinarchyLeaderPanel',$null)
+        if ($leaderPanel -eq [IntPtr]::Zero) { throw 'Leader panel missing' }
+        function Send-LeaderKeys([string]$keys) {
+            if ([BrowserTest]::GetForegroundWindow() -ne $window) { throw 'Focus left the test browser; refusing keyboard input' }
+            [Windows.Forms.SendKeys]::SendWait($keys)
+            Start-Sleep -Milliseconds 120
+        }
+        function Leader-Title {
+            $value = New-Object Text.StringBuilder 256
+            [void][BrowserTest]::GetText($leaderPanel,0x000D,[IntPtr]256,$value)
+            $value.ToString()
+        }
+        function Assert-LeaderClosed {
+            Wait-For { ![BrowserTest]::IsWindowVisible($leaderPanel) } 'Leader did not close'
+        }
+        $automation = [Windows.Automation.AutomationElement]::FromHandle($window)
+        function Find-Accessible([string]$name) {
+            $condition = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::NameProperty,$name)
+            $automation.FindFirst([Windows.Automation.TreeScope]::Descendants,$condition)
+        }
+        function Accessible-Value($element) {
+            $element.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value
+        }
+        $field = Find-Accessible 'Leader test input'
+        $events = Find-Accessible 'Leader keyboard events'
+        if (!$field -or !$events) { throw 'Keyboard fixture controls missing from UI Automation' }
+        $field.SetFocus()
+        Send-LeaderKeys 'sentinel'
+        $keysBefore = Accessible-Value $events
+        Send-LeaderKeys '^b'
+        Wait-For { [BrowserTest]::IsWindowVisible($leaderPanel) } 'Ctrl+B did not open leader from web input'
+        $leaderRect = New-Object BrowserTest+Rect
+        $windowRect = New-Object BrowserTest+Rect
+        [void][BrowserTest]::GetWindowRect($leaderPanel,[ref]$leaderRect)
+        [void][BrowserTest]::GetWindowRect($window,[ref]$windowRect)
+        if ([Math]::Abs(($leaderRect.left+$leaderRect.right)-($windowRect.left+$windowRect.right)) -gt 2 -or
+            [Math]::Abs(($leaderRect.top+$leaderRect.bottom)-($windowRect.top+$windowRect.bottom)) -gt 2) { throw 'Leader panel not centered' }
+        [void][BrowserTest]::GetWindowRect($web,[ref]$after)
+        if ($before.left -ne $after.left -or $before.top -ne $after.top -or $before.right -ne $after.right -or $before.bottom -ne $after.bottom) { throw 'Leader resized the page' }
+        $bitmap = New-Object Drawing.Bitmap ($leaderRect.right-$leaderRect.left),($leaderRect.bottom-$leaderRect.top)
+        $graphics = [Drawing.Graphics]::FromImage($bitmap)
+        try {
+            $graphics.CopyFromScreen($leaderRect.left,$leaderRect.top,0,0,$bitmap.Size)
+            $bitmap.Save((Join-Path $root 'leader.png'))
+        } finally { $graphics.Dispose(); $bitmap.Dispose() }
+        Send-LeaderKeys 'n'
+        if ((Leader-Title) -notmatch 'Navigation') { throw 'Navigation submenu missing' }
+        Send-LeaderKeys '{BACKSPACE}'
+        if ((Leader-Title) -notmatch 'Principal') { throw 'Backspace did not return to root' }
+        Send-LeaderKeys '{ESC}'
+        Assert-LeaderClosed
+        if ((Accessible-Value $field) -ne 'sentinel' -or (Accessible-Value $events) -ne $keysBefore) { throw 'Leader keys leaked into the page' }
+        Send-LeaderKeys '^b'
+        Start-Sleep -Milliseconds 3300
+        Assert-LeaderClosed
+        Send-LeaderKeys 'x'
+        if ((Accessible-Value $field) -ne 'sentinelx') { throw 'Timeout did not preserve web input focus' }
+        $keysBefore = Accessible-Value $events
+        Send-LeaderKeys '^b'
+        Send-LeaderKeys '^b'
+        Assert-LeaderClosed
+        $newKeys = (Accessible-Value $events).Substring($keysBefore.Length)
+        if ($newKeys -cne 'Ctrl+b|') { throw "Double leader did not pass exactly one Ctrl+B: $newKeys" }
+        Send-LeaderKeys '^b'
+        Send-LeaderKeys 'x'
+        Assert-LeaderClosed
+        if ((Accessible-Value $field) -ne 'sentinelx') { throw 'Invalid key leaked into the page' }
+        Send-LeaderKeys '^b'
+        Send-LeaderKeys 'f'
+        Assert-LeaderClosed
+        $focused = [Windows.Automation.AutomationElement]::FocusedElement
+        if ($focused.Current.ControlType -ne [Windows.Automation.ControlType]::Edit -or $focused.Current.Name -eq 'Leader test input') { throw 'Find action did not focus the native find field' }
+        Send-LeaderKeys 'fixture'
+        if ((Accessible-Value $focused) -ne 'fixture') { throw 'Find field did not receive search query' }
+        Send-LeaderKeys '{ESC}'
+        # URL action and cancellation preserve a partially typed native query.
+        Send-LeaderKeys '^b'
+        Send-LeaderKeys 'l'
+        Wait-For { [BrowserTest]::IsWindowVisible($edit) } 'Leader URL action failed'
+        [void][BrowserTest]::SetText($edit,0x000C,[IntPtr]::Zero,'unfinished query')
+        Send-LeaderKeys '^b'
+        Send-LeaderKeys '{ESC}'
+        $query = New-Object Text.StringBuilder 256
+        [void][BrowserTest]::GetText($edit,0x000D,[IntPtr]256,$query)
+        if ($query.ToString() -ne 'unfinished query') { throw 'Leader lost the native query' }
+        Send-LeaderKeys '{ESC}'
+        $frameField = Find-Accessible 'Leader frame input'
+        if (!$frameField) { throw 'Frame fixture input missing' }
+        $frameField.SetFocus()
+        Send-LeaderKeys '^b'
+        Wait-For { [BrowserTest]::IsWindowVisible($leaderPanel) } 'Leader did not open from iframe'
+        Send-LeaderKeys '{ESC}'
+        Assert-LeaderClosed
+        Write-Host "PASS: leader menus, bounds, timeout, web/native/iframe input, no key leakage, double Ctrl+B, find UI. Screenshot: $root/leader.png"
+    }
     [void][BrowserTest]::PostMessage($window,0x8001,[IntPtr]::Zero,[IntPtr]::Zero)
     Wait-For { [BrowserTest]::IsWindowVisible($edit) } 'Picker did not open'
     Assert-CenteredPalette
@@ -181,6 +284,18 @@ try {
     Wait-For { [BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -and $alpha -eq 115 } 'Returning home lost the override set while browsing'
     Remove-Item $opacityPath
     Wait-For { [BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -and $alpha -eq 191 } 'Clearing override did not restore theme opacity'
+    if ($CheckLeader) {
+        [void][BrowserTest]::SetText($edit,0x000C,[IntPtr]::Zero,'home query')
+        Send-LeaderKeys '^b'
+        Wait-For { [BrowserTest]::IsWindowVisible($leaderPanel) } 'Leader did not open from home'
+        Send-LeaderKeys 'n'
+        Send-LeaderKeys '{ESC}'
+        Assert-LeaderClosed
+        $query = New-Object Text.StringBuilder 256
+        [void][BrowserTest]::GetText($edit,0x000D,[IntPtr]256,$query)
+        if ($query.ToString() -ne 'home query') { throw 'Leader consumed or replaced home input' }
+        Write-Host 'PASS: home leader cancellation preserves the native query.'
+    }
     $process.Refresh()
     if ($process.MainWindowHandle -ne $window) { throw 'Opacity update recreated the browser window' }
     [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, 'https')

@@ -15,4 +15,16 @@ window.addEventListener('load', () => {
 </script>
 <p>Ctrl+L → :block → Enter should reload with blocking disabled; both checks should then fail. Repeat to re-enable.</p>
 <p><a href="/index.html?popup" target="_blank">New-window policy test (currently opens here)</a></p>
-<input placeholder="Ctrl+L must work even while this input has focus">
+<input aria-label="Leader test input" placeholder="Ctrl+L / Ctrl+B must work while this input has focus">
+<p><label>Page key events <input aria-label="Leader keyboard events" id="leader-events" readonly></label></p>
+<div contenteditable="true" aria-label="Leader rich text editor">Double Ctrl+B should toggle bold here.</div>
+<iframe title="Leader frame" srcdoc='<input aria-label="Leader frame input" placeholder="Try Ctrl+B here">'></iframe>
+<script>
+// Readable via UI Automation by the opt-in keyboard smoke test. Only this local
+// fixture records keys; production browser pages get no injected test bridge.
+document.addEventListener('keydown', event => {
+  if (event.key.length === 1) {
+    document.querySelector('#leader-events').value += (event.ctrlKey ? 'Ctrl+' : '') + event.key + '|';
+  }
+});
+</script>
