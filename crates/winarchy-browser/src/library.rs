@@ -33,11 +33,11 @@ impl Suggestion {
         };
         let age = now.saturating_sub(visited_at);
         let relative = match age {
-            0..60 => "Visité à l’instant".to_owned(),
-            60..3600 => format!("Visité il y a {} min", age / 60),
-            3600..86400 => format!("Visité il y a {} h", age / 3600),
-            86400..172800 => "Visité il y a 1 jour".to_owned(),
-            _ => format!("Visité il y a {} jours", age / 86400),
+            0..60 => "Visited just now".to_owned(),
+            60..3600 => format!("Visited {}m ago", age / 60),
+            3600..86400 => format!("Visited {}h ago", age / 3600),
+            86400..172800 => "Visited 1 day ago".to_owned(),
+            _ => format!("Visited {} days ago", age / 86400),
         };
         if self.site.title.is_empty() {
             relative
@@ -209,17 +209,17 @@ mod tests {
         assert_eq!(suggestion.description(100), "Example");
         suggestion.site.visited_at = Some(100);
         for (elapsed, expected) in [
-            (0, "à l’instant"),
-            (59, "à l’instant"),
-            (60, "1 min"),
-            (3599, "59 min"),
-            (3600, "1 h"),
-            (86400, "1 jour"),
-            (259200, "3 jours"),
+            (0, "just now"),
+            (59, "just now"),
+            (60, "1m ago"),
+            (3599, "59m ago"),
+            (3600, "1h ago"),
+            (86400, "1 day ago"),
+            (259200, "3 days ago"),
         ] {
             assert!(suggestion.description(100 + elapsed).ends_with(expected));
         }
-        assert!(suggestion.description(0).ends_with("à l’instant"));
+        assert!(suggestion.description(0).ends_with("just now"));
         suggestion.bookmarked = true;
         assert_eq!(suggestion.description(1000), "Example");
         let roundtrip: Site =

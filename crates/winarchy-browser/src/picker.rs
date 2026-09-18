@@ -148,7 +148,7 @@ impl Picker {
             edit,
             0x1501,
             Some(WPARAM(1)),
-            Some(LPARAM(w!("Rechercher ou saisir une adresse…").0 as isize)),
+            Some(LPARAM(w!("Search or enter an address…").0 as isize)),
         );
         SendMessageW(edit, 0x00C5, Some(WPARAM(4096)), None);
         Ok(picker)
@@ -210,7 +210,7 @@ impl Picker {
             self.edit,
             0x1501,
             Some(WPARAM(1)),
-            Some(LPARAM(w!("Rechercher ou saisir une adresse…").0 as isize)),
+            Some(LPARAM(w!("Search or enter an address…").0 as isize)),
         );
         let _ = SetWindowTextW(self.panel, w!("Navigation"));
         self.visible = true;
@@ -231,12 +231,12 @@ impl Picker {
         self.tabs_mode = true;
         self.visible = true;
         self.status.borrow_mut().clear();
-        let _ = SetWindowTextW(self.panel, w!("Onglets ouverts"));
+        let _ = SetWindowTextW(self.panel, w!("Open tabs"));
         SendMessageW(
             self.edit,
             0x1501,
             Some(WPARAM(1)),
-            Some(LPARAM(w!("Rechercher un onglet ouvert…").0 as isize)),
+            Some(LPARAM(w!("Fuzzy-find an open tab…").0 as isize)),
         );
         let _ = SetWindowTextW(self.edit, w!(""));
         self.refresh_tabs(parent, false);
@@ -280,13 +280,13 @@ impl Picker {
             let value = wide(&format!(
                 "{}{}{}{} — {}",
                 if self.tabs.borrow().active() == Some(tab.id) {
-                    "[actif] "
+                    "[active] "
                 } else {
                     ""
                 },
-                if tab.pinned { "[épinglé] " } else { "" },
+                if tab.pinned { "[pinned] " } else { "" },
                 if tab.muted {
-                    "[muet] "
+                    "[muted] "
                 } else if tab.audible {
                     "[audio] "
                 } else {
@@ -454,7 +454,7 @@ impl Picker {
             r.right - p(24),
             p(28),
             if self.tabs_mode {
-                "WINARCHY BROWSER › Onglets ouverts"
+                "WINARCHY BROWSER › Open tabs"
             } else {
                 "WINARCHY BROWSER › Navigation"
             },
@@ -481,19 +481,19 @@ impl Picker {
                 r.right - p(24),
                 p(40),
                 if self.tabs_mode {
-                    "Aucun onglet correspondant"
+                    "No matching tabs"
                 } else {
-                    "Aucun résultat local · Entrée pour rechercher"
+                    "No local results · Enter to search"
                 },
                 &self.theme.subtext,
             );
         }
         let status = self.status.borrow();
         let footer = if self.tabs_mode {
-            "Onglets · ↑↓ choisir · Entrée activer · Ctrl+W fermer".into()
+            "Open tabs · ↑↓ select · Enter switch · Ctrl+W close".into()
         } else if status.is_empty() {
             format!(
-                "{} résultats · ↑↓ choisir · Entrée ouvrir",
+                "{} results · ↑↓ select · Enter open",
                 self.suggestions.len()
             )
         } else {
@@ -530,7 +530,7 @@ impl Picker {
             }),
         );
         let old = SelectObject(item.hDC, self.font.into());
-        let category = if s.bookmarked { "FAVORI" } else { "HISTORIQUE" };
+        let category = if s.bookmarked { "BOOKMARK" } else { "HISTORY" };
         let label = |left, top, right, h, value: &str, c: &str| {
             text(
                 item.hDC,
@@ -563,11 +563,7 @@ impl Picker {
                 r.top + p(2),
                 r.right - p(140),
                 p(22),
-                if s.bookmarked {
-                    "Favoris"
-                } else {
-                    "Historique"
-                },
+                if s.bookmarked { "Bookmarks" } else { "History" },
                 &self.theme.subtext,
             );
         }
@@ -641,7 +637,7 @@ impl Picker {
             "{}{}{}",
             if tab.pinned { "◆ " } else { "" },
             if tab.muted {
-                "muet "
+                "muted "
             } else if tab.audible {
                 "♫ "
             } else {
@@ -670,7 +666,7 @@ impl Picker {
             &self.theme.accent,
         );
         let url = if tab.home {
-            "Accueil"
+            "Home"
         } else {
             tab.url
                 .strip_prefix("https://")

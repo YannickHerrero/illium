@@ -181,7 +181,7 @@ impl LeaderPanel {
             text(
                 dc,
                 box_at(r.right - p(122), p(12), p(100), p(40)),
-                &format!("{} touches", menu.entries().len()),
+                &format!("{} keys", menu.entries().len()),
                 &t.subtext,
             );
             let columns = if r.right >= p(680) { 2 } else { 1 };
@@ -233,9 +233,9 @@ impl LeaderPanel {
                 &t.subtext,
             );
             let help = if r.right >= p(680) {
-                "⌫ retour · Échap fermer"
+                "⌫ back · Esc close"
             } else {
-                "⌫ retour · Esc"
+                "⌫ back · Esc"
             };
             text(
                 dc,

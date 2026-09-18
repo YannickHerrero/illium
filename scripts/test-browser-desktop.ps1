@@ -236,7 +236,7 @@ try {
         Send-LeaderKeys 'n'
         if ((Leader-Title) -notmatch 'Navigation') { throw 'Navigation submenu missing' }
         Send-LeaderKeys '{BACKSPACE}'
-        if ((Leader-Title) -notmatch 'Principal') { throw 'Backspace did not return to root' }
+        if ((Leader-Title) -notmatch 'Root') { throw 'Backspace did not return to root' }
         Send-LeaderKeys '{ESC}'
         Assert-LeaderClosed
         if ((Accessible-Value $field) -ne 'sentinel' -or (Accessible-Value $events) -ne $keysBefore) { throw 'Leader keys leaked into the page' }
@@ -364,7 +364,7 @@ try {
         Send-LeaderKeys 'preserved across tabs'
         Send-LeaderKeys '^b'
         Send-LeaderKeys 't'
-        Wait-For { (Window-Title) -match 'Nouvel onglet' } 'Leader new-tab action failed'
+        Wait-For { (Window-Title) -match 'New tab' } 'Leader new-tab action failed'
         Assert-TabViews 2 0
         $secondUrl = [Uri]::new([Uri]$TestUrl, 'tabs.html?child=1').AbsoluteUri
         [void][BrowserTest]::SetText($edit,0x000C,[IntPtr]::Zero,$secondUrl)
@@ -421,13 +421,13 @@ try {
         Send-LeaderKeys '^+t'
         Assert-TabViews 3 1
         Send-LeaderKeys '^+a'
-        Wait-For { (Selected-TabLabel).Contains('[muet]') } 'Reopen did not restore the muted state'
+        Wait-For { (Selected-TabLabel).Contains('[muted]') } 'Reopen did not restore the muted state'
         Send-LeaderKeys '^w'
         Assert-TabViews 2 1
         Send-LeaderKeys '^w'
         Assert-TabViews 1 1
         Send-LeaderKeys '^w'
-        Wait-For { (Window-Title) -match 'Nouvel onglet' } 'Closing the final tab did not create an empty home'
+        Wait-For { (Window-Title) -match 'New tab' } 'Closing the final tab did not create an empty home'
         Assert-TabViews 1 0
         Send-LeaderKeys '^+t'
         Assert-TabViews 2 1

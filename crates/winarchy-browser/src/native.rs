@@ -317,7 +317,7 @@ unsafe fn leader_key(vk: u32, scan: u32, down: bool, repeat: bool, from_hook: bo
                 input.state.cancel();
                 input.consumed.clear();
                 app.leader_panel.borrow_mut().notice = Some((
-                    "Interception clavier indisponible".into(),
+                    "Keyboard capture unavailable".into(),
                     Instant::now() + std::time::Duration::from_millis(1800),
                 ));
             }
@@ -513,7 +513,7 @@ unsafe fn create_tab(target: &str, keep_picker: bool) -> AppResult<TabId> {
 unsafe fn close_tab(id: TabId) -> AppResult<()> {
     let app = snapshot().ok_or("Browser closed")?;
     if app.tabs.borrow().get(id).is_some_and(|tab| tab.pinned) {
-        leader_notice(&app, "Désépinglez cet onglet avant de le fermer");
+        leader_notice(&app, "Unpin this tab before closing it");
         return Ok(());
     }
     if app.tabs.borrow().entries().len() == 1 {
@@ -555,9 +555,9 @@ unsafe fn bookmark(app: &App) -> AppResult<()> {
         if app.picker.borrow().visible && !app.picker.borrow().tabs_mode {
             app.picker.borrow_mut().refresh(app.hwnd);
             app.picker.borrow().status(if added {
-                "★ Favori ajouté"
+                "★ Bookmark added"
             } else {
-                "★ Déjà dans les favoris"
+                "★ Already bookmarked"
             });
         }
     }
@@ -655,7 +655,7 @@ unsafe fn execute_leader(
         return Ok(());
     }
     if app.home {
-        leader_notice(app, "Ouvrez une page pour utiliser cette action");
+        leader_notice(app, "Open a page to use this action");
         return Ok(());
     }
     match action {
@@ -700,7 +700,7 @@ unsafe fn execute_leader(
                     if let Err(error) = result {
                         eprintln!("Cannot open find: {error}");
                         if let Some(app) = snapshot() {
-                            leader_notice(&app, "Recherche indisponible sur ce runtime");
+                            leader_notice(&app, "Find unavailable in this runtime");
                         }
                     }
                     Ok(())
@@ -709,7 +709,7 @@ unsafe fn execute_leader(
         }
         Action::CopyUrl => {
             copy_url(app.hwnd, &take_string(|s| web.Source(s))?)?;
-            leader_notice(app, "URL copiée");
+            leader_notice(app, "URL copied");
         }
         Action::HardReload => {
             web.CallDevToolsProtocolMethod(
@@ -719,7 +719,7 @@ unsafe fn execute_leader(
                     if let Err(error) = result {
                         eprintln!("Cannot hard reload: {error}");
                         if let Some(app) = snapshot() {
-                            leader_notice(&app, "Rechargement sans cache échoué");
+                            leader_notice(&app, "Reload without cache failed");
                         }
                     }
                     Ok(())
@@ -746,9 +746,9 @@ unsafe fn execute_leader(
             leader_notice(
                 app,
                 if enabled {
-                    "Blocage activé pour ce site"
+                    "Blocking enabled for this site"
                 } else {
-                    "Blocage désactivé pour ce site"
+                    "Blocking disabled for this site"
                 },
             );
         }
@@ -1216,12 +1216,17 @@ pub fn run(
         }
         let (tx, rx) = std::sync::mpsc::channel();
         let profile = wide(&profile.to_string_lossy());
+        // Keep WebView-owned UI (find, context menus, dialogs) in English too.
+        // This does not translate page content or change the system language.
+        let options: ICoreWebView2EnvironmentOptions =
+            CoreWebView2EnvironmentOptions::default().into();
+        options.SetLanguage(w!("en-US"))?;
         CreateCoreWebView2EnvironmentCompletedHandler::wait_for_async_operation(
             Box::new(move |handler| {
                 CreateCoreWebView2EnvironmentWithOptions(
                     PCWSTR::null(),
                     PCWSTR(profile.as_ptr()),
-                    None,
+                    &options,
                     &handler,
                 )
                 .map_err(webview2_com::Error::WindowsError)
@@ -1392,7 +1397,7 @@ pub fn run(
                             execute_leader(action, &current, &env, &blocker, &filters)
                         {
                             eprintln!("Leader action failed: {error}");
-                            leader_notice(&app, "Action indisponible ou échouée");
+                            leader_notice(&app, "Action unavailable or failed");
                         }
                     }
                 }
@@ -1451,7 +1456,7 @@ pub fn run(
                     && let Err(error) = bookmark(&app)
                 {
                     eprintln!("Cannot save bookmark: {error}");
-                    picker.borrow().status("Impossible d’enregistrer le favori");
+                    picker.borrow().status("Unable to save bookmark");
                 }
                 continue;
             }

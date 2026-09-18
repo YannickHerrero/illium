@@ -82,12 +82,12 @@ macro_rules! entries {
 impl Menu {
     pub fn title(self) -> &'static str {
         match self {
-            Self::Root => "Principal",
+            Self::Root => "Root",
             Self::Navigation => "Navigation",
             Self::Page => "Page",
             Self::Zoom => "Zoom",
-            Self::Blocking => "Blocage",
-            Self::Tabs => "Onglets",
+            Self::Blocking => "Blocking",
+            Self::Tabs => "Tabs",
         }
     }
     pub fn prefix(self) -> &'static str {
@@ -103,44 +103,44 @@ impl Menu {
     pub fn entries(self) -> &'static [Entry] {
         match self {
             Self::Root => entries! {
-                'l', "Adresse / recherche", Action(Address);
-                'h', "Page précédente", Action(Back);
-                'f', "Rechercher dans la page", Action(Find);
-                'r', "Recharger", Action(Reload);
-                'd', "Ajouter aux favoris", Action(Bookmark);
-                't', "Nouvel onglet", Action(NewTab);
-                'w', "Fermer l’onglet", Action(CloseTab);
-                'j', "Onglet précédent", Action(PreviousTab);
-                'k', "Onglet suivant", Action(NextTab);
-                'o', "Onglets", Menu(Tabs);
+                'l', "Address / search", Action(Address);
+                'h', "Back", Action(Back);
+                'f', "Find in page", Action(Find);
+                'r', "Reload", Action(Reload);
+                'd', "Bookmark this page", Action(Bookmark);
+                't', "New tab", Action(NewTab);
+                'w', "Close tab", Action(CloseTab);
+                'j', "Previous tab", Action(PreviousTab);
+                'k', "Next tab", Action(NextTab);
+                'o', "Tabs", Menu(Tabs);
                 'n', "Navigation", Menu(Navigation);
                 'p', "Page", Menu(Page);
                 'z', "Zoom", Menu(Zoom);
-                'b', "Blocage", Menu(Blocking);
+                'b', "Blocking", Menu(Blocking);
             },
             Self::Navigation => entries! {
-                'p', "Page précédente", Action(Back);
-                's', "Page suivante", Action(Forward);
-                'a', "Accueil", Action(Home);
+                'p', "Back", Action(Back);
+                's', "Forward", Action(Forward);
+                'a', "Home", Action(Home);
             },
             Self::Page => entries! {
-                'u', "Copier l’URL", Action(CopyUrl);
-                'r', "Recharger sans cache", Action(HardReload);
-                's', "Arrêter le chargement", Action(Stop);
-                'i', "Outils de développement", Action(DevTools);
+                'u', "Copy URL", Action(CopyUrl);
+                'r', "Reload without cache", Action(HardReload);
+                's', "Stop loading", Action(Stop);
+                'i', "Developer tools", Action(DevTools);
             },
             Self::Zoom => entries! {
-                '+', "Agrandir (+ ou =)", Action(ZoomIn);
-                '-', "Réduire", Action(ZoomOut);
-                '0', "Réinitialiser à 100 %", Action(ZoomReset);
+                '+', "Zoom in (+ or =)", Action(ZoomIn);
+                '-', "Zoom out", Action(ZoomOut);
+                '0', "Reset to 100%", Action(ZoomReset);
             },
-            Self::Blocking => entries! { 'b', "Activer / désactiver ce site", Action(Blocking); },
+            Self::Blocking => entries! { 'b', "Toggle blocking for this site", Action(Blocking); },
             Self::Tabs => entries! {
-                'o', "Sélectionner un onglet", Action(SelectTab);
-                'r', "Rouvrir l’onglet fermé", Action(ReopenTab);
-                'd', "Dupliquer l’onglet", Action(DuplicateTab);
-                'e', "Épingler / désépingler", Action(PinTab);
-                'm', "Couper / rétablir le son", Action(MuteTab);
+                'o', "Open tabs", Action(SelectTab);
+                'r', "Reopen closed tab", Action(ReopenTab);
+                'd', "Duplicate tab", Action(DuplicateTab);
+                'e', "Pin / unpin tab", Action(PinTab);
+                'm', "Mute / unmute tab", Action(MuteTab);
             },
         }
     }

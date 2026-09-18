@@ -21,15 +21,32 @@ unsafe fn tick(hwnd: HWND) {
     let Some(app) = snapshot() else {
         return;
     };
-    let (visible, tabs_mode, edit, list) = {
+    let (visible, tabs_mode, panel, edit, list) = {
         let picker = app.picker.borrow();
-        (picker.visible, picker.tabs_mode, picker.edit, picker.list)
+        (
+            picker.visible,
+            picker.tabs_mode,
+            picker.panel,
+            picker.edit,
+            picker.list,
+        )
     };
     let count = SendMessageW(list, LB_GETCOUNT, None, None).0;
     let mut advance = false;
     match stage {
         0 if visible && tabs_mode && count == 2 => {
-            // The queued query refresh must not reenter a borrowed picker.
+            let mut title = [0u16; 128];
+            let length = GetWindowTextW(panel, &mut title) as usize;
+            let title = String::from_utf16_lossy(&title[..length]);
+            if title != "Open tabs" {
+                PROBE.with(|probe| {
+                    probe.borrow_mut().error =
+                        Some(format!("Expected English tab palette title, got {title:?}"))
+                });
+                let _ = PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0));
+                return;
+            }
+            // Exercise queued query refreshes after inactive badges have painted.
             let _ = SetWindowTextW(edit, w!("no-tab-can-match-this"));
             advance = true;
         }

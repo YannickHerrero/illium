@@ -17,7 +17,7 @@ pub struct Tab {
 impl Tab {
     pub fn label(&self) -> &str {
         if self.home {
-            "Nouvel onglet"
+            "New tab"
         } else if self.title.is_empty() {
             &self.url
         } else {
@@ -26,10 +26,10 @@ impl Tab {
     }
     pub fn age(&self, now: u64) -> String {
         match now.saturating_sub(self.last_active) {
-            0..60 => "maintenant".into(),
-            age @ 60..3600 => format!("{} min", age / 60),
-            age @ 3600..86400 => format!("{} h", age / 3600),
-            age => format!("{} j", age / 86400),
+            0..60 => "now".into(),
+            age @ 60..3600 => format!("{}m", age / 60),
+            age @ 3600..86400 => format!("{}h", age / 3600),
+            age => format!("{}d", age / 86400),
         }
     }
 }
@@ -208,7 +208,7 @@ mod tests {
         let closed = tabs.recently_closed().unwrap();
         assert!(closed.muted);
         assert_eq!(closed.title, "Saved page");
-        assert_eq!(closed.age(220), "2 min");
+        assert_eq!(closed.age(220), "2m");
         assert_eq!(tabs.search("same").len(), 11);
     }
     #[test]

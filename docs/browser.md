@@ -49,6 +49,14 @@ The field suggests up to eight local results, matching case-insensitive ordered 
 
 `Ctrl+D` adds the current page to favorites without opening the search field or moving focus. Repeating it does not remove or duplicate the bookmark. Favorites and history share the same fuzzy results list, with each URL shown only once. An already-open home refreshes its data when it regains focus. Successful top-level web navigations record the title, URL and last-visit timestamp; history is deduplicated and limited to 500 entries. History rows show relative visit ages (minutes, hours, days), calculated when painted without a background timer. Older libraries remain readable: entries without a timestamp show their title until revisited. Data is stored as plain JSON in `browser/library.json`; embedded URL username/password credentials are removed, but paths and query strings remain. There is no private browsing mode yet. Close the browser and remove this file to erase history and bookmarks. Updates are merged under a file lock across windows; no idle polling/indexer is added.
 
+## UI language
+
+All browser-owned UI is English: URL/tab palettes, leader menus, tab states,
+history age labels, confirmations and errors. The WebView2 environment also
+requests `en-US` for its built-in UI, including find and context menus. Website
+content and page titles are not translated, and the Windows system language is
+not modified. OS-owned dialogs may still follow Windows language settings.
+
 ## Controls
 
 | Input | Action |
