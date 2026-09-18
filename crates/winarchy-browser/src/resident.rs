@@ -40,6 +40,13 @@ pub fn log(message: &str) {
 }
 pub fn run() -> Result<(), String> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.as_slice() == ["--demo"] {
+        // Dedicated process: never contact the resident or open the normal profile.
+        let data = winarchy_browser::demo::DemoData::new().map_err(|e| e.to_string())?;
+        return native::run_demo(data.path())
+            .map(|_| ())
+            .map_err(|e| e.to_string());
+    }
     if args.first().is_some_and(|a| a == "--standalone") {
         return native::run(&args[1..].join(" "), false, None, |_| {})
             .map(|_| ())
@@ -49,7 +56,7 @@ pub fn run() -> Result<(), String> {
     let control = args.as_slice() == ["--status"] || args.as_slice() == ["--quit"];
     if args.first().is_some_and(|a| a.starts_with("--")) && !serve && !control {
         return Err(
-            "Usage: winarchy-browser [URL | --serve | --standalone [URL] | --status | --quit]"
+            "Usage: winarchy-browser [URL | --serve | --standalone [URL] | --demo | --status | --quit]"
                 .into(),
         );
     }

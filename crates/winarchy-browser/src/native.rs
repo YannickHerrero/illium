@@ -1116,27 +1116,43 @@ impl Drop for Apartment {
     }
 }
 
+pub fn run_demo(data: &std::path::Path) -> AppResult<Exit> {
+    run_inner("", false, None, |_| {}, Some(data))
+}
 pub fn run(
     input: &str,
     hidden: bool,
     requests: Option<&std::sync::mpsc::Receiver<Request>>,
     ready: impl FnOnce(u32),
 ) -> AppResult<Exit> {
+    run_inner(input, hidden, requests, ready, None)
+}
+fn run_inner(
+    input: &str,
+    hidden: bool,
+    requests: Option<&std::sync::mpsc::Receiver<Request>>,
+    ready: impl FnOnce(u32),
+    demo: Option<&std::path::Path>,
+) -> AppResult<Exit> {
     unsafe {
         let started = Instant::now();
         let target = address(input);
         let start_home = target == "about:blank";
         let home = winarchy_theme::config_home();
-        let filters = home.join("browser");
+        let filters = demo.unwrap_or(&home).join("browser");
         std::fs::create_dir_all(&filters)?;
         let blocker = Rc::new(RefCell::new(Blocker::load(&filters)?));
         let library = Rc::new(RefCell::new(Library::load(&filters)?));
         eprintln!("metric filters_ready_ms={}", started.elapsed().as_millis());
         let theme = winarchy_theme::Theme::current(&home);
-        let profile = std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .ok_or("LOCALAPPDATA is missing")?
-            .join("Winarchy/browser/profile");
+        let profile = if let Some(data) = demo {
+            data.join("profile")
+        } else {
+            std::env::var_os("LOCALAPPDATA")
+                .map(PathBuf::from)
+                .ok_or("LOCALAPPDATA is missing")?
+                .join("Winarchy/browser/profile")
+        };
         std::fs::create_dir_all(&profile)?;
         CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
         let _apartment = Apartment;
@@ -1221,6 +1237,11 @@ pub fn run(
         let options: ICoreWebView2EnvironmentOptions =
             CoreWebView2EnvironmentOptions::default().into();
         options.SetLanguage(w!("en-US"))?;
+        if demo.is_some() {
+            options.SetAdditionalBrowserArguments(w!(
+                "--disable-background-networking --disable-sync --no-first-run"
+            ))?;
+        }
         CreateCoreWebView2EnvironmentCompletedHandler::wait_for_async_operation(
             Box::new(move |handler| {
                 CreateCoreWebView2EnvironmentWithOptions(
@@ -1281,6 +1302,13 @@ pub fn run(
                 LPARAM(0),
             );
         })?;
+        if demo.is_some() {
+            SetPropW(
+                hwnd,
+                w!("WinarchyDemoReady"),
+                Some(HANDLE(1usize as *mut _)),
+            )?;
+        }
         let mut msg = MSG::default();
         loop {
             let result = GetMessageW(&mut msg, None, 0, 0).0;

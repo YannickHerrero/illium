@@ -5948,6 +5948,7 @@ dependencies = [
  "adblock",
  "serde",
  "serde_json",
+ "tempfile",
  "url",
  "webview2-com",
  "winarchy-ipc",
