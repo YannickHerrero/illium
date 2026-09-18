@@ -96,7 +96,9 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                         return LRESULT(1);
                     }
                     let mut consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner());
-                    if !consumed[k.vkCode as usize]
+                    // Only resize repeats: toggles and other actions stay one-shot.
+                    if (!consumed[k.vkCode as usize]
+                        || matches!(b.command, crate::command::Command::Resize { .. }))
                         && tx.send(Event::Command(b.command.clone(), None)).is_err()
                     {
                         drop(consumed);

@@ -21,6 +21,11 @@ pub enum Command {
     Close,
     Focus(Direction),
     Move(Direction),
+    /// Change a tiled split by signed percentage points of its available space.
+    Resize {
+        axis: Axis,
+        delta: i32,
+    },
     MoveWorkspace(u8, bool),
     Tile,
     Float,
@@ -96,6 +101,19 @@ impl FromStr for Command {
             ["window", "close"] => Self::Close,
             ["window", "focus", d] => Self::Focus(dir(d)?),
             ["window", "move", d] => Self::Move(dir(d)?),
+            ["window", "resize", axis, amount] => {
+                let axis = match *axis {
+                    "--width" => Axis::Width,
+                    "--height" => Axis::Height,
+                    _ => return Err("resize axis must be --width or --height".into()),
+                };
+                let delta = amount.strip_suffix('%')
+                    .filter(|s| s.starts_with(['+', '-']))
+                    .and_then(|s| s.parse::<i32>().ok())
+                    .filter(|n| *n != 0 && (-100..=100).contains(n))
+                    .ok_or("resize requires a signed integer percentage from -100% to +100%, excluding zero")?;
+                Self::Resize { axis, delta }
+            }
             ["window", "move-workspace", n] => Self::MoveWorkspace(ws(n)?, false),
             ["window", "move-workspace", n, "--follow"] => Self::MoveWorkspace(ws(n)?, true),
             ["window", "set-tiling"] => Self::Tile,
@@ -173,6 +191,39 @@ mod tests {
             "app Shot",
         ] {
             assert!(s.parse::<Command>().is_err(), "{s}");
+        }
+    }
+    #[test]
+    fn resize() {
+        for (flag, axis) in [("--width", Axis::Width), ("--height", Axis::Height)] {
+            for delta in [-100, -5, 5, 100] {
+                let command = Command::Resize { axis, delta };
+                assert_eq!(
+                    format!("window resize {flag} {delta:+}%").parse(),
+                    Ok(command.clone())
+                );
+                let json = serde_json::to_string(&command).unwrap();
+                assert_eq!(serde_json::from_str::<Command>(&json).unwrap(), command);
+            }
+        }
+        for s in [
+            "",
+            "--width",
+            "--depth +5%",
+            "--width 5%",
+            "--width +0%",
+            "--width +101%",
+            "--height -101%",
+            "--width +5",
+            "--width +1.5%",
+            "--width +5% --height +5%",
+            "--width +999999999999%",
+            "--width NaN",
+        ] {
+            assert!(
+                format!("window resize {s}").parse::<Command>().is_err(),
+                "{s}"
+            );
         }
     }
     #[test]

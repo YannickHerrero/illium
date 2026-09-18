@@ -19,7 +19,7 @@ mod terminal;
 use crate::{
     command::Command,
     config::Config,
-    layout::{Rect, fibonacci, neighbor},
+    layout::{Rect, neighbor},
     model::{Client, Model},
     state::{Placement, State},
 };
@@ -236,6 +236,29 @@ impl Manager {
         }
         r
     }
+    /// Membership includes generations so reused HWNDs reset the layout too.
+    fn sync_splits(&mut self) -> Vec<isize> {
+        let mut active = Vec::new();
+        for workspace in 1..=9 {
+            let members: Vec<_> = self
+                .model
+                .clients
+                .iter()
+                .filter(|c| {
+                    c.workspace == workspace
+                        && !c.floating
+                        && !c.fullscreen
+                        && !native::minimized(c.id)
+                })
+                .map(|c| (c.id, c.generation))
+                .collect();
+            if workspace == self.model.active {
+                active = members.iter().map(|(id, _)| *id).collect();
+            }
+            self.model.splits[usize::from(workspace - 1)].sync(members);
+        }
+        active
+    }
     fn layout(&mut self) {
         self.dirty = true;
         self.prune();
@@ -247,19 +270,8 @@ impl Manager {
             c.hidden = !visible;
         }
         let area = self.area();
-        let ids: Vec<_> = self
-            .model
-            .clients
-            .iter()
-            .filter(|c| {
-                c.workspace == self.model.active
-                    && !c.floating
-                    && !c.fullscreen
-                    && !native::minimized(c.id)
-            })
-            .map(|c| c.id)
-            .collect();
-        let rs = fibonacci(
+        let ids = self.sync_splits();
+        let rs = self.model.splits[usize::from(self.model.active - 1)].layout(
             area,
             ids.len(),
             dpi::scale(area, self.config.wm.gap),
@@ -517,6 +529,33 @@ impl Manager {
                         } else {
                             self.model.focused = Some(other);
                             native::focus(other, true);
+                        }
+                    }
+                }
+            }
+            Command::Resize { axis, delta } => {
+                // IPC also accepts serialized Commands, bypassing the text parser.
+                if delta == 0 || !(-100..=100).contains(&delta) {
+                    return Err("resize delta must be -100..100 and nonzero".into());
+                }
+                let ids = self.sync_splits();
+                if let Some(index) = ids.iter().position(|id| Some(*id) == self.model.focused) {
+                    let area = self.area();
+                    let gap = dpi::scale(area, self.config.wm.gap);
+                    let outer = dpi::scale(area, self.config.wm.outer_gap);
+                    let minimum = dpi::scale(area, 32).max(1);
+                    let splits = &mut self.model.splits[usize::from(self.model.active - 1)];
+                    let mut candidate = splits.clone();
+                    if candidate.resize(index, axis, delta) {
+                        let before = splits.layout(area, ids.len(), gap, outer);
+                        let after = candidate.layout(area, ids.len(), gap, outer);
+                        // Protect every descendant, not just the focused leaf. Existing
+                        // tiny tiles may grow, but cannot be shrunk further by a resize.
+                        if before.iter().zip(&after).all(|(a, b)| {
+                            b.w >= a.w.min(minimum) && b.h >= a.h.min(minimum)
+                        }) {
+                            *splits = candidate;
+                            self.layout();
                         }
                     }
                 }

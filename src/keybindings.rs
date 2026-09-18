@@ -75,6 +75,15 @@ pub fn describe(command: &str) -> String {
         Command::Close => "Close window".into(),
         Command::Focus(d) => format!("Focus {}", direction(d)),
         Command::Move(d) => format!("Move window {}", direction(d)),
+        Command::Resize { axis, delta } => format!(
+            "{} window {} by {}%",
+            if delta > 0 { "Increase" } else { "Decrease" },
+            match axis {
+                crate::command::Axis::Width => "width",
+                crate::command::Axis::Height => "height",
+            },
+            delta.unsigned_abs(),
+        ),
         Command::MoveWorkspace(n, true) => format!("Move window to workspace {n} and follow"),
         Command::MoveWorkspace(n, false) => format!("Move window to workspace {n}"),
         Command::Tile => "Set tiling".into(),
