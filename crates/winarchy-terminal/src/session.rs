@@ -36,8 +36,20 @@ pub struct Session {
     pub palette: Arc<Mutex<Palette>>,
     input: SyncSender<Vec<u8>>,
     control: Signal,
+    demo: Option<crate::demo::Scene>,
 }
 impl Session {
+    /// A real terminal model, but deliberately no PTY, shell or worker threads.
+    pub fn demo(scene: crate::demo::Scene, size: Size, palette: Palette) -> Self {
+        let (input, _) = mpsc::sync_channel(1);
+        Self {
+            model: Arc::new(Mutex::new(scene.model(size))),
+            palette: Arc::new(Mutex::new(palette)),
+            input,
+            control: Arc::new((Mutex::new(Control::default()), Condvar::new())),
+            demo: Some(scene),
+        }
+    }
     pub fn start(config: Config, size: Size, palette: Palette, wake: Wake) -> Self {
         let mut model = Model::new(size, config.scrollback);
         model.configure(config.scrollback, config.osc52_copy);
@@ -50,6 +62,7 @@ impl Session {
             palette: palette.clone(),
             input: input.clone(),
             control: control.clone(),
+            demo: None,
         };
         std::thread::spawn(move || {
             let run = || -> Result<(), String> {
@@ -204,6 +217,9 @@ impl Session {
         pending
     }
     pub fn send(&self, bytes: Vec<u8>) -> Result<(), &'static str> {
+        if self.demo.is_some() {
+            return Ok(());
+        }
         if bytes.len() > 65536 {
             return Err("Input exceeds 64 KiB; paste smaller chunks");
         }
@@ -212,6 +228,10 @@ impl Session {
             .map_err(|_| "Terminal input queue is full or WSL is unavailable")
     }
     pub fn resize(&self, size: Size) {
+        if let Some(scene) = self.demo {
+            *self.model.lock().unwrap() = scene.model(size);
+            return;
+        }
         self.model.lock().unwrap().term.resize(size);
         self.control.0.lock().unwrap().size = Some(size);
         self.control.1.notify_one();

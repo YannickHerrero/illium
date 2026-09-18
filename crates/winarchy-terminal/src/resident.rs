@@ -18,6 +18,17 @@ fn request(pipe: &str, command: &str) -> Result<String, String> {
 }
 pub fn run() -> Result<(), String> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if let [flag, scene] = args.as_slice()
+        && flag == "--demo"
+    {
+        let scene = match scene.as_str() {
+            "build" => winarchy_terminal::demo::Scene::Build,
+            "fetch" => winarchy_terminal::demo::Scene::Fetch,
+            _ => return Err("Expected --demo build or --demo fetch".into()),
+        };
+        // Never forward a demo to the normal resident or start a user's shell.
+        return native::run_demo(scene);
+    }
     let command = match args.as_slice() {
         [] => "open",
         [arg] => match arg.as_str() {

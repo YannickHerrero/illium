@@ -77,6 +77,7 @@ struct App {
     palette: Palette,
     thread: u32,
     resident: bool,
+    demo: Option<winarchy_terminal::demo::Scene>,
     output: Arc<WakeEvent>,
 }
 fn post(thread: u32, message: u32, w: usize, l: isize) {
@@ -136,11 +137,23 @@ unsafe extern "system" fn procedure(hwnd: HWND, message: u32, w: WPARAM, l: LPAR
         }
     }
 }
+pub fn run_demo(scene: winarchy_terminal::demo::Scene) -> Result<(), String> {
+    run_inner(false, true, None, |_| {}, Some(scene))
+}
 pub fn run(
     resident: bool,
     open: bool,
     requests: Option<Receiver<Request>>,
     ready: impl FnOnce(u32),
+) -> Result<(), String> {
+    run_inner(resident, open, requests, ready, None)
+}
+fn run_inner(
+    resident: bool,
+    open: bool,
+    requests: Option<Receiver<Request>>,
+    ready: impl FnOnce(u32),
+    demo: Option<winarchy_terminal::demo::Scene>,
 ) -> Result<(), String> {
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -184,6 +197,7 @@ pub fn run(
         palette,
         thread,
         resident,
+        demo,
         output: Arc::new(WakeEvent::new().map_err(|e| e.to_string())?),
     };
     app.prepare()?;
@@ -457,12 +471,28 @@ impl App {
         });
         // The themed frame already exists and the window is visible BEFORE any
         // PTY/model construction or WSL process launch.
-        window.session = Some(Session::start(
-            window.config.clone(),
-            window.surface.size(),
-            self.palette.clone(),
-            wake,
-        ));
+        window.session = Some(if let Some(scene) = self.demo {
+            title(hwnd, "Winarchy Terminal — Demo");
+            Session::demo(scene, window.surface.size(), self.palette.clone())
+        } else {
+            Session::start(
+                window.config.clone(),
+                window.surface.size(),
+                self.palette.clone(),
+                wake,
+            )
+        });
+        window.schedule();
+        if self.demo.is_some() {
+            unsafe {
+                SetPropW(
+                    hwnd,
+                    w!("WinarchyDemoReady"),
+                    Some(windows::Win32::Foundation::HANDLE(1usize as *mut _)),
+                )
+                .map_err(|e| e.to_string())?;
+            }
+        }
         if self.resident {
             post(self.thread, SPARE, 0, 0);
         }
