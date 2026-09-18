@@ -17,7 +17,7 @@ export component Background inherits Window {
         image-fit: cover;
     }
 }
-export struct StatusItem { kind: string, value: string, icon: image, has-icon: bool, level: int, charging: bool }
+export struct StatusItem { kind: string, value: string, icon: image, has-icon: bool, level: int, charging: bool, hint-id: int }
 component StatusModule inherits Rectangle {
     in property <StatusItem> item;
     in property <color> fg;
@@ -25,6 +25,13 @@ component StatusModule inherits Rectangle {
     in property <color> bg;
     /// Horizontal center of the module in window coordinates, for anchoring a popup.
     callback clicked(length);
+    in property <int> hint-request;
+    callback hint-position(int, int, length);
+    changed hint-request => {
+        if root.hint-request > 0 && root.item.hint-id > 0 {
+            root.hint-position(root.hint-request, root.item.hint-id, root.x + root.width / 2);
+        }
+    }
     property <bool> has-icon: item.has-icon || item.kind == "cpu" || item.kind == "memory";
     property <bool> separator: item.kind == "separator";
     width: layout.preferred-width;
@@ -86,6 +93,8 @@ export component Bar inherits Window {
     callback workspace(int);
     /// A module was clicked: its kind and horizontal center in the bar.
     callback module(string, length);
+    in property <int> hint-request;
+    callback hint-position(int, int, length);
     /// Shared theme/application opacity affects only the base surface.
     in property <float> background-opacity: 1;
     /// Clicking the bar can still hide its surface completely.
@@ -100,12 +109,22 @@ export component Bar inherits Window {
     center-group := HorizontalLayout {
         x: (root.width - self.width) / 2; height: root.height; width: self.preferred-width;
         padding-top: 4px; padding-bottom: 4px; spacing: 16px;
-        for item in root.center-items: StatusModule { item: item; fg: root.fg; muted: root.muted; bg: root.bg; clicked(x) => { root.module(item.kind, center-group.x + x); } }
+        for item in root.center-items: StatusModule {
+            item: item; fg: root.fg; muted: root.muted; bg: root.bg;
+            hint-request: root.hint-request;
+            hint-position(epoch, index, x) => { root.hint-position(epoch, index, center-group.x + x); }
+            clicked(x) => { root.module(item.kind, center-group.x + x); }
+        }
     }
     left-group := HorizontalLayout {
         x: 0; height: root.height; width: self.preferred-width;
         padding-left: 4px; padding-top: 4px; padding-bottom: 4px; spacing: 8px;
-        for item in root.before-workspace-items: StatusModule { item: item; fg: root.fg; muted: root.muted; bg: root.bg; clicked(x) => { root.module(item.kind, left-group.x + x); } }
+        for item in root.before-workspace-items: StatusModule {
+            item: item; fg: root.fg; muted: root.muted; bg: root.bg;
+            hint-request: root.hint-request;
+            hint-position(epoch, index, x) => { root.hint-position(epoch, index, left-group.x + x); }
+            clicked(x) => { root.module(item.kind, left-group.x + x); }
+        }
         for n in root.workspaces: Rectangle {
             width: 25px;
             // Inactive workspaces reveal the single base surface, avoiding a
@@ -114,12 +133,47 @@ export component Bar inherits Window {
             Text { text: "\{n}"; color: root.active == n ? root.bg : root.fg; horizontal-alignment: center; vertical-alignment: center; }
             TouchArea { clicked => { root.workspace(n); } }
         }
-        for item in root.left-items: StatusModule { item: item; fg: root.fg; muted: root.muted; bg: root.bg; clicked(x) => { root.module(item.kind, left-group.x + x); } }
+        for item in root.left-items: StatusModule {
+            item: item; fg: root.fg; muted: root.muted; bg: root.bg;
+            hint-request: root.hint-request;
+            hint-position(epoch, index, x) => { root.hint-position(epoch, index, left-group.x + x); }
+            clicked(x) => { root.module(item.kind, left-group.x + x); }
+        }
     }
     right-group := HorizontalLayout {
         x: root.width - self.width; height: root.height; width: self.preferred-width;
         padding-right: 12px; padding-top: 4px; padding-bottom: 4px; spacing: 16px;
-        for item in root.right-items: StatusModule { item: item; fg: root.fg; muted: root.muted; bg: root.bg; clicked(x) => { root.module(item.kind, right-group.x + x); } }
+        for item in root.right-items: StatusModule {
+            item: item; fg: root.fg; muted: root.muted; bg: root.bg;
+            hint-request: root.hint-request;
+            hint-position(epoch, index, x) => { root.hint-position(epoch, index, right-group.x + x); }
+            clicked(x) => { root.module(item.kind, right-group.x + x); }
+        }
+    }
+}
+export struct BarHint { center: length, label: string }
+export component BarHints inherits Window {
+    no-frame: true;
+    in property <length> surface-width;
+    width: surface-width;
+    height: 26px;
+    background: transparent;
+    in property <color> bg;
+    in property <color> fg;
+    in property <color> accent;
+    in property <int> selected;
+    in property <[BarHint]> hints;
+    for hint[index] in root.hints: Rectangle {
+        x: max(0px, min(root.width - self.width, hint.center - self.width / 2));
+        y: 1px; width: 24px; height: 24px;
+        border-radius: 5px; border-width: 1px; border-color: root.accent;
+        background: root.selected == index ? root.accent : root.bg;
+        Text {
+            text: hint.label;
+            color: root.selected == index ? root.bg : root.fg;
+            font-size: 13px; font-weight: 700;
+            horizontal-alignment: center; vertical-alignment: center;
+        }
     }
 }
 export component Popup inherits Window {

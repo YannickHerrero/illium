@@ -109,6 +109,7 @@ pub fn describe(command: &str) -> String {
         Command::WallpaperPicker => "Wallpaper picker".into(),
         Command::WallpaperNext => "Next wallpaper".into(),
         Command::Keybindings => "Keybindings".into(),
+        Command::BarHints => "Bar applet hints".into(),
         Command::Dictate => "Dictate while held".into(),
         Command::Wallpaper(None) => "Solid background".into(),
         Command::Wallpaper(Some(name)) => format!("Wallpaper {name}"),
@@ -249,7 +250,7 @@ mod tests {
     #[test]
     fn defaults_are_unchanged_and_ordered() {
         let rows = rows(DEFAULTS, DEFAULTS);
-        assert_eq!(rows.len(), 57);
+        assert_eq!(rows.len(), 58);
         assert!(rows.iter().all(|r| !r.changed()));
         assert_eq!(rows[0].description, "Launcher");
         assert_eq!(rows[0].label(), "Alt + Space");

@@ -65,6 +65,7 @@ pub struct Runtime {
     /// Name of the applet whose view is shown.
     pub open: Option<String>,
     pending: Option<Rect>,
+    keyboard_focus: bool,
     tx: EventSender,
     generation: u64,
 }
@@ -74,6 +75,7 @@ impl Runtime {
             entries: vec![],
             open: None,
             pending: None,
+            keyboard_focus: false,
             tx,
             generation: 0,
         }
@@ -372,6 +374,11 @@ impl Runtime {
             let _ = instance.hide();
         }
         self.pending = None;
+        self.keyboard_focus = false;
+    }
+    /// Keyboard hint activation may focus even a normally passive applet.
+    pub fn focus_on_arrange(&mut self) {
+        self.keyboard_focus = self.open.is_some();
     }
     /// Positions the view once its native window exists.
     pub fn arrange(&mut self) {
@@ -389,12 +396,15 @@ impl Runtime {
         if shell::id(window) == 0 {
             return;
         }
-        shell::tool(window, !e.applet.manifest.focusable);
+        shell::tool(window, !e.applet.manifest.focusable && !self.keyboard_focus);
         native::position(
             shell::id(window),
             r,
             Some(windows::Win32::UI::WindowsAndMessaging::HWND_TOPMOST),
         );
+        if self.keyboard_focus {
+            native::focus(shell::id(window), false);
+        }
         self.pending = None;
     }
     pub fn owns(&self, id: isize) -> bool {

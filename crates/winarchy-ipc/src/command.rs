@@ -54,6 +54,8 @@ pub enum Command {
     WallpaperNext,
     /// Open the keybindings viewer and editor.
     Keybindings,
+    /// Toggle keyboard hints for status bar applets.
+    BarHints,
     /// Push-to-talk dictation through `winarchy-dictate.exe`: bound to a held
     /// key, the daemon records while it is down; over IPC it toggles.
     Dictate,
@@ -125,6 +127,7 @@ impl FromStr for Command {
             ["launcher", "toggle"] => Self::Launcher,
             ["meta", "toggle"] => Self::Meta,
             ["keybindings", "toggle"] => Self::Keybindings,
+            ["bar", "hints"] => Self::BarHints,
             ["dictate"] => Self::Dictate,
             ["demo"] => Self::Demo,
             ["app", name] if name.chars().all(|c| c.is_ascii_lowercase()) => {
@@ -179,6 +182,7 @@ mod tests {
         assert!("opacity increase extra".parse::<Command>().is_err());
         assert!("opacity set nan".parse::<Command>().is_err());
         assert_eq!("keybindings toggle".parse(), Ok(Command::Keybindings));
+        assert_eq!("bar hints".parse(), Ok(Command::BarHints));
         assert_eq!("dictate".parse(), Ok(Command::Dictate));
         assert_eq!("demo".parse(), Ok(Command::Demo));
         assert!("demo extra".parse::<Command>().is_err());

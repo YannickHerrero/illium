@@ -33,6 +33,36 @@ winarchyctl workspace recent
 
 The bar lists the occupied workspaces plus the active one and highlights the active one; empty workspaces are not shown. Workspaces have a monitor association; focusing a client on a monitor updates that association. Switching workspaces is global, not independently per monitor.
 
+## Status bar applets
+
+**Ctrl+Alt+B** (or `winarchyctl bar hints`) toggles keyboard hints on the active
+workspace's monitor. Release Ctrl/Alt, then press a displayed **1–9** or **A–Z**
+to open that applet. **Left/Right** cycle the highlighted hint; **Enter** opens it.
+The top number row works without Shift on AZERTY (`&`, `é`, etc.); numpad 1–9
+works with Num Lock. Letters do not require Shift.
+
+Badges float below a top bar, or above a bottom bar, in the current theme.
+They label actionable modules from left to right (up to 35); separators,
+unattached window titles and workspace buttons do not receive hints. Workspaces
+retain Alt+1…9. Labels and bar geometry stay frozen during selection, even when
+providers refresh. There is no timeout. Invalid keys are consumed, not typed into
+the previous application.
+
+Selecting hides the hints, opens the same popup as a click, and gives it keyboard
+focus. Existing applet controls remain available (for example arrows for volume,
+and Up/Down then Enter for Wi-Fi). **Escape** closes it and restores the previous
+window; an applet's inner dialog can consume Escape first. While hints are shown,
+Escape or the toggle shortcut cancels. Clicking outside, reconfiguring the bar,
+or changing displays also cancels selection. Custom applets still need to provide
+their own keyboard controls.
+
+Existing keybinding files are not overwritten on upgrade. Add this line under
+`[keybindings]`, then reload with Alt+Shift+R:
+
+```toml
+"Ctrl+Alt+B" = "bar hints"
+```
+
 ## Windows
 
 The first tiled client gets the left half; subsequent clients split the remainder alternately horizontally and vertically. Gaps are configurable. Very small remaining rectangles stack rather than producing negative dimensions; applications can still enforce their own minimum size.

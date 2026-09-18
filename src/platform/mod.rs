@@ -53,6 +53,8 @@ pub enum Event {
     Click(isize),
     /// Empty bar area clicked.
     BarBackground,
+    BarHintPosition(u32, usize, f32),
+    BarHintKey(u32, crate::bar_hints::Input),
     /// An applet provider finished: applet name and its stdout or error.
     AppletData(String, u64, Result<String, String>),
     AppletTraffic {
@@ -86,6 +88,8 @@ struct Manager {
     /// Popup closed by a press on the bar: the module click that follows the
     /// release must not reopen it.
     just_closed: Option<(String, std::time::Instant)>,
+    /// Foreground window before keyboard hints, retained while its applet is open.
+    bar_restore: Option<isize>,
     /// New browser to focus after its final tile geometry has been applied.
     pending_browser_focus: Option<isize>,
     demo: Option<demo::Pending>,
@@ -457,6 +461,11 @@ impl Manager {
         Ok(())
     }
     fn execute(&mut self, c: Command) -> Result<String, String> {
+        if self.shell.hints.opened && !matches!(c, Command::BarHints | Command::Status) {
+            self.shell.hints.close();
+            let restore = self.bar_restore.take();
+            self.restore_focus(restore);
+        }
         if self.prune() {
             self.layout();
         }
@@ -481,6 +490,8 @@ impl Manager {
                 "wallpaper_pending": self.shell.pending_wallpaper(),
                 "wallpaper_error": self.shell.wallpaper_error,
                 "gap": self.config.wm.gap, "launcher": self.shell.visible,
+                "bar_hints": self.shell.hints.opened,
+                "bar_applet": self.applets.open.as_ref().or(self.shell.popup_open.as_ref()),
                 "bar_background_opacity": self.shell.bars.first().map(|bar| bar.get_background_opacity()),
                 "theme_picker": self.shell.picker.opened && self.shell.picker.wallpaper_theme.is_none(),
                 "wallpaper_picker": self.shell.picker.opened && self.shell.picker.wallpaper_theme.is_some(),
@@ -638,6 +649,32 @@ impl Manager {
                 self.shell.picker.close();
                 self.shell.toggle_meta(&self.config, self.area())?;
             }
+            Command::BarHints => {
+                if self.shell.hints.opened {
+                    self.shell.hints.close();
+                    let restore = self.bar_restore.take();
+                    self.restore_focus(restore);
+                } else {
+                    let restore = self
+                        .bar_restore
+                        .take()
+                        .or_else(|| self.restore_target(foreground));
+                    self.shell.dismiss();
+                    self.shell.close_popup();
+                    self.applets.close();
+                    self.finish_picker(crate::theme_picker::Outcome::Cancel);
+                    self.finish_editor(shell::keybindings::Outcome::Close);
+                    self.shell.refresh(&self.model, &self.config, &self.applets);
+                    let monitor = self.model.monitors[(self.model.active - 1) as usize]
+                        .min(self.monitors.len().saturating_sub(1));
+                    self.shell.open_hints(&self.config, self.full_area(), monitor);
+                    if self.shell.hints.opened {
+                        self.bar_restore = restore;
+                    } else {
+                        self.restore_focus(restore);
+                    }
+                }
+            }
             Command::Keybindings => {
                 if self.shell.editor.opened {
                     self.finish_editor(shell::keybindings::Outcome::Close);
@@ -776,8 +813,19 @@ impl Manager {
     }
     fn event(&mut self, event: Event) {
         self.dispatch(event);
+        if !self.shell.hints.opened && self.shell.popup_open.is_none() && self.applets.open.is_none() {
+            self.bar_restore = None;
+        }
         input::POPUP_OPEN.store(
             self.shell.popup_open.is_some() || self.applets.open.is_some(),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        input::BAR_HINTS.store(
+            if self.shell.hints.opened {
+                self.shell.hints.generation
+            } else {
+                0
+            },
             std::sync::atomic::Ordering::Relaxed,
         );
         input::CAPTURE.store(
@@ -822,6 +870,18 @@ impl Manager {
                     }
                 }
                 EVENT_SYSTEM_FOREGROUND => {
+                    if (self.shell.hints.opened || self.bar_restore.is_some())
+                        && Some(id) != self.bar_restore
+                    {
+                        let mut pid = 0;
+                        unsafe {
+                            GetWindowThreadProcessId(native::hwnd(id), Some(&mut pid));
+                        }
+                        if pid != std::process::id() {
+                            self.shell.hints.close();
+                            self.bar_restore = None;
+                        }
+                    }
                     if let Some(c) = self.model.clients.iter().find(|c| c.id == id)
                         && c.workspace == self.model.active
                         && !native::minimized(c.id)
@@ -902,7 +962,25 @@ impl Manager {
                 self.shell.dismiss();
                 self.focus_visible();
             }
+            Event::BarHintPosition(epoch, index, x) => self.shell.hints.position(epoch, index, x),
+            Event::BarHintKey(epoch, input) => {
+                let active = self.shell.hints.opened && self.shell.hints.generation == epoch;
+                if let Some((kind, x, monitor)) = self.shell.hints.input(epoch, input) {
+                    self.just_closed = None;
+                    self.dispatch(Event::Module(kind, x, monitor));
+                    self.applets.focus_on_arrange();
+                    self.shell.focus_popup_on_arrange();
+                    if self.applets.open.is_none() && self.shell.popup_open.is_none() {
+                        let restore = self.bar_restore.take();
+                        self.restore_focus(restore);
+                    }
+                } else if active && !self.shell.hints.opened {
+                    let restore = self.bar_restore.take();
+                    self.restore_focus(restore);
+                }
+            }
             Event::Module(kind, x, monitor) => {
+                self.shell.hints.close();
                 if self.shell.picker.opened {
                     self.finish_picker(crate::theme_picker::Outcome::Cancel);
                 }
@@ -938,8 +1016,11 @@ impl Manager {
                 }
             }
             Event::Click(id) => {
+                self.shell.hints.close();
                 // Any press outside the open popup closes it, the bar included.
                 if !self.applets.owns(id) && self.shell.popup_hwnd() != id {
+                    // A mouse click owns focus; don't steal it back on Escape.
+                    self.bar_restore = None;
                     let open = self
                         .applets
                         .open
@@ -963,8 +1044,12 @@ impl Manager {
                 self.shell.toggle_bar_background();
             }
             Event::Escape => {
+                self.shell.hints.close();
                 self.shell.close_popup();
                 self.applets.escape();
+                if self.applets.open.is_none() && let Some(restore) = self.bar_restore.take() {
+                    self.restore_focus(Some(restore));
+                }
             }
             Event::Dictate(down) => dictate::hold(down),
             Event::AppletData(name, generation, result) => {
@@ -995,6 +1080,7 @@ impl Manager {
                 }
             }
             Event::Display => {
+                self.shell.hints.close();
                 let monitors = native::monitors();
                 if !monitors.is_empty() && monitors != self.monitors {
                     tracing::info!(count = monitors.len(), "display configuration changed");
@@ -1140,6 +1226,7 @@ pub fn run(replace: bool) -> Result<(), String> {
         demo_error: None,
         applets: applet::Runtime::new(tx.clone()),
         just_closed: None,
+        bar_restore: None,
         dirty: false,
     };
     let manager = Rc::new(RefCell::new(manager));
@@ -1228,6 +1315,8 @@ pub fn run(replace: bool) -> Result<(), String> {
             let ready = shell.arrange(config, monitors);
             m.finish_picker(outcome);
             m.applets.arrange();
+            let restore = m.bar_restore;
+            m.shell.hints.arrange(restore);
             if ready && std::time::Instant::now() >= preload_at {
                 preload_at = std::time::Instant::now() + std::time::Duration::from_millis(500);
                 if !m.shell.interactive() && m.shell.pending_wallpaper().is_none() {
