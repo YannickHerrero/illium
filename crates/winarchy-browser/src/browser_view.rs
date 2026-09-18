@@ -153,7 +153,11 @@ impl ViewContext {
                 if let Some(web) = sender {
                     let title = string(|s| web.DocumentTitle(s))?;
                     if let Some(tab) = tabs.borrow_mut().get_mut(id) {
-                        tab.title = title;
+                        tab.title = title
+                            .chars()
+                            .filter(|c| !c.is_control())
+                            .take(200)
+                            .collect();
                     }
                     native::tabs_changed(hwnd);
                 }
