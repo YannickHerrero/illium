@@ -1072,8 +1072,6 @@ fn watch(home: std::path::PathBuf, tx: EventSender) {
         let mut previous = crate::files::snapshot(&home);
         let mut previous_wallpapers = wallpaper_snapshot();
         let mut previous_previews = winarchy_theme::preview::catalog(&home);
-        let opacity_path = home.join(winarchy_theme::opacity::FILE);
-        let mut previous_opacity = crate::files::read_config(&opacity_path);
         loop {
             if WaitForSingleObject(h, INFINITE) != WAIT_OBJECT_0 {
                 break;
@@ -1084,11 +1082,11 @@ fn watch(home: std::path::PathBuf, tx: EventSender) {
             std::thread::sleep(std::time::Duration::from_millis(150));
             let next = crate::files::snapshot(&home);
             let next_wallpapers = wallpaper_snapshot();
-            let next_opacity = crate::files::read_config(&opacity_path);
-            if next_opacity != previous_opacity {
-                previous_opacity = next_opacity;
-                let _ = tx.send(Event::Opacity);
-            }
+            // Commands update the bar immediately. A quick create/delete of
+            // the override can be coalesced back to the same disk snapshot, so
+            // reconcile even when its final bytes have not changed. This only
+            // updates a property; it never rebuilds surfaces or applet providers.
+            let _ = tx.send(Event::Opacity);
             // The picker covers inactive themes too. This bounded scan lives on
             // the notification thread and never decodes pixels or reloads applets.
             let next_previews = winarchy_theme::preview::catalog(&home);

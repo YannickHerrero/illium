@@ -41,7 +41,15 @@ cargo test -p winarchy --lib bar_fades_only_its_background_and_honors_shared_ove
 This test passes on Windows. After deployment, `winarchyctl status` exposes
 `bar_background_opacity` (null when no bar exists) alongside `bar_transparent`.
 Opacity shortcuts and external override edits update bars in place, without
-restarting applets or recreating HWNDs.
+restarting applets or recreating HWNDs. The opt-in live regression also covers a
+quick command/reset whose file notifications can coalesce:
+
+```powershell
+.\scripts\test-bar-opacity-desktop.ps1 -Bin "$env:LOCALAPPDATA\Programs\Winarchy"
+```
+
+It briefly decreases opacity, restores only its own temporary override, and
+checks that the status bar follows both updates without changing workspaces.
 
 ## Theme demo scene
 
