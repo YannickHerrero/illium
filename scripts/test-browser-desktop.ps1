@@ -24,6 +24,7 @@ public static class BrowserTest {
     [DllImport("user32.dll")] public static extern bool GetGUIThreadInfo(uint id, ref GuiThreadInfo info);
     [DllImport("user32.dll", EntryPoint="SendMessageW", CharSet=CharSet.Unicode)] public static extern IntPtr GetText(IntPtr h, uint m, IntPtr w, System.Text.StringBuilder text);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out Rect r);
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out Point p);
     [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c);
@@ -108,6 +109,8 @@ try {
     if (![BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -or $alpha -ne 153) { throw 'Invalid theme changed the last valid opacity' }
     [IO.File]::WriteAllText($themePath, $theme)
     if (!$SkipFocusChecks) {
+    [void][BrowserTest]::SetForegroundWindow($window)
+    Wait-For { [BrowserTest]::GetForegroundWindow() -eq $window } 'Desktop did not grant foreground focus; use -SkipFocusChecks on an unattended desktop'
     # Select a suggestion without clicking (click now opens it), then route a
     # character addressed to the list into the native search field.
     [void][BrowserTest]::SendMessage($list,0x0186,[IntPtr]::Zero,[IntPtr]::Zero)
@@ -126,6 +129,12 @@ try {
     }
     [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, 'bkmd')
     Wait-For { [BrowserTest]::SendMessage($list,0x018B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 1 } 'Fuzzy bookmark match missing'
+    if ([BrowserTest]::SendMessage($list,0x0188,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne -1) { throw 'Typing automatically selected a result' }
+    [void][BrowserTest]::PostMessage($edit,0x0100,[IntPtr]40,[IntPtr]::Zero)
+    Wait-For { [BrowserTest]::SendMessage($list,0x0188,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 0 } 'Down did not select the first result'
+    [void][BrowserTest]::PostMessage($edit,0x0100,[IntPtr]27,[IntPtr]::Zero)
+    Wait-For { [BrowserTest]::SendMessage($list,0x018B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 2 } 'Escape on home did not clear the query'
+    if (![BrowserTest]::IsWindowVisible($panel)) { throw 'Escape closed the home palette' }
     [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, 'zzzzzzzz')
     Wait-For { [BrowserTest]::SendMessage($list,0x018B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 0 } 'Unrelated suggestion was retained'
     [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, $TestUrl)
@@ -145,6 +154,7 @@ try {
     [void][BrowserTest]::PostMessage($window,0x8005,[IntPtr]::Zero,[IntPtr]::Zero)
     Wait-For { (Get-Content $log -Raw) -match 'bookmark_added=false' } 'Repeated bookmark action not handled'
     $saved = Get-Content $library -Raw | ConvertFrom-Json
+    if (!(($saved.history | Where-Object { $_.url -eq $TestUrl }).visited_at -gt 0)) { throw 'Visit timestamp was not persisted' }
     if (@($saved.bookmarks | Where-Object { $_.url -eq $TestUrl }).Count -ne 1) { throw 'Repeated Ctrl+D removed or duplicated the bookmark' }
     # Opening the overlay must not move/resize the WebView native child.
     $web = [BrowserTest]::FindWindowEx($window, [IntPtr]::Zero, 'Chrome_WidgetWin_0', $null)
@@ -176,6 +186,12 @@ try {
     [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, 'https')
     Wait-For { [BrowserTest]::SendMessage($list,0x018B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 2 } 'Home must search the bookmark and history together'
     Assert-CenteredPalette
+    # A single result click opens it; no double click is required.
+    [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, $TestUrl)
+    Wait-For { [BrowserTest]::SendMessage($list,0x018B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 1 } 'Fixture bookmark not found'
+    [void][BrowserTest]::PostMessage($list,0x0201,[IntPtr]1,[IntPtr]0x00200020)
+    [void][BrowserTest]::PostMessage($list,0x0202,[IntPtr]::Zero,[IntPtr]0x00200020)
+    Wait-For { ![BrowserTest]::IsWindowVisible($panel) } 'Single click did not navigate'
     Write-Host "PASS: centered home/overlay, Escape, home opacity, fuzzy suggestions, navigation, opaque page, history and bookmark persistence. Logs: $root"
 } finally {
     $env:WINARCHY_CONFIG_HOME = $oldHome

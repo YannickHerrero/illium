@@ -145,7 +145,8 @@ Prepared mode keeps one browser host and its empty WebView ready. There is no po
 
 ## Validation performed
 
-- `cargo test -p winarchy-browser --locked`: six tests pass (DuckDuckGo/address parsing, network/cosmetic rules, fixture rules, cache invalidation, persisted exceptions, fuzzy matching and merged/bounded history/bookmark persistence).
+- `cargo test -p winarchy-browser --locked`: seven tests pass (DuckDuckGo/address parsing, network/cosmetic rules, fixture rules, cache invalidation, persisted exceptions, fuzzy matching, merged/bounded history/bookmark persistence, legacy timestamp compatibility and relative dates).
+- The centered-palette desktop smoke test passes on Windows via WSL interop, including foreground Unicode input routing, query selection reset, arrow selection, home Escape, single-click navigation, centered overlay, unchanged WebView bounds, page Escape, timestamps and opacity. The resident lifecycle test also passes with local fixture filters. Actual Ctrl+L from web inputs, outside-page clicks, mixed-DPI displays, light-theme visual appearance and screen-reader behavior still need manual validation.
 - Clippy with warnings denied for the browser's Linux, Windows GNU and Windows MSVC targets passes; Windows GNU release linking succeeds. GNU builds additionally require `WebView2Loader.dll` from the matching `webview2-com-sys` package next to the executable; the documented MSVC/release-CI build uses the static loader.
 - Workspace formatting and the CLI dependency-boundary check pass.
 - Both PowerShell scripts parse; the updater successfully downloads upstream lists into a temporary config. Loading these lists, restoring their cache and matching a known blocked/allowed URL were smoke-tested on Linux.
