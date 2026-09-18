@@ -12,6 +12,64 @@ struct Probe {
 thread_local! { static PROBE: RefCell<Probe> = RefCell::new(Probe::default()); }
 const PROBE_TIMER: usize = 0x545354;
 
+#[test]
+#[ignore = "requires Windows and WebView2; run alone with --test-threads=1"]
+fn demo_home_never_loads_the_normal_library() {
+    struct ConfigGuard(Option<std::ffi::OsString>);
+    impl Drop for ConfigGuard {
+        fn drop(&mut self) {
+            unsafe {
+                if let Some(value) = &self.0 {
+                    std::env::set_var("WINARCHY_CONFIG_HOME", value);
+                } else {
+                    std::env::remove_var("WINARCHY_CONFIG_HOME");
+                }
+            }
+        }
+    }
+    let _restore = ConfigGuard(std::env::var_os("WINARCHY_CONFIG_HOME"));
+    let normal = tempfile::tempdir().unwrap();
+    std::fs::create_dir(normal.path().join("browser")).unwrap();
+    // Invalid JSON: opening the normal library would fail, even without a leak.
+    let personal = normal.path().join("browser/library.json");
+    std::fs::write(&personal, "DO NOT READ: personal library sentinel").unwrap();
+    unsafe {
+        std::env::set_var("WINARCHY_CONFIG_HOME", normal.path());
+    }
+    let demo = winarchy_browser::demo::DemoData::new().unwrap();
+    let demo_path = demo.path().to_owned();
+    let mut checked = false;
+    let result = run_inner(
+        "",
+        true,
+        None,
+        |_| {
+            let app = snapshot().unwrap();
+            assert!(app.home);
+            let picker = app.picker.borrow();
+            let rows = picker.library.borrow().suggestions("");
+            assert_eq!(rows.len(), 5);
+            assert!(
+                rows.iter()
+                    .any(|row| row.site.title == "Rust Programming Language")
+            );
+            checked = true;
+            unsafe {
+                let _ = PostMessageW(Some(app.hwnd), WM_CLOSE, WPARAM(0), LPARAM(0));
+            }
+        },
+        Some(demo.path()),
+    );
+    assert!(result.is_ok(), "{:?}", result.err());
+    assert!(checked);
+    assert_eq!(
+        std::fs::read_to_string(personal).unwrap(),
+        "DO NOT READ: personal library sentinel"
+    );
+    drop(demo);
+    assert!(!demo_path.exists(), "temporary profile was not cleaned up");
+}
+
 unsafe fn tick(hwnd: HWND) {
     let (stage, ticks) = PROBE.with(|probe| {
         let mut probe = probe.borrow_mut();

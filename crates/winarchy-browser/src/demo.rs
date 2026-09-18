@@ -10,6 +10,11 @@ impl DemoData {
         let data = dir.path().join("browser");
         std::fs::create_dir(&data)?;
         std::fs::create_dir(dir.path().join("profile"))?;
+        // Blocker requires a local list. Never load/download the personal lists.
+        std::fs::write(
+            data.join("custom.txt"),
+            "! Demo fixture only\n||ads.example^\n",
+        )?;
         std::fs::write(
             data.join("library.json"),
             serde_json::to_vec_pretty(&serde_json::json!({
@@ -53,6 +58,7 @@ mod tests {
         let first = DemoData::new().unwrap();
         let second = DemoData::new().unwrap();
         assert_ne!(first.path(), second.path());
+        assert!(crate::Blocker::load(&first.path().join("browser")).is_ok());
         let mut a = Library::load(&first.path().join("browser")).unwrap();
         assert_eq!(a.suggestions("").len(), 5);
         a.add_bookmark("https://example.com/private", "Not shared")
