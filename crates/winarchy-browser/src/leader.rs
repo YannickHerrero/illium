@@ -1,8 +1,4 @@
 //! Platform-independent leader key map and state machine.
-use std::time::{Duration, Instant};
-
-pub const TIMEOUT: Duration = Duration::from_secs(3);
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     Address,
@@ -115,7 +111,6 @@ pub enum Outcome {
 #[derive(Default)]
 pub struct Leader {
     menu: Option<Menu>,
-    deadline: Option<Instant>,
 }
 impl Leader {
     pub fn menu(&self) -> Option<Menu> {
@@ -123,23 +118,8 @@ impl Leader {
     }
     pub fn cancel(&mut self) {
         self.menu = None;
-        self.deadline = None;
     }
-    pub fn remaining(&self, now: Instant) -> Duration {
-        self.deadline
-            .map(|d| d.saturating_duration_since(now))
-            .unwrap_or_default()
-    }
-    pub fn expire(&mut self, now: Instant) -> bool {
-        if self.deadline.is_some_and(|d| now >= d) {
-            self.cancel();
-            true
-        } else {
-            false
-        }
-    }
-    pub fn input(&mut self, key: Key, repeat: bool, now: Instant) -> Outcome {
-        self.expire(now);
+    pub fn input(&mut self, key: Key, repeat: bool) -> Outcome {
         if repeat {
             return if self.menu.is_some() || key == Key::Leader {
                 Outcome::Changed
@@ -153,15 +133,17 @@ impl Leader {
                 return Outcome::Pass;
             }
             self.menu = Some(Menu::Root);
-            self.deadline = Some(now + TIMEOUT);
             return Outcome::Changed;
         }
         let Some(menu) = self.menu else {
             return Outcome::Pass;
         };
-        if key == Key::Backspace && menu != Menu::Root {
+        if key == Key::Escape {
+            self.cancel();
+            return Outcome::Cancelled;
+        }
+        if key == Key::Backspace {
             self.menu = Some(Menu::Root);
-            self.deadline = Some(now + TIMEOUT);
             return Outcome::Changed;
         }
         let key = match key {
@@ -172,7 +154,6 @@ impl Leader {
             match entry.target {
                 Target::Menu(menu) => {
                     self.menu = Some(menu);
-                    self.deadline = Some(now + TIMEOUT);
                     Outcome::Changed
                 }
                 Target::Action(action) => {
@@ -181,8 +162,8 @@ impl Leader {
                 }
             }
         } else {
-            self.cancel();
-            Outcome::Cancelled
+            // Consume unknown keys without closing the persistent menu.
+            Outcome::Changed
         }
     }
 }
@@ -202,17 +183,12 @@ mod tests {
             let mut keys = std::collections::HashSet::new();
             for entry in menu.entries() {
                 assert!(keys.insert(entry.key));
-                let now = Instant::now();
                 let mut leader = Leader::default();
-                leader.input(Key::Leader, false, now);
+                leader.input(Key::Leader, false);
                 if menu != Menu::Root {
-                    leader.input(
-                        Key::Character(menu.prefix().chars().next().unwrap()),
-                        false,
-                        now,
-                    );
+                    leader.input(Key::Character(menu.prefix().chars().next().unwrap()), false);
                 }
-                let result = leader.input(Key::Character(entry.key), false, now);
+                let result = leader.input(Key::Character(entry.key), false);
                 match entry.target {
                     Target::Action(action) => {
                         assert_eq!(result, Outcome::Execute(action));
@@ -227,43 +203,35 @@ mod tests {
         }
     }
     #[test]
-    fn timeout_back_cancel_and_passthrough() {
-        let now = Instant::now();
+    fn persistent_menu_back_cancel_and_passthrough() {
         let mut l = Leader::default();
-        assert_eq!(l.input(Key::Character('l'), false, now), Outcome::Pass);
-        l.input(Key::Leader, false, now);
-        l.input(Key::Character('n'), false, now + Duration::from_secs(2));
-        assert!(!l.expire(now + TIMEOUT));
-        assert_eq!(
-            l.input(Key::Backspace, false, now + TIMEOUT),
-            Outcome::Changed
-        );
-        assert_eq!(l.menu(), Some(Menu::Root));
-        assert_eq!(l.input(Key::Leader, false, now + TIMEOUT), Outcome::Pass);
-        assert_eq!(l.menu(), None);
-        for key in [Key::Escape, Key::Other, Key::Backspace, Key::Character('x')] {
-            l.input(Key::Leader, false, now);
-            assert_eq!(l.input(key, false, now), Outcome::Cancelled);
+        assert_eq!(l.input(Key::Character('l'), false), Outcome::Pass);
+        l.input(Key::Leader, false);
+        for key in [Key::Other, Key::Backspace, Key::Character('x')] {
+            assert_eq!(l.input(key, false), Outcome::Changed);
+            assert_eq!(l.menu(), Some(Menu::Root));
         }
-        l.input(Key::Leader, false, now);
-        assert!(l.expire(now + TIMEOUT));
-        assert_eq!(
-            l.input(Key::Character('l'), false, now + TIMEOUT),
-            Outcome::Pass
-        );
+        l.input(Key::Character('n'), false);
+        assert_eq!(l.input(Key::Other, false), Outcome::Changed);
+        assert_eq!(l.menu(), Some(Menu::Navigation));
+        assert_eq!(l.input(Key::Backspace, false), Outcome::Changed);
+        assert_eq!(l.menu(), Some(Menu::Root));
+        assert_eq!(l.input(Key::Leader, false), Outcome::Pass);
+        assert_eq!(l.menu(), None);
+        l.input(Key::Leader, false);
+        assert_eq!(l.input(Key::Escape, false), Outcome::Cancelled);
+        assert_eq!(l.menu(), None);
     }
     #[test]
-    fn repeats_do_not_execute_or_extend_timeout_and_zoom_alias_works() {
-        let now = Instant::now();
+    fn repeats_do_not_execute_and_zoom_alias_works() {
         let mut l = Leader::default();
-        l.input(Key::Leader, false, now);
-        l.input(Key::Leader, true, now + Duration::from_secs(2));
-        l.input(Key::Character('r'), true, now + Duration::from_secs(2));
-        assert!(l.expire(now + TIMEOUT));
-        l.input(Key::Leader, false, now);
-        l.input(Key::Character('z'), false, now);
+        l.input(Key::Leader, false);
+        l.input(Key::Leader, true);
+        l.input(Key::Character('r'), true);
+        assert_eq!(l.menu(), Some(Menu::Root));
+        l.input(Key::Character('z'), false);
         assert_eq!(
-            l.input(Key::Character('='), false, now),
+            l.input(Key::Character('='), false),
             Outcome::Execute(Action::ZoomIn)
         );
     }

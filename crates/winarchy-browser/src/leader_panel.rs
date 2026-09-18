@@ -216,8 +216,7 @@ impl LeaderPanel {
                     );
                 }
             }
-            let seconds = leader.remaining(Instant::now()).as_secs_f32().ceil() as u32;
-            let footer = format!("Ctrl+B {} · {} s", menu.prefix(), seconds);
+            let footer = format!("Ctrl+B {}", menu.prefix());
             text(
                 dc,
                 box_at(p(24), r.bottom - p(46), r.right / 2 - p(24), p(40)),

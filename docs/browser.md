@@ -53,7 +53,7 @@ The field suggests up to eight local results, matching case-insensitive ordered 
 
 | Input | Action |
 | --- | --- |
-| `Ctrl+B`, then a key | Open the themed leader menu (3-second inactivity timeout; see below) |
+| `Ctrl+B`, then a key | Open the themed leader menu (no inactivity timeout; see below) |
 | `Ctrl+L` | Open centered navigation palette over the page; select current URL |
 | URL/domain, then Enter | Navigate (bare domains use HTTPS) |
 | Other text, then Enter | DuckDuckGo search; no remote autocomplete |
@@ -76,7 +76,7 @@ The native, centered help panel follows the current Winarchy/Omarchy theme,
 including live updates: `surface` background, `overlay` borders, `text` labels,
 `subtext` hints and `accent` keys. It uses the URL palette's Cascadia Mono/font
 fallback and DPI conventions, two columns (one in narrow windows), a menu path,
-key count, boxed keys, submenu chevrons and a remaining-seconds footer. It does
+key count, boxed keys, submenu chevrons and a keyboard-help footer. It does
 not resize the page, create another WebView, or introduce page transparency.
 The existing URL palette's contents and focus remain intact beneath the overlay.
 
@@ -97,11 +97,12 @@ informational message instead of acting on the hidden WebView. Copying and
 blocking changes show brief themed confirmation messages. Failures leave the
 browser running and show a brief message; details go to the browser log.
 
-- The leader expires after **3 seconds of inactivity**, renewed by valid submenu
-  transitions and Backspace, not by key autorepeat. There is no idle timer.
-- **Escape** cancels. **Backspace** returns to the root; at the root it cancels.
-- An unknown key is consumed and cancels with a brief indication. It is never
-  replayed into the page. A key pressed after expiration is ordinary input.
+- The leader and its submenus stay open **indefinitely**, until an action or
+  explicit cancellation. There is no idle timer or countdown; only transient
+  confirmation/error messages use a timer.
+- **Escape** cancels. **Backspace** returns to the root; at the root it stays open.
+- An unknown key is consumed without closing the menu or changing its submenu.
+  It is never replayed into the page.
 - An action closes the help before execution. Losing window activation cancels
   the leader and pending commands.
 - **`Ctrl+B`, `Ctrl+B`** closes the leader and lets the second physical chord
@@ -187,7 +188,7 @@ This requires the updated local fixture and cannot be combined with
 browser is foreground; it does not inject into another application. The test
 uses UI Automation to verify page-input preservation, no leaked command keys,
 one passed-through Ctrl+B, native find input, home/URL palette query preservation,
-iframe activation, menu transitions, timeout and unchanged page bounds. A panel
+iframe activation, menu transitions, persistence past the former timeout and unchanged page bounds. A panel
 screenshot is saved alongside the temporary logs. It adds no test IPC or script
 bridge to the browser. Security software may block keyboard automation; do not
 disable protection to run it. In that case, perform the same checks manually.
@@ -236,7 +237,7 @@ Prepared mode keeps one browser host and its empty WebView ready. There is no po
 ### Leader implementation validation
 
 - All ten browser unit tests pass, including command-map reachability/uniqueness,
-  submenu navigation, cancellation, timeout renewal, repeat handling, double
+  submenu navigation, cancellation, unknown-key persistence, repeat handling, double
   leader passthrough and the zoom alias.
 - Browser Clippy with warnings denied passes on Linux, Windows GNU and Windows
   MSVC. The Windows GNU release binary builds. The updated PowerShell smoke

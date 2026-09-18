@@ -223,10 +223,15 @@ try {
         Assert-LeaderClosed
         if ((Accessible-Value $field) -ne 'sentinel' -or (Accessible-Value $events) -ne $keysBefore) { throw 'Leader keys leaked into the page' }
         Send-LeaderKeys '^b'
-        Start-Sleep -Milliseconds 3300
+        Start-Sleep -Milliseconds 4000
+        if (![BrowserTest]::IsWindowVisible($leaderPanel)) { throw 'Leader expired while idle' }
+        Send-LeaderKeys 'n'
+        Start-Sleep -Milliseconds 4000
+        if (![BrowserTest]::IsWindowVisible($leaderPanel) -or (Leader-Title) -notmatch 'Navigation') { throw 'Leader submenu expired while idle' }
+        Send-LeaderKeys '{ESC}'
         Assert-LeaderClosed
         Send-LeaderKeys 'x'
-        if ((Accessible-Value $field) -ne 'sentinelx') { throw 'Timeout did not preserve web input focus' }
+        if ((Accessible-Value $field) -ne 'sentinelx') { throw 'Cancellation did not preserve web input focus' }
         $keysBefore = Accessible-Value $events
         Send-LeaderKeys '^b'
         Send-LeaderKeys '^b'
@@ -235,8 +240,10 @@ try {
         if ($newKeys -cne 'Ctrl+b|') { throw "Double leader did not pass exactly one Ctrl+B: $newKeys" }
         Send-LeaderKeys '^b'
         Send-LeaderKeys 'x'
-        Assert-LeaderClosed
+        if (![BrowserTest]::IsWindowVisible($leaderPanel)) { throw 'Unknown key closed the leader' }
         if ((Accessible-Value $field) -ne 'sentinelx') { throw 'Invalid key leaked into the page' }
+        Send-LeaderKeys '{ESC}'
+        Assert-LeaderClosed
         Send-LeaderKeys '^b'
         Send-LeaderKeys 'f'
         Assert-LeaderClosed
@@ -263,7 +270,7 @@ try {
         Wait-For { [BrowserTest]::IsWindowVisible($leaderPanel) } 'Leader did not open from iframe'
         Send-LeaderKeys '{ESC}'
         Assert-LeaderClosed
-        Write-Host "PASS: leader menus, bounds, timeout, web/native/iframe input, no key leakage, double Ctrl+B, find UI. Screenshot: $root/leader.png"
+        Write-Host "PASS: leader menus, bounds, persistent idle state, web/native/iframe input, no key leakage, double Ctrl+B, find UI. Screenshot: $root/leader.png"
     }
     [void][BrowserTest]::PostMessage($window,0x8001,[IntPtr]::Zero,[IntPtr]::Zero)
     Wait-For { [BrowserTest]::IsWindowVisible($edit) } 'Picker did not open'

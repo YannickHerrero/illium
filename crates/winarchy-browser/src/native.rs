@@ -130,9 +130,8 @@ unsafe fn sync_leader(app: &App) {
     if let Some(hook) = obsolete_hook {
         let _ = UnhookWindowsHookEx(hook);
     }
-    let showing =
-        active || app.leader_panel.borrow().notice.is_some() || app.leader.borrow().hook.is_some();
-    if showing {
+    // Only transient feedback needs a timer; the leader itself is persistent.
+    if app.leader_panel.borrow().notice.is_some() {
         SetTimer(Some(app.hwnd), LEADER_TIMER, 100, None);
     } else {
         let _ = KillTimer(Some(app.hwnd), LEADER_TIMER);
@@ -273,18 +272,12 @@ unsafe fn leader_key(vk: u32, scan: u32, down: bool, repeat: bool, from_hook: bo
         }
     };
     let was_active = input.state.menu().is_some();
-    let outcome = input.state.input(key, repeat, Instant::now());
+    let outcome = input.state.input(key, repeat);
     let handled = outcome != Outcome::Pass;
     if from_hook && was_active && key == Key::Leader && !handled {
         // The hook passes the real second chord through. Its later native/
         // WebView accelerator delivery must not start another leader session.
         input.pass_leader_once = true;
-    }
-    if outcome == Outcome::Cancelled && !matches!(key, Key::Escape | Key::Backspace) {
-        app.leader_panel.borrow_mut().notice = Some((
-            "Touche non reconnue — leader annulé".into(),
-            Instant::now() + std::time::Duration::from_millis(1200),
-        ));
     }
     if let Outcome::Execute(action) = outcome {
         input.actions.push_back(action);
@@ -653,7 +646,6 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         }
         WM_TIMER if wp.0 == LEADER_TIMER => {
             if let Some(app) = snapshot() {
-                app.leader.borrow_mut().state.expire(Instant::now());
                 if app
                     .leader_panel
                     .borrow()
