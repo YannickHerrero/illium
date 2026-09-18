@@ -18,7 +18,7 @@ The browser uses:
 
 - `$WINARCHY_CONFIG_HOME/browser`, or `$HOME/.config/winarchy/browser`: `easylist.txt`, `easyprivacy.txt`, optional `custom.txt`, compiled filters and `exceptions.json`;
 - `%LOCALAPPDATA%/Winarchy/browser/profile`: persistent WebView2 profile, cookies and disk cache;
-- the current `winarchy-theme` at launch: window/editor background, editor text, WebView initial background and page dark/light preference. Live theme switching is not implemented.
+- the current `winarchy-theme`, including live changes: window/palette backgrounds, text, accents, selection, WebView initial background and page dark/light preference.
 
 ## Prepared launch (resident mode)
 
@@ -41,11 +41,11 @@ Initial Windows smoke measurements with EasyList/EasyPrivacy, not a benchmark: a
 
 ## Home, history and bookmarks
 
-Launching without an argument (including `Alt+B`), or submitting an empty address / `about:blank`, shows a native home surface. A solid Winarchy theme color fills the window, with the URL/search field centered and focused, without an explanatory heading above it. The home window uses the theme's `background_opacity` (85% by default, also applying to its native controls), including live Ctrl+Alt+Shift+Y/U adjustments. Web pages always stay fully opaque, even when opacity changes while browsing. An explicit web URL on the command line bypasses home.
+Launching without an argument (including `Alt+B`), or submitting an empty address / `about:blank`, shows a native home surface. A Winarchy theme color fills the window, with a focused native navigation palette centered as a whole in the browser's client area. The same palette overlays web pages with `Ctrl+L`, without changing the page's bounds. It contains a search field, navigation heading, grouped favorites/history with icons and category badges, and a result count/keyboard hint footer. It uses Cascadia Mono (with Windows font fallback), the active theme's colors, a DPI-scaled maximum width of 850 logical pixels and a bounded, scrollable result list. The home window uses the theme's `background_opacity` (85% by default, also applying to its native controls), including live Ctrl+Alt+Shift+Y/U adjustments. Web pages always stay fully opaque, even when opacity changes while browsing. An explicit web URL on the command line bypasses home.
 
 While the home window is foreground, typing redirects focus and the first character to the search field even after selecting a suggestion. Editing shortcuts such as Ctrl+V work too. Other applications' input and Alt/Windows shortcuts are not intercepted; this does not apply to web pages.
 
-The field suggests up to eight local results, matching case-insensitive ordered subsequences against titles and URLs. Contiguous matches rank higher; equally ranked favorites precede recent history. With empty input, favorites come first, then recent history. No remote suggestions, page prefetches or second WebView are used. Typing and pressing Enter submits the input as typed; select a suggestion with arrows first to open it, or double-click it.
+The field suggests up to eight local results, matching case-insensitive ordered subsequences against titles and URLs. Contiguous matches rank higher; equally ranked favorites precede recent history. The eight best matches are displayed in favorite/history groups, preserving relevance within each group. With empty input, favorites come first, then recent history. No remote suggestions, page prefetches or second WebView are used. Typing and pressing Enter submits the input as typed; select a suggestion with arrows first to open it, or click it. Editing the query clears the selection. On web pages, Escape closes the palette and returns page focus; clicking the page also dismisses it when WebView receives focus. On home, Escape clears the query and keeps the palette visible.
 
 `Ctrl+D` adds the current page to favorites without opening the search field or moving focus. Repeating it does not remove or duplicate the bookmark. Favorites and history share the same fuzzy results list, with each URL shown only once. An already-open home refreshes its data when it regains focus. Successful top-level web navigations record the title and URL; history is deduplicated and limited to 500 entries. Data is stored as plain JSON in `browser/library.json`; embedded URL username/password credentials are removed, but paths and query strings remain. There is no private browsing mode yet. Close the browser and remove this file to erase history and bookmarks. Updates are merged under a file lock across windows; no idle polling/indexer is added.
 
@@ -53,7 +53,7 @@ The field suggests up to eight local results, matching case-insensitive ordered 
 
 | Input | Action |
 | --- | --- |
-| `Ctrl+L` | Reveal native address editor; select current URL |
+| `Ctrl+L` | Open centered navigation palette over the page; select current URL |
 | URL/domain, then Enter | Navigate (bare domains use HTTPS) |
 | Other text, then Enter | DuckDuckGo search; no remote autocomplete |
 | Up / Down, then Enter | Select and open a history/bookmark suggestion |
@@ -66,7 +66,7 @@ The field suggests up to eight local results, matching case-insensitive ordered 
 
 Winarchy gives each newly opened browser window on the active workspace foreground focus and centers the pointer after applying its tile geometry. This is a one-shot launch action, not a cursor warp on every resize. Both the browser and the daemon must be updated for this behavior.
 
-There is no caption or tab strip. Use Winarchy's window management or Windows' system menu (`Alt+Space`) to move the window. The native editor and suggestions temporarily reserve space above the page instead of allocating another WebView. `target=_blank` currently navigates the same window; popup-based OAuth flows may not work. Only one window is kept prepared; additional simultaneous windows use standalone hosts.
+There is no caption or tab strip. Use Winarchy's window management or Windows' system menu (`Alt+Space`) to move the window. The palette is a native child panel placed above the WebView child in the window's z-order; it neither reserves page space nor allocates another WebView. It remains inside its browser window and inherits its minimize/move/resize lifecycle. No tab action is advertised because tabs are not implemented. `target=_blank` currently navigates the same window; popup-based OAuth flows may not work. Only one window is kept prepared; additional simultaneous windows use standalone hosts.
 
 ## Blocking scope and security
 
@@ -110,7 +110,7 @@ powershell -ExecutionPolicy Bypass -File scripts/test-browser-desktop.ps1 `
   -Exe "$PWD/target/release/winarchy-browser.exe"
 ```
 
-It uses disposable configuration and profile directories, checks theme-owned home opacity, live overrides/reset, invalid-theme retention, unified fuzzy matching, navigation, opaque pages even during opacity updates, history and add-only bookmark persistence, and closes only its own process. `-SkipFocusChecks` skips the first-character/Unicode focus-routing checks when foreground focus is unavailable; opacity and navigation checks still run. With an updated Winarchy running, add `-CheckTilingFocus` to check foreground focus and cursor centering after tiling (do not move the mouse during this check). It invokes the queued bookmark action directly, without injecting global keystrokes; manually verify the actual `Ctrl+D` accelerator as well. It retains its temporary logs for diagnosis.
+It uses disposable configuration and profile directories, checks palette centering on home and over a page, unchanged WebView bounds, Escape dismissal, theme-owned home opacity, live overrides/reset, invalid-theme retention, unified fuzzy matching, navigation, opaque pages even during opacity updates, history and add-only bookmark persistence, and closes only its own process. `-SkipFocusChecks` skips the first-character/Unicode focus-routing checks when foreground focus is unavailable; opacity and navigation checks still run. With an updated Winarchy running, add `-CheckTilingFocus` to check foreground focus and cursor centering after tiling (do not move the mouse during this check). It invokes the queued bookmark action directly, without injecting global keystrokes; manually verify the actual `Ctrl+D` accelerator as well. It retains its temporary logs for diagnosis.
 
 For resident lifecycle and latency/memory checks, close and stop any existing resident first, then run:
 

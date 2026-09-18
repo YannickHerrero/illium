@@ -28,6 +28,7 @@ public static class BrowserTest {
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out Point p);
     [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c);
     [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr h, int id);
+    [DllImport("user32.dll", EntryPoint="FindWindowExW", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
     [DllImport("user32.dll", EntryPoint="SendMessageW", CharSet=CharSet.Unicode)] public static extern IntPtr SetText(IntPtr h, uint m, IntPtr w, string s);
     [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
@@ -81,10 +82,23 @@ try {
         }
         Write-Host 'PASS: new browser focused and pointer centered after tiling.'
     }
-    $edit = [BrowserTest]::GetDlgItem($window, 101)
-    $list = [BrowserTest]::GetDlgItem($window, 102)
+    $panel = [BrowserTest]::GetDlgItem($window, 104)
+    $edit = [BrowserTest]::GetDlgItem($panel, 101)
+    $list = [BrowserTest]::GetDlgItem($panel, 102)
     if (![BrowserTest]::IsWindowVisible($edit)) { throw 'Home input is not visible' }
-    if ([BrowserTest]::IsWindowVisible([BrowserTest]::GetDlgItem($window, 103))) { throw 'Home explanatory heading should be hidden' }
+    function Assert-CenteredPalette {
+        $outer = New-Object BrowserTest+Rect
+        $inner = New-Object BrowserTest+Rect
+        [void][BrowserTest]::GetWindowRect($window, [ref]$outer)
+        [void][BrowserTest]::GetWindowRect($panel, [ref]$inner)
+        if ([Math]::Abs(($outer.left+$outer.right)-($inner.left+$inner.right)) -gt 2 -or
+            [Math]::Abs(($outer.top+$outer.bottom)-($inner.top+$inner.bottom)) -gt 2) {
+            throw 'Navigation palette is not centered'
+        }
+        if ($inner.left -lt $outer.left -or $inner.right -gt $outer.right -or
+            $inner.top -lt $outer.top -or $inner.bottom -gt $outer.bottom) { throw 'Palette overflows the browser' }
+    }
+    Assert-CenteredPalette
     [uint32]$key=0; [byte]$alpha=0; [uint32]$flags=0
     if (![BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -or $alpha -ne 191) { throw 'Home alpha did not use the theme 75%' }
     [IO.File]::WriteAllText($opacityPath, "theme = 'test'`nopacity = 0.60`n")
@@ -94,14 +108,12 @@ try {
     if (![BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -or $alpha -ne 153) { throw 'Invalid theme changed the last valid opacity' }
     [IO.File]::WriteAllText($themePath, $theme)
     if (!$SkipFocusChecks) {
-    # Focus a suggestion, then type: the first character must go into search,
-    # not list-box type-ahead. These are window-local messages, not global input.
-    [void][BrowserTest]::PostMessage($list,0x0201,[IntPtr]1,[IntPtr]0x00080008)
-    [void][BrowserTest]::PostMessage($list,0x0202,[IntPtr]::Zero,[IntPtr]0x00080008)
+    # Select a suggestion without clicking (click now opens it), then route a
+    # character addressed to the list into the native search field.
+    [void][BrowserTest]::SendMessage($list,0x0186,[IntPtr]::Zero,[IntPtr]::Zero)
     $thread = [BrowserTest]::GetWindowThreadProcessId($window,[IntPtr]::Zero)
     $gui = New-Object BrowserTest+GuiThreadInfo
     $gui.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($gui)
-    Wait-For { [void][BrowserTest]::GetGUIThreadInfo($thread,[ref]$gui); $gui.focus -eq $list } 'Suggestion did not receive focus'
     # Deliver a translated character, independent of modifiers the user may be
     # holding on the live desktop. Never synthesize global key releases here.
     [void][BrowserTest]::PostMessage($list,0x0102,[IntPtr]0x61,[IntPtr]1)
@@ -134,9 +146,24 @@ try {
     Wait-For { (Get-Content $log -Raw) -match 'bookmark_added=false' } 'Repeated bookmark action not handled'
     $saved = Get-Content $library -Raw | ConvertFrom-Json
     if (@($saved.bookmarks | Where-Object { $_.url -eq $TestUrl }).Count -ne 1) { throw 'Repeated Ctrl+D removed or duplicated the bookmark' }
-    # Return to home: both history and bookmarks must appear in this same field.
+    # Opening the overlay must not move/resize the WebView native child.
+    $web = [BrowserTest]::FindWindowEx($window, [IntPtr]::Zero, 'Chrome_WidgetWin_0', $null)
+    if ($web -eq [IntPtr]::Zero) { throw 'WebView native child not found' }
+    $before = New-Object BrowserTest+Rect
+    $after = New-Object BrowserTest+Rect
+    [void][BrowserTest]::GetWindowRect($web, [ref]$before)
     [void][BrowserTest]::PostMessage($window,0x8001,[IntPtr]::Zero,[IntPtr]::Zero)
     Wait-For { [BrowserTest]::IsWindowVisible($edit) } 'Picker did not open'
+    Assert-CenteredPalette
+    [void][BrowserTest]::GetWindowRect($web, [ref]$after)
+    if ($before.left -ne $after.left -or $before.top -ne $after.top -or
+        $before.right -ne $after.right -or $before.bottom -ne $after.bottom) { throw 'Opening palette changed WebView bounds' }
+    if ([BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags)) { throw 'Palette made the page translucent' }
+    # Escape closes only the overlay, leaving the page in place.
+    [void][BrowserTest]::PostMessage($edit,0x0100,[IntPtr]27,[IntPtr]::Zero)
+    Wait-For { ![BrowserTest]::IsWindowVisible($panel) } 'Escape did not close the overlay'
+    [void][BrowserTest]::PostMessage($window,0x8001,[IntPtr]::Zero,[IntPtr]::Zero)
+    Wait-For { [BrowserTest]::IsWindowVisible($edit) } 'Picker did not reopen'
     [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, 'about:blank')
     Start-Sleep -Milliseconds 200
     [void][BrowserTest]::PostMessage($edit,0x0100,[IntPtr]13,[IntPtr]::Zero)
@@ -148,7 +175,8 @@ try {
     if ($process.MainWindowHandle -ne $window) { throw 'Opacity update recreated the browser window' }
     [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, 'https')
     Wait-For { [BrowserTest]::SendMessage($list,0x018B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 2 } 'Home must search the bookmark and history together'
-    Write-Host "PASS: home opacity, fuzzy suggestions, navigation, opaque page, history and bookmark persistence. Logs: $root"
+    Assert-CenteredPalette
+    Write-Host "PASS: centered home/overlay, Escape, home opacity, fuzzy suggestions, navigation, opaque page, history and bookmark persistence. Logs: $root"
 } finally {
     $env:WINARCHY_CONFIG_HOME = $oldHome
     $env:LOCALAPPDATA = $oldLocal

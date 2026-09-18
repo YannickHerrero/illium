@@ -10,7 +10,7 @@ use windows::{
         Foundation::*,
         Graphics::Gdi::*,
         System::{Com::*, LibraryLoader::*, Threading::GetCurrentThreadId},
-        UI::{HiDpi::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
+        UI::{Controls::*, HiDpi::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
     },
     core::*,
 };
@@ -34,6 +34,7 @@ const BOOKMARK: u32 = WM_APP + 5;
 const LIBRARY_CHANGED: u32 = WM_APP + 6;
 // WM_APP + 7 is the resident pipe wakeup, handled by the same message loop.
 const THEME_CHANGED: u32 = WM_APP + 8;
+const DISMISS_PALETTE: u32 = WM_APP + 9;
 const _: () = assert!(THEME_CHANGED != crate::resident::REQUEST);
 #[derive(Clone)]
 struct App {
@@ -72,16 +73,21 @@ fn color(s: &str) -> COLORREF {
 fn snapshot() -> Option<App> {
     APP.with(|a| a.borrow().clone())
 }
+pub(crate) unsafe fn paint_picker(dc: HDC) {
+    if let Some(app) = snapshot()
+        && let Ok(picker) = app.picker.try_borrow()
+    {
+        picker.paint(dc);
+    }
+}
 unsafe fn layout(app: &App) {
     let mut rect = RECT::default();
     let _ = GetClientRect(app.hwnd, &mut rect);
-    let height = app.picker.borrow().layout(app.hwnd);
-    if !app.home {
-        rect.top = height.min(rect.bottom.max(0));
-    }
     if let Some(c) = &app.controller {
         let _ = c.SetBounds(rect);
     }
+    // Keep the native palette above the WebView child without resizing the page.
+    app.picker.borrow().layout(app.hwnd);
 }
 unsafe fn palette(show: bool) {
     if let Some(app) = snapshot() {
@@ -129,6 +135,7 @@ unsafe fn apply_theme(theme: &winarchy_theme::Theme) -> AppResult<()> {
     let _ = DeleteObject(previous.1.into());
     if let Some(app) = snapshot() {
         apply_opacity(&app);
+        app.picker.borrow_mut().set_theme(theme);
         let _ = RedrawWindow(Some(app.hwnd), None, None, RDW_INVALIDATE | RDW_ALLCHILDREN);
         if let Some(controller) = app
             .controller
@@ -179,7 +186,7 @@ unsafe fn home_mode(home: bool) {
         palette(home);
     }
 }
-/// Route input only inside the foreground home window. Re-target key events
+/// Route input inside the foreground home or open palette. Re-target key events
 /// before TranslateMessage so the first character, keyboard layout and dead
 /// keys are handled by the real EDIT control rather than reconstructed here.
 unsafe fn route_home_input(msg: &mut MSG) {
@@ -190,7 +197,10 @@ unsafe fn route_home_input(msg: &mut MSG) {
         return;
     };
     let edit = app.picker.borrow().edit;
-    if !app.home
+    let panel = app.picker.borrow().panel;
+    if (!app.home
+        && (!app.picker.borrow().visible
+            || (msg.hwnd != panel && !IsChild(panel, msg.hwnd).as_bool())))
         || msg.hwnd == edit
         || GetForegroundWindow() != app.hwnd
         || (msg.hwnd != app.hwnd && !IsChild(app.hwnd, msg.hwnd).as_bool())
@@ -282,12 +292,22 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             );
             LRESULT(0)
         }
+        WM_DRAWITEM => {
+            if wp.0 == LIST_ID
+                && let Some(app) = snapshot()
+                && let Ok(picker) = app.picker.try_borrow()
+            {
+                picker.draw_item(&*(lp.0 as *const DRAWITEMSTRUCT));
+                return LRESULT(1);
+            }
+            LRESULT(0)
+        }
         WM_COMMAND => {
             let id = wp.0 & 0xffff;
             let notification = (wp.0 >> 16) & 0xffff;
             if id == EDIT_ID && notification == EN_CHANGE as usize {
                 let _ = PostMessageW(Some(hwnd), PICKER_CHANGED, WPARAM(0), LPARAM(0));
-            } else if id == LIST_ID && notification == LBN_DBLCLK as usize {
+            } else if id == LIST_ID && notification == LBN_SELCHANGE as usize {
                 let _ = PostMessageW(Some(hwnd), SUBMIT, WPARAM(0), LPARAM(0));
             }
             LRESULT(0)
@@ -321,6 +341,17 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         }
         PALETTE => {
             palette(true);
+            LRESULT(0)
+        }
+        DISMISS_PALETTE => {
+            if let Some(app) = snapshot()
+                && !app.home
+                && app.picker.borrow().visible
+                && GetFocus() != app.picker.borrow().edit
+                && GetFocus() != app.picker.borrow().list
+            {
+                app.picker.borrow_mut().hide();
+            }
             LRESULT(0)
         }
         WM_CTLCOLOREDIT | WM_CTLCOLORLISTBOX | WM_CTLCOLORSTATIC | WM_ERASEBKGND => APP.with(|a| {
@@ -643,6 +674,14 @@ pub fn run(
         )?;
         let toggle_blocker = blocker.clone();
         let toggle_page = page.clone();
+        controller.add_GotFocus(
+            &FocusChangedEventHandler::create(Box::new(move |_, _| {
+                // Queue this: WebView callbacks must not reenter a borrowed picker.
+                let _ = PostMessageW(Some(hwnd), DISMISS_PALETTE, WPARAM(0), LPARAM(0));
+                Ok(())
+            })),
+            &mut 0,
+        )?;
         controller.add_AcceleratorKeyPressed(
             &AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
                 if let Some(args) = args {
