@@ -161,7 +161,7 @@ impl Library {
     }
 }
 /// Case-insensitive ordered subsequence. Prefer contiguous matches, then early ones.
-fn fuzzy(query: &str, text: &str) -> Option<usize> {
+pub(crate) fn fuzzy(query: &str, text: &str) -> Option<usize> {
     let query: Vec<_> = query
         .to_lowercase()
         .chars()

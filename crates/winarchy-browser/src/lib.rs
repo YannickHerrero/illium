@@ -1,5 +1,6 @@
 pub mod leader;
 pub mod library;
+pub mod tabs;
 
 use adblock::{Engine, request::Request};
 use std::{collections::BTreeSet, path::Path};
