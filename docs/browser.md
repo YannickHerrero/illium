@@ -53,6 +53,7 @@ The field suggests up to eight local results, matching case-insensitive ordered 
 
 | Input | Action |
 | --- | --- |
+| `Ctrl+B`, then a key | Open the themed leader menu (3-second inactivity timeout; see below) |
 | `Ctrl+L` | Open centered navigation palette over the page; select current URL |
 | URL/domain, then Enter | Navigate (bare domains use HTTPS) |
 | Other text, then Enter | DuckDuckGo search; no remote autocomplete |
@@ -67,6 +68,67 @@ The field suggests up to eight local results, matching case-insensitive ordered 
 Winarchy gives each newly opened browser window on the active workspace foreground focus and centers the pointer after applying its tile geometry. This is a one-shot launch action, not a cursor warp on every resize. Both the browser and the daemon must be updated for this behavior.
 
 There is no caption or tab strip. Use Winarchy's window management or Windows' system menu (`Alt+Space`) to move the window. The palette is a native child panel placed above the WebView child in the window's z-order; it neither reserves page space nor allocates another WebView. It remains inside its browser window and inherits its minimize/move/resize lifecycle. No tab action is advertised because tabs are not implemented. `target=_blank` currently navigates the same window; popup-based OAuth flows may not work. Only one window is kept prepared; additional simultaneous windows use standalone hosts.
+
+## Leader key
+
+Press and release `Ctrl+B`, then type a key. No modifier needs to stay held.
+The native, centered help panel follows the current Winarchy/Omarchy theme,
+including live updates: `surface` background, `overlay` borders, `text` labels,
+`subtext` hints and `accent` keys. It uses the URL palette's Cascadia Mono/font
+fallback and DPI conventions, two columns (one in narrow windows), a menu path,
+key count, boxed keys, submenu chevrons and a remaining-seconds footer. It does
+not resize the page, create another WebView, or introduce page transparency.
+The existing URL palette's contents and focus remain intact beneath the overlay.
+
+| Key after `Ctrl+B` | Action |
+| --- | --- |
+| `l` | URL/search palette, current address selected |
+| `h` | Previous page |
+| `f` | WebView2's native find bar |
+| `r` | Reload |
+| `d` | Add bookmark |
+| `n` | Navigation: `p` previous, `s` next, `a` home |
+| `p` | Page: `u` copy URL, `r` reload ignoring cache, `s` stop, `i` DevTools |
+| `z` | Zoom: `+` or `=` in, `-` out, `0` reset |
+| `b` | Blocking: `b` toggle for the current exact hostname and reload |
+
+For example, `Ctrl+B`, `n`, `p` goes back. Page-specific actions on home show an
+informational message instead of acting on the hidden WebView. Copying and
+blocking changes show brief themed confirmation messages. Failures leave the
+browser running and show a brief message; details go to the browser log.
+
+- The leader expires after **3 seconds of inactivity**, renewed by valid submenu
+  transitions and Backspace, not by key autorepeat. There is no idle timer.
+- **Escape** cancels. **Backspace** returns to the root; at the root it cancels.
+- An unknown key is consumed and cancels with a brief indication. It is never
+  replayed into the page. A key pressed after expiration is ordinary input.
+- An action closes the help before execution. Losing window activation cancels
+  the leader and pending commands.
+- **`Ctrl+B`, `Ctrl+B`** closes the leader and lets the second physical chord
+  reach the focused page/editor normally (for example bold in a rich-text
+  editor). No global keyboard injection or script-based imitation is used.
+- Native controls, WebView2 accelerators and a temporary keyboard hook share
+  the same state machine. WebView2's accelerator event does **not** deliver
+  unmodified letters, so a `WH_KEYBOARD_LL` hook is installed when leader mode
+  opens. It checks that this browser window is foreground before inspecting
+  keys, and never records or intercepts another application's input. The hook
+  is removed when the mode ends and the last consumed key is released, or
+  immediately on deactivation/destruction. This preserves page/input/frame
+  focus and suppresses repeats as well as key-up leakage, without global
+  keyboard injection. Existing shortcuts remain available outside leader mode.
+  If Windows refuses hook installation, the leader cancels with a message.
+- Letter keys are case-insensitive; punctuation follows the active keyboard
+  layout. `=` is an alternative to `+` for zoom.
+
+Find uses `ICoreWebView2_28` and `ICoreWebView2Environment15` to open the native
+find dialog with an empty query. An older runtime without these interfaces
+shows an unavailable-action message; the existing `Ctrl+F` remains available.
+Hard reload uses WebView2's `Page.reload` DevTools protocol method with
+`ignoreCache: true`, not a persistent cache setting.
+
+Tabs, filtered history/bookmark views, command search and configurable bindings
+are intentionally not part of this version. Tab shortcuts are not displayed or
+repurposed as window-closing actions.
 
 ## Blocking scope and security
 
@@ -112,6 +174,24 @@ powershell -ExecutionPolicy Bypass -File scripts/test-browser-desktop.ps1 `
 
 It uses disposable configuration and profile directories, checks palette centering on home and over a page, unchanged WebView bounds, Escape dismissal, theme-owned home opacity, live overrides/reset, invalid-theme retention, unified fuzzy matching, navigation, opaque pages even during opacity updates, history and add-only bookmark persistence, and closes only its own process. `-SkipFocusChecks` skips the first-character/Unicode focus-routing checks when foreground focus is unavailable; opacity and navigation checks still run. With an updated Winarchy running, add `-CheckTilingFocus` to check foreground focus and cursor centering after tiling (do not move the mouse during this check). It invokes the queued bookmark action directly, without injecting global keystrokes; manually verify the actual `Ctrl+D` accelerator as well. It retains its temporary logs for diagnosis.
 
+For the opt-in **real keyboard** leader checks, use an interactive desktop and
+leave the keyboard/mouse untouched while the test runs:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/test-browser-desktop.ps1 `
+  -Exe "$PWD/target/release/winarchy-browser.exe" -CheckLeader
+```
+
+This requires the updated local fixture and cannot be combined with
+`-SkipFocusChecks`. Before each injected sequence it verifies that its own test
+browser is foreground; it does not inject into another application. The test
+uses UI Automation to verify page-input preservation, no leaked command keys,
+one passed-through Ctrl+B, native find input, home/URL palette query preservation,
+iframe activation, menu transitions, timeout and unchanged page bounds. A panel
+screenshot is saved alongside the temporary logs. It adds no test IPC or script
+bridge to the browser. Security software may block keyboard automation; do not
+disable protection to run it. In that case, perform the same checks manually.
+
 For resident lifecycle and latency/memory checks, close and stop any existing resident first, then run:
 
 ```powershell
@@ -152,6 +232,25 @@ Prepared mode keeps one browser host and its empty WebView ready. There is no po
 - Both PowerShell scripts parse; the updater successfully downloads upstream lists into a temporary config. Loading these lists, restoring their cache and matching a known blocked/allowed URL were smoke-tested on Linux.
 - The full workspace test run stops on the unchanged `theme_picker::loader::tests::parallel_render_preserves_paint_order_and_reuses_frames` timeout, including with one test thread. No unrelated theme-picker code was changed.
 - The home/history/bookmark desktop smoke script passes on Windows via WSL interop, including add-only bookmarking, combined suggestions, and the opt-in tiling focus/cursor check. The native frame inset was also verified to be zero on Windows. The resident lifecycle script also passes, including rebuilding a spare in the same process, independent extra windows, and idle/deferred shutdown. Initial process-tree memory samples and warm-open timings are recorded above; the broader acceptance matrix and statistically meaningful performance comparisons remain **unverified**.
+
+### Leader implementation validation
+
+- All ten browser unit tests pass, including command-map reachability/uniqueness,
+  submenu navigation, cancellation, timeout renewal, repeat handling, double
+  leader passthrough and the zoom alias.
+- Browser Clippy with warnings denied passes on Linux, Windows GNU and Windows
+  MSVC. The Windows GNU release binary builds. The updated PowerShell smoke
+  script parses successfully.
+- **The new desktop leader test has not run successfully in the implementation
+  environment:** Windows antivirus rejected the script before execution. No
+  protection was bypassed. The desktop claims in earlier sections describe
+  the previous browser, not validation of this leader implementation.
+- Still manually validate the new shortcuts and find UI on Windows, especially
+  cross-origin frames, real rich-text editors, AZERTY/QWERTY, light/dark live
+  theme changes, mixed DPI, small windows, focus loss and rapid/repeated input.
+  Check navigation, copy URL, no-cache reload, zoom, DevTools and both blocking
+  states against the local fixture. Screen-reader discoverability of the
+  owner-drawn help remains unverified.
 
 ## Status / remaining gates
 
