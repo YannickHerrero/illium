@@ -139,6 +139,12 @@ unsafe fn leader_key(vk: u32, scan: u32, down: bool, repeat: bool) -> bool {
     if repeat && input.consumed.contains(&vk) {
         return true;
     }
+    // An action can move focus to a runtime-owned control which does not send
+    // its key-up through this adapter. A fresh press must not inherit that
+    // consumed key or suppress normal autorepeat later.
+    if !repeat {
+        input.consumed.remove(&vk);
+    }
     // Modifier transitions must pass through, notably the second Ctrl+B.
     if [
         VK_CONTROL.0 as u32,
@@ -156,7 +162,12 @@ unsafe fn leader_key(vk: u32, scan: u32, down: bool, repeat: bool) -> bool {
     let ctrl = GetKeyState(VK_CONTROL.0 as i32) < 0;
     let alt = GetKeyState(VK_MENU.0 as i32) < 0;
     let win = GetKeyState(VK_LWIN.0 as i32) < 0 || GetKeyState(VK_RWIN.0 as i32) < 0;
-    let key = if ctrl && !alt && !win && GetKeyState(VK_SHIFT.0 as i32) >= 0 && vk == b'B' as u32 {
+    let is_leader =
+        ctrl && !alt && !win && GetKeyState(VK_SHIFT.0 as i32) >= 0 && vk == b'B' as u32;
+    if input.state.menu().is_none() && !is_leader {
+        return false;
+    }
+    let key = if is_leader {
         Key::Leader
     } else if ctrl || alt || win {
         Key::Other
