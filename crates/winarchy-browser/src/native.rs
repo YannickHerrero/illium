@@ -20,6 +20,10 @@ use windows::{
     core::*,
 };
 
+#[cfg(test)]
+#[path = "native_tests.rs"]
+mod tests;
+
 type AppResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 pub fn show_error(message: &str) {
     unsafe {

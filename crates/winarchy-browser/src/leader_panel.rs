@@ -36,6 +36,10 @@ unsafe fn fill(dc: HDC, rect: RECT, value: &str) {
     let _ = DeleteObject(brush.into());
 }
 unsafe fn text(dc: HDC, mut rect: RECT, value: &str, tint: &str) {
+    // An empty UTF-16 Vec does not provide a readable string pointer to User32.
+    if value.is_empty() {
+        return;
+    }
     SetTextColor(dc, color(tint));
     let mut value: Vec<u16> = value.encode_utf16().collect();
     DrawTextW(

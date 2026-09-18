@@ -42,6 +42,11 @@ unsafe fn fill(dc: HDC, rect: &RECT, color: COLORREF) {
     let _ = DeleteObject(brush.into());
 }
 unsafe fn text(dc: HDC, rect: RECT, value: &str, color: COLORREF) {
+    // Empty tab badges are normal. Do not pass an empty Vec's dangling UTF-16
+    // pointer to User32: DrawTextW can dereference it even with a zero count.
+    if value.is_empty() {
+        return;
+    }
     SetTextColor(dc, color);
     SetBkMode(dc, TRANSPARENT);
     let mut value: Vec<u16> = value.encode_utf16().collect();
