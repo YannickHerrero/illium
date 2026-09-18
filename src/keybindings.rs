@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn defaults_are_unchanged_and_ordered() {
         let rows = rows(DEFAULTS, DEFAULTS);
-        assert_eq!(rows.len(), 53);
+        assert_eq!(rows.len(), 57);
         assert!(rows.iter().all(|r| !r.changed()));
         assert_eq!(rows[0].description, "Launcher");
         assert_eq!(rows[0].label(), "Alt + Space");

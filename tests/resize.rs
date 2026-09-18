@@ -1,5 +1,39 @@
 use winarchy::layout::{Axis, Rect, Splits, fibonacci};
 
+#[test]
+fn default_shortcuts_and_editor_labels() {
+    use winarchy::{command::Command, config::Keys, keybindings, keyboard};
+    let keys: Keys = toml::from_str(keybindings::DEFAULTS).unwrap();
+    let bindings = keyboard::parse(&keys).unwrap();
+    for (key, axis, delta, label) in [
+        ('U', Axis::Width, -5, "Decrease window width by 5%"),
+        ('P', Axis::Width, 5, "Increase window width by 5%"),
+        ('I', Axis::Height, -5, "Decrease window height by 5%"),
+        ('O', Axis::Height, 5, "Increase window height by 5%"),
+    ] {
+        let binding = bindings
+            .iter()
+            .find(|b| b.key == key as u32 && b.modifiers == keyboard::ALT)
+            .unwrap();
+        assert_eq!(binding.command, Command::Resize { axis, delta });
+        assert_eq!(
+            keybindings::describe(&keys.keybindings[&format!("Alt+{key}")]),
+            label
+        );
+    }
+    // An existing custom file is not silently granted new shortcuts.
+    let rows = keybindings::rows(
+        keybindings::DEFAULTS,
+        "[keybindings]\n'Alt+Q'='window close'\n",
+    );
+    let resize: Vec<_> = rows
+        .iter()
+        .filter(|r| r.command.starts_with("window resize "))
+        .collect();
+    assert_eq!(resize.len(), 4);
+    assert!(resize.iter().all(|r| r.chord.is_none()));
+}
+
 fn area() -> Rect {
     Rect {
         x: -1000,

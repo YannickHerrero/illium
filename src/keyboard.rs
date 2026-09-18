@@ -177,7 +177,7 @@ mod tests {
         let keys: Keys =
             toml::from_str(include_str!("../config/defaults/keybindings.toml")).unwrap();
         let bs = parse(&keys).unwrap();
-        assert_eq!(bs.len(), 53);
+        assert_eq!(bs.len(), 57);
         for (key, increase) in [(b'Y', false), (b'U', true)] {
             assert!(
                 bs.iter()

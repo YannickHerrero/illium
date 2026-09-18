@@ -65,6 +65,8 @@ This does **not** stop Explorer. Defaults are installed without overwriting exis
 | Alt+Shift+Escape | Task manager |
 | Alt+H/J/K/L or arrows | Focus left/down/up/right |
 | Alt+Shift+H/J/K/L or arrows | Swap tiled windows directionally |
+| Alt+U / Alt+P | Reduce / increase tiled window width by 5% of its split (hold to repeat) |
+| Alt+I / Alt+O | Reduce / increase tiled window height by 5% of its split (hold to repeat) |
 | Alt+1…9 | Workspace |
 | Alt+Shift+1…9 | Move to workspace and follow |
 | Alt+S / Alt+D | Next occupied / recent workspace |
