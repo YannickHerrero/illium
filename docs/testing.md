@@ -117,6 +117,15 @@ the timezone applet at two widths and compares column edges across all rows,
 including midnight and half-hour labels.
 **Physical-key interaction with third-party hooks and mixed-DPI behavior still need desktop validation.**
 
+For a failure that cannot be reproduced with injected input, start the daemon
+with `WINARCHY_TRACE_ESCAPE=1`. `winarchy.log` then records Escape-only hook
+metadata (down/up, injected flags, consumed state, active capture modes) plus
+the foreground HWND and open applet at dispatch time. No other keys or typed
+text are recorded, and the hook only enqueues metadata; logging stays on the UI
+thread. Popup capture transitions are also logged. Restart without this variable
+to disable the diagnostic. Reproduce with the physical key, without running an
+input-injection probe between the opening and the failed dismissal.
+
 On an unlocked Windows desktop, with the updated default binding installed:
 
 1. Focus an editor. Press Ctrl+Alt+B; check badges align with each actionable

@@ -15,6 +15,20 @@ static STATE: OnceLock<(EventSender, RwLock<Vec<Binding>>)> = OnceLock::new();
 /// of reaching the foreground application.
 static POPUP_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static HOOK_THREAD: OnceLock<u32> = OnceLock::new();
+static TRACE_ESCAPE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Opt-in, Escape-only diagnostics. No other key or typed text is recorded.
+#[derive(Debug)]
+pub struct EscapeTrace {
+    pub down: bool,
+    pub popup: bool,
+    pub hints: u32,
+    pub capture: bool,
+    pub consumed: bool,
+    pub flags: u32,
+    pub extra: usize,
+}
+
 const REFRESH_KEYBOARD_HOOK: u32 = WM_APP + 1;
 
 /// Claim Escape when a popup opens, without activating its window. A foreground
@@ -22,6 +36,9 @@ const REFRESH_KEYBOARD_HOOK: u32 = WM_APP + 1;
 /// Windows calls newer hooks first, and a consumed key never reaches ours.
 pub fn set_popup_open(open: bool) {
     let was_open = POPUP_OPEN.swap(open, std::sync::atomic::Ordering::Relaxed);
+    if open != was_open && TRACE_ESCAPE.load(std::sync::atomic::Ordering::Relaxed) {
+        tracing::info!(open, "Escape diagnostic: popup capture changed");
+    }
     if open && !was_open && let Some(thread) = HOOK_THREAD.get() {
         // Hooks must be replaced on their message-pumping thread, not the UI
         // thread (which can spend time compiling an applet).
@@ -118,6 +135,23 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
     unsafe {
         if code >= 0 {
             let k = *(l.0 as *const KBDLLHOOKSTRUCT);
+            if k.vkCode == VK_ESCAPE.0 as u32
+                && TRACE_ESCAPE.load(std::sync::atomic::Ordering::Relaxed)
+                && let Some((tx, _)) = STATE.get()
+            {
+                // Never log or query the foreground window on the hook thread.
+                let consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner())[k.vkCode as usize]
+                    != Consumed::No;
+                let _ = tx.send(Event::EscapeTrace(EscapeTrace {
+                    down: w.0 as u32 == WM_KEYDOWN || w.0 as u32 == WM_SYSKEYDOWN,
+                    popup: POPUP_OPEN.load(std::sync::atomic::Ordering::Relaxed),
+                    hints: BAR_HINTS.load(std::sync::atomic::Ordering::Relaxed),
+                    capture: CAPTURE.load(std::sync::atomic::Ordering::Relaxed),
+                    consumed,
+                    flags: k.flags.0,
+                    extra: k.dwExtraInfo,
+                }));
+            }
             if k.vkCode < 256 && k.dwExtraInfo != super::native::INJECTED {
                 let down = w.0 as u32 == WM_KEYDOWN || w.0 as u32 == WM_SYSKEYDOWN;
                 let up = w.0 as u32 == WM_KEYUP || w.0 as u32 == WM_SYSKEYUP;
@@ -285,6 +319,10 @@ unsafe extern "system" fn display_window(h: HWND, message: u32, w: WPARAM, l: LP
     unsafe { DefWindowProcW(h, message, w, l) }
 }
 pub fn start(tx: EventSender, bindings: Vec<Binding>) -> Result<(), String> {
+    TRACE_ESCAPE.store(
+        std::env::var("WINARCHY_TRACE_ESCAPE").as_deref() == Ok("1"),
+        std::sync::atomic::Ordering::Relaxed,
+    );
     let _ = STATE.set((tx, RwLock::new(bindings)));
     let (ready, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || unsafe {

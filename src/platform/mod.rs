@@ -67,6 +67,8 @@ pub enum Event {
     AppletAction(String, Option<String>),
     /// Escape pressed while a bar popup was open.
     Escape,
+    /// Opt-in diagnostic delivered off the low-level hook thread.
+    EscapeTrace(input::EscapeTrace),
     /// Backspace on an empty launcher query: leave a submenu.
     Back,
     /// Keybindings editor input, tagged with its opening generation.
@@ -1040,7 +1042,18 @@ impl Manager {
                 }
                 self.shell.toggle_bar_background();
             }
+            Event::EscapeTrace(trace) => {
+                tracing::info!(
+                    down = trace.down, popup = trace.popup, hints = trace.hints,
+                    capture = trace.capture, consumed = trace.consumed,
+                    flags = trace.flags, extra = trace.extra,
+                    applet = ?self.applets.open, details = ?self.shell.popup_open,
+                    foreground = unsafe { GetForegroundWindow().0 as isize },
+                    "Escape diagnostic: hook event"
+                );
+            }
             Event::Escape => {
+                tracing::debug!(applet = ?self.applets.open, "dismissing popup on Escape");
                 self.shell.hints.close();
                 self.shell.close_popup();
                 self.applets.escape();
