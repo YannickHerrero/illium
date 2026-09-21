@@ -816,10 +816,7 @@ impl Manager {
         if !self.shell.hints.opened && self.shell.popup_open.is_none() && self.applets.open.is_none() {
             self.bar_restore = None;
         }
-        input::POPUP_OPEN.store(
-            self.shell.popup_open.is_some() || self.applets.open.is_some(),
-            std::sync::atomic::Ordering::Relaxed,
-        );
+        input::set_popup_open(self.shell.popup_open.is_some() || self.applets.open.is_some());
         input::BAR_HINTS.store(
             if self.shell.hints.opened {
                 self.shell.hints.generation

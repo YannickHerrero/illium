@@ -101,7 +101,21 @@ the hook is called directly without injecting desktop input to verify Escape
 queued immediately after selection and suppression of held-key repeats; a
 headless applet whose `cancel` callback returns true still closes in one press
 and receives exactly one `dismissed` callback.
-**Full native hook, focus and mixed-DPI behavior still need desktop validation.**
+A focused Windows regression now covers an Escape-intercepting client hook installed
+*after* Winarchy's hook. Opening a passive popup must renew Winarchy's capture
+priority without changing the foreground HWND. Escape closes it, repeats/key-up
+stay consumed, and the next press goes back to the client. This opt-in test uses
+real hooks and tagged Escape injections (no desktop clicks); run it alone:
+
+```powershell
+cargo test -p winarchy --lib passive_popup_escape -- --ignored --test-threads=1
+```
+
+It fails with the old popup flag-only publication and passes with capture renewal.
+The regular `timezone_columns_align_despite_different_label_widths` test renders
+the timezone applet at two widths and compares column edges across all rows,
+including midnight and half-hour labels.
+**Physical-key interaction with third-party hooks and mixed-DPI behavior still need desktop validation.**
 
 On an unlocked Windows desktop, with the updated default binding installed:
 

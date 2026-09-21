@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "input_popup_tests.rs"]
+mod popup_tests;
+
 use super::{Event, EventSender};
 use crate::keyboard::Binding;
 pub use crate::keyboard::parse;
@@ -9,7 +13,26 @@ use windows::Win32::{
 static STATE: OnceLock<(EventSender, RwLock<Vec<Binding>>)> = OnceLock::new();
 /// Set while a bar popup is shown so Escape is consumed and closes it instead
 /// of reaching the foreground application.
-pub static POPUP_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static POPUP_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static HOOK_THREAD: OnceLock<u32> = OnceLock::new();
+const REFRESH_KEYBOARD_HOOK: u32 = WM_APP + 1;
+
+/// Claim Escape when a popup opens, without activating its window. A foreground
+/// application may have installed a newer low-level hook since daemon startup;
+/// Windows calls newer hooks first, and a consumed key never reaches ours.
+pub fn set_popup_open(open: bool) {
+    let was_open = POPUP_OPEN.swap(open, std::sync::atomic::Ordering::Relaxed);
+    if open && !was_open && let Some(thread) = HOOK_THREAD.get() {
+        // Hooks must be replaced on their message-pumping thread, not the UI
+        // thread (which can spend time compiling an applet).
+        if let Err(error) = unsafe {
+            PostThreadMessageW(*thread, REFRESH_KEYBOARD_HOOK, WPARAM(0), LPARAM(0))
+        } {
+            tracing::warn!(%error, "could not refresh popup keyboard capture");
+        }
+    }
+}
+
 /// Nonzero opening generation while bar hints consume keyboard input.
 pub static BAR_HINTS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 /// Set while the keybindings editor records a chord: every key is consumed
@@ -271,7 +294,7 @@ pub fn start(tx: EventSender, bindings: Vec<Binding>) -> Result<(), String> {
             Err(e) => {
                 let _ = ready.send(Err(e.to_string()));
             }
-            Ok(hook) => {
+            Ok(mut hook) => {
                 let mouse_hook = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse), None, 0).ok();
                 let hooks = [
                     SetWinEventHook(
@@ -354,9 +377,23 @@ pub fn start(tx: EventSender, bindings: Vec<Binding>) -> Result<(), String> {
                     }
                     return;
                 }
+                let _ = HOOK_THREAD.set(windows::Win32::System::Threading::GetCurrentThreadId());
                 let _ = ready.send(Ok(()));
                 let mut msg = MSG::default();
                 while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+                    if msg.hwnd.is_invalid() && msg.message == REFRESH_KEYBOARD_HOOK {
+                        // Install first: retain the working hook if replacement
+                        // fails. Keep consumed-key state so Escape repeats and
+                        // its eventual release cannot leak into the client.
+                        match SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard), None, 0) {
+                            Ok(replacement) => {
+                                let _ = UnhookWindowsHookEx(hook);
+                                hook = replacement;
+                            }
+                            Err(error) => tracing::warn!(%error, "could not refresh popup keyboard hook"),
+                        }
+                        continue;
+                    }
                     let _ = TranslateMessage(&msg);
                     DispatchMessageW(&msg);
                 }
