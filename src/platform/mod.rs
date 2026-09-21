@@ -1044,12 +1044,12 @@ impl Manager {
             }
             Event::EscapeTrace(trace) => {
                 tracing::info!(
-                    down = trace.down, popup = trace.popup, hints = trace.hints,
+                    source = trace.source, down = trace.down, popup = trace.popup, hints = trace.hints,
                     capture = trace.capture, consumed = trace.consumed,
                     flags = trace.flags, extra = trace.extra,
                     applet = ?self.applets.open, details = ?self.shell.popup_open,
                     foreground = unsafe { GetForegroundWindow().0 as isize },
-                    "Escape diagnostic: hook event"
+                    "Escape diagnostic: input event"
                 );
             }
             Event::Escape => {

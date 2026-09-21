@@ -2,6 +2,9 @@
 #[path = "input_popup_tests.rs"]
 mod popup_tests;
 
+#[path = "input_raw.rs"]
+mod raw;
+
 use super::{Event, EventSender};
 use crate::keyboard::Binding;
 pub use crate::keyboard::parse;
@@ -20,6 +23,7 @@ static TRACE_ESCAPE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBo
 /// Opt-in, Escape-only diagnostics. No other key or typed text is recorded.
 #[derive(Debug)]
 pub struct EscapeTrace {
+    pub source: &'static str,
     pub down: bool,
     pub popup: bool,
     pub hints: u32,
@@ -143,6 +147,7 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                 let consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner())[k.vkCode as usize]
                     != Consumed::No;
                 let _ = tx.send(Event::EscapeTrace(EscapeTrace {
+                    source: "hook",
                     down: w.0 as u32 == WM_KEYDOWN || w.0 as u32 == WM_SYSKEYDOWN,
                     popup: POPUP_OPEN.load(std::sync::atomic::Ordering::Relaxed),
                     hints: BAR_HINTS.load(std::sync::atomic::Ordering::Relaxed),
@@ -311,6 +316,10 @@ unsafe extern "system" fn mouse(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
     }
 }
 unsafe extern "system" fn display_window(h: HWND, message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    if message == WM_INPUT {
+        raw::received(l);
+        // DefWindowProc must still run to release foreground raw-input storage.
+    }
     if (message == WM_DISPLAYCHANGE || message == WM_SETTINGCHANGE)
         && let Some((tx, _)) = STATE.get()
     {
@@ -414,6 +423,9 @@ pub fn start(tx: EventSender, bindings: Vec<Binding>) -> Result<(), String> {
                         let _ = UnhookWinEvent(h);
                     }
                     return;
+                }
+                if let Ok(window) = _display && let Err(error) = raw::register(window) {
+                    tracing::warn!(%error, "physical popup Escape capture unavailable");
                 }
                 let _ = HOOK_THREAD.set(windows::Win32::System::Threading::GetCurrentThreadId());
                 let _ = ready.send(Ok(()));

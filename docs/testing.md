@@ -118,13 +118,25 @@ including midnight and half-hour labels.
 **Physical-key interaction with third-party hooks and mixed-DPI behavior still need desktop validation.**
 
 For a failure that cannot be reproduced with injected input, start the daemon
-with `WINARCHY_TRACE_ESCAPE=1`. `winarchy.log` then records Escape-only hook
-metadata (down/up, injected flags, consumed state, active capture modes) plus
+with `WINARCHY_TRACE_ESCAPE=1`. `winarchy.log` then records Escape-only input
+metadata (`source=hook` or `source=raw`, down/up, source-specific flags, consumed
+state, active capture modes) plus
 the foreground HWND and open applet at dispatch time. No other keys or typed
 text are recorded, and the hook only enqueues metadata; logging stays on the UI
 thread. Popup capture transitions are also logged. Restart without this variable
 to disable the diagnostic. Reproduce with the physical key, without running an
 input-injection probe between the opening and the failed dismissal.
+
+The input thread also receives keyboard raw-input notifications with `INPUTSINK`
+on its hidden event window. Only Escape can produce an action, only while a popup
+or bar hints are open, and never during chord recording. The raw fallback handles
+a physical Escape missing from the hook without focusing the popup; repeats are
+one-shot and ordinary input remains enabled (no `NOLEGACY`). Winit's mouse raw
+registration is unchanged; Slint keyboard events continue using regular window
+messages. Raw input is observational: if another program intercepts a physical
+key, this fallback can dismiss the popup but cannot undo that program's action.
+The consuming hook remains the normal path. Native unit tests under `input::raw`
+cover modal gating, held-before-opening keys, repeats and hook-consumed presses.
 
 On an unlocked Windows desktop, with the updated default binding installed:
 
