@@ -116,6 +116,45 @@ fn escape_closes_applet_even_when_its_cancel_callback_would_handle_it() {
     std::fs::remove_dir_all(home).unwrap();
 }
 
+#[test]
+fn timezone_columns_align_despite_different_label_widths() {
+    let windows = Rc::new(RefCell::new(Vec::new()));
+    slint::platform::set_platform(Box::new(Headless(windows.clone()))).unwrap();
+    let home = std::env::temp_dir().join(format!("winarchy-timezone-grid-{}", std::process::id()));
+    Config::install(&home).unwrap();
+    let applet = applets::load(&home, "timezones").unwrap();
+    let def = compile(&applet).unwrap();
+    let instance = def.create().unwrap();
+    let rows: Vec<_> = ["1", "23", "Wed\n12", "05:30"]
+        .into_iter()
+        .map(|label| serde_json::json!({
+            "name": "Test", "zone": "UTC+00:00", "time": "12:30", "detail": "Today",
+            "cells": (0..24).map(|hour| serde_json::json!({
+                "label": if hour == 0 { label.to_owned() } else { hour.to_string() }, "current": false, "daytime": false, "night": false,
+            })).collect::<Vec<_>>()
+        }))
+        .collect();
+    set_data(&instance, &def, &serde_json::json!({"rows": rows, "position": 12.5})).unwrap();
+    instance.show().unwrap();
+    let window = windows.borrow().last().unwrap().clone();
+    for width in [1120, 860] {
+        instance.set_property("popup-width", Value::Number(width as f64)).unwrap();
+        window.set_size(slint::PhysicalSize::new(width, 310));
+        window.request_redraw();
+        let mut pixels = vec![Rgb8Pixel::default(); width as usize * 310];
+        window.draw_if_needed(|renderer| { renderer.render(&mut pixels, width as usize); });
+        // Sample above the centered labels, below each rounded corner. Every
+        // row must have exactly the same cell edges and current-time marker.
+        let strip = |y: usize| &pixels[y * width as usize + 266..(y + 1) * width as usize - 20];
+        for y in [98, 167, 237] {
+            assert_eq!(strip(28), strip(y), "misaligned timeline at width {width}, y={y}");
+        }
+        assert!(strip(28).windows(2).filter(|pair| pair[0] != pair[1]).count() >= 46);
+    }
+    instance.hide().unwrap();
+    std::fs::remove_dir_all(home).unwrap();
+}
+
 fn press(window: &MinimalSoftwareWindow, text: slint::SharedString) {
     window.dispatch_event(WindowEvent::KeyPressed { text: text.clone() });
     window.dispatch_event(WindowEvent::KeyReleased { text });

@@ -46,24 +46,26 @@ export component View inherits Window {
                         Text { text: zone.detail; color: root.muted; font-size: 10px; }
                     }
                 }
-                Rectangle {
-                    HorizontalLayout {
-                        spacing: 2px;
-                        for cell in zone.cells: Rectangle {
-                            border-radius: 4px;
-                            background: cell.current ? root.accent.with-alpha(0.45)
-                                : cell.daytime ? root.accent.with-alpha(0.22)
-                                : cell.night ? root.surface.with-alpha(0.4) : root.surface;
-                            Text {
-                                text: cell.label;
-                                color: cell.night ? root.muted : root.fg;
-                                font-size: 11px;
-                                horizontal-alignment: center; vertical-alignment: center;
-                            }
+                timeline := Rectangle {
+                    // Shared geometry, independent of each label's preferred width.
+                    property <length> step: (self.width + 2px) / 24;
+                    for cell[index] in zone.cells: Rectangle {
+                        x: index * timeline.step;
+                        width: timeline.step - 2px;
+                        height: parent.height;
+                        border-radius: 4px;
+                        background: cell.current ? root.accent.with-alpha(0.45)
+                            : cell.daytime ? root.accent.with-alpha(0.22)
+                            : cell.night ? root.surface.with-alpha(0.4) : root.surface;
+                        Text {
+                            text: cell.label;
+                            color: cell.night ? root.muted : root.fg;
+                            font-size: 11px;
+                            horizontal-alignment: center; vertical-alignment: center;
                         }
                     }
                     Rectangle {
-                        x: parent.width * root.data.position / 24;
+                        x: timeline.step * root.data.position;
                         width: 2px; height: parent.height;
                         background: root.accent;
                     }
