@@ -555,9 +555,11 @@ impl Manager {
                 "clients": self.model.clients.iter().map(|c| serde_json::json!({"id":c.id,"workspace":c.workspace,"floating":c.floating,"fullscreen":c.fullscreen,"title":native::title(c.id),"rect":native::rect(c.id)})).collect::<Vec<_>>()
             }).to_string()),
             Command::Workspace(n) => {
+                let started = std::time::Instant::now();
                 self.model.switch(n);
                 self.layout();
                 self.focus_visible();
+                tracing::debug!(workspace = n, elapsed_us = started.elapsed().as_micros(), "workspace placement and focus submitted");
             }
             Command::Next => {
                 self.model.switch(self.model.next());
@@ -1439,7 +1441,9 @@ pub fn run(replace: bool) -> Result<(), String> {
             return;
         };
         let started = std::time::Instant::now();
+        let mut count = 0;
         for (index, event) in rx.try_iter().take(128).enumerate() {
+            count += 1;
             m.event(event);
             if index == 127 || started.elapsed() >= std::time::Duration::from_millis(4) {
                 dispatch::wake();
@@ -1454,7 +1458,9 @@ pub fn run(replace: bool) -> Result<(), String> {
             applets.arrange();
             shell.hints.arrange(*bar_restore);
         }
-        tracing::trace!(elapsed_us = started.elapsed().as_micros(), "event drain");
+        if count > 0 {
+            tracing::trace!(count, elapsed_us = started.elapsed().as_micros(), "event drain");
+        }
     });
     let notified = drain.clone();
     dispatch::install(move || notified());

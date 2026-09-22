@@ -17,7 +17,9 @@ fn main() {
         if let Ok(file) = file {
             tracing_subscriber::fmt()
                 .with_ansi(false)
-                .with_max_level(if args.iter().any(|a| a == "--debug") {
+                .with_max_level(if args.iter().any(|a| a == "--trace-latency") {
+                    tracing::Level::TRACE
+                } else if args.iter().any(|a| a == "--debug") {
                     tracing::Level::DEBUG
                 } else {
                     tracing::Level::INFO

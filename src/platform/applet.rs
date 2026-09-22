@@ -83,6 +83,7 @@ pub struct Runtime {
     /// Name of the applet whose view is shown.
     pub open: Option<String>,
     pending: Option<Rect>,
+    pending_since: Option<Instant>,
     keyboard_focus: bool,
     tx: EventSender,
     generation: u64,
@@ -93,6 +94,7 @@ impl Runtime {
             entries: vec![],
             open: None,
             pending: None,
+            pending_since: None,
             keyboard_focus: false,
             tx,
             generation: 0,
@@ -370,6 +372,7 @@ impl Runtime {
     }
     /// Shows or hides the applet view under the bar module centered at logical `x`.
     pub fn toggle(&mut self, c: &Config, monitor: Rect, name: &str, x: i32) -> Result<(), String> {
+        let started = Instant::now();
         if self.open.as_deref() == Some(name) {
             self.close();
             return Ok(());
@@ -417,6 +420,7 @@ impl Runtime {
             Value::Number(super::dpi::logical(monitor, rect.h) as f64),
         );
         self.pending = Some(rect);
+        self.pending_since = Some(started);
         shell::prepare(instance.window(), rect, !e.applet.manifest.focusable);
         instance.show().map_err(|err| err.to_string())?;
         self.open = Some(name.to_owned());
@@ -436,6 +440,7 @@ impl Runtime {
             let _ = instance.hide();
         }
         self.pending = None;
+        self.pending_since = None;
         self.keyboard_focus = false;
     }
     /// Keyboard hint activation may focus even a normally passive applet.
@@ -468,6 +473,9 @@ impl Runtime {
             native::focus(shell::id(window), false);
         }
         self.pending = None;
+        if let Some(started) = self.pending_since.take() {
+            tracing::debug!(applet = e.applet.name, elapsed_us = started.elapsed().as_micros(), "applet placement submitted");
+        }
     }
     pub fn owns(&self, id: isize) -> bool {
         self.entries
