@@ -114,6 +114,8 @@ pub struct Expose {
     model: Model,
     /// Executable path per window, for the icon lookup.
     exes: HashMap<isize, String>,
+    /// Last thumbnail per window, kept across openings so a reopened exposé
+    /// shows cards at once while the capture worker refreshes them.
     images: HashMap<isize, slint::Image>,
     /// Icons by executable path, kept across openings.
     icons: HashMap<String, slint::Image>,
@@ -212,9 +214,10 @@ impl Expose {
             .iter()
             .map(|e| (e.id, exes.get(&e.id).cloned().unwrap_or_default()))
             .collect();
+        self.images
+            .retain(|id, _| entries.iter().any(|e| e.id == *id));
         self.model = Model::new(entries);
         self.exes = exes;
-        self.images.clear();
         self.render();
         if self.ui.show().is_err() {
             return;
@@ -246,7 +249,6 @@ impl Expose {
         self.pending_window = false;
         let _ = self.ui.hide();
         self.rows.set_vec(vec![]);
-        self.images.clear();
         self.model = Model::default();
         self.restore.take()
     }

@@ -39,7 +39,7 @@ The bar lists the occupied workspaces plus the active one and highlights the act
 
 Typing filters by title or application name with the launcher's subsequence matching; Backspace edits, Ctrl+U clears. **Left/Right** (or Alt+Tab / Alt+Shift+Tab while the exposé is open), **Up/Down** and hovering move the selection. **Enter** or a click switches to the window's workspace if needed and focuses it. A middle click or the configured `window close` chord (Alt+Q by default) closes the selected window and removes its card; a window closed by other means disappears too. **Escape** clears the filter first, then closes the exposé and restores the previous focus. Any other Winarchy command (a workspace switch, the launcher) closes it as well.
 
-Thumbnails are static snapshots taken when the exposé opens. Windows on inactive workspaces can only be captured while `conceal = "park"` (the default) keeps them painting off screen; with `conceal = "hide"` their cards show icon and title only.
+Thumbnails are static snapshots refreshed each time the exposé opens; the previous ones show immediately until the new captures arrive. Windows on inactive workspaces can only be captured while `conceal = "park"` (the default) keeps them painting off screen; with `conceal = "hide"` their cards show icon and title only.
 
 Existing keybinding files are not overwritten on upgrade. Add this line under `[keybindings]`, then reload with Alt+Shift+R:
 
