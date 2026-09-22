@@ -42,6 +42,9 @@ pub struct Bar {
     /// Date half of the clock; empty uses the short weekday/day/month format.
     #[serde(default)]
     pub clock_date_format: String,
+    /// Modules folded behind the `drawer` chevron, shown while it is expanded.
+    #[serde(default)]
+    pub drawer: Vec<String>,
 }
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -103,7 +106,7 @@ pub struct Config {
     pub theme: Theme,
 }
 /// Bar module names handled by the daemon itself; anything else is an applet.
-pub const BUILTIN_MODULES: [&str; 9] = [
+pub const BUILTIN_MODULES: [&str; 10] = [
     "workspaces",
     "window-title",
     "volume",
@@ -113,6 +116,7 @@ pub const BUILTIN_MODULES: [&str; 9] = [
     "cpu",
     "memory",
     "separator",
+    "drawer",
 ];
 const DEFAULTS: &[(&str, &str)] = &[
     (
@@ -380,12 +384,26 @@ impl Config {
             return Err("launcher: invalid dimensions".into());
         }
         crate::keyboard::parse(&c.keys)?;
-        for (index, modules) in [&c.bar.left, &c.bar.center, &c.bar.right]
+        let drawers = [&c.bar.left, &c.bar.center, &c.bar.right]
+            .iter()
+            .flat_map(|modules| modules.iter())
+            .filter(|module| *module == "drawer")
+            .count();
+        if drawers > 1 {
+            return Err("bar: drawer may be listed once".into());
+        }
+        if (drawers == 1) == c.bar.drawer.is_empty() {
+            return Err(
+                "bar: drawer needs both a drawer entry in a section and a non-empty drawer list"
+                    .into(),
+            );
+        }
+        for (index, modules) in [&c.bar.left, &c.bar.center, &c.bar.right, &c.bar.drawer]
             .iter()
             .enumerate()
         {
             for module in *modules {
-                if module == "workspaces" && index != 0 {
+                if module == "workspaces" && index != 0 || module == "drawer" && index == 3 {
                     return Err(format!("bar: unsupported module or placement: {module}"));
                 }
                 if !BUILTIN_MODULES.contains(&module.as_str())
@@ -482,6 +500,40 @@ mod tests {
         assert_eq!(c.bar.right.iter().filter(|m| *m == "separator").count(), 2);
         bar("right = [\"divider\"]");
         assert!(Config::load(&p).is_err());
+        std::fs::remove_dir_all(p).unwrap();
+    }
+    #[test]
+    fn drawer_is_listed_once_with_a_matching_module_list() {
+        let p = std::env::temp_dir().join(format!("winarchy-drawer-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&p);
+        Config::install(&p).unwrap();
+        let bar = |right: &str, drawer: &str| {
+            let text = include_str!("../config/defaults/bar.toml").replace(
+                "right = [\"battery\", \"cpu\", \"memory\", \"volume\", \"wifi\"]",
+                &format!("{right}\n{drawer}"),
+            );
+            std::fs::write(p.join("bar.toml"), text).unwrap();
+        };
+        bar(
+            "right = [\"battery\", \"drawer\", \"volume\"]",
+            "drawer = [\"cpu\", \"memory\", \"wifi\"]",
+        );
+        let c = Config::load(&p).unwrap();
+        assert_eq!(c.bar.drawer, ["cpu", "memory", "wifi"]);
+        assert!(c.bar.right.contains(&"drawer".to_string()));
+        bar("right = [\"battery\"]", "");
+        assert!(Config::load(&p).unwrap().bar.drawer.is_empty());
+        for (right, drawer) in [
+            ("right = [\"drawer\"]", ""),
+            ("right = [\"battery\"]", "drawer = [\"cpu\"]"),
+            ("right = [\"drawer\", \"drawer\"]", "drawer = [\"cpu\"]"),
+            ("right = [\"drawer\"]", "drawer = [\"drawer\"]"),
+            ("right = [\"drawer\"]", "drawer = [\"workspaces\"]"),
+            ("right = [\"drawer\"]", "drawer = [\"nope\"]"),
+        ] {
+            bar(right, drawer);
+            assert!(Config::load(&p).is_err(), "{right} / {drawer}");
+        }
         std::fs::remove_dir_all(p).unwrap();
     }
     #[test]

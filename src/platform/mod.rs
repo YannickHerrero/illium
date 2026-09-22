@@ -666,10 +666,16 @@ impl Manager {
                     self.applets.close();
                     self.finish_picker(crate::theme_picker::Outcome::Cancel);
                     self.finish_editor(shell::keybindings::Outcome::Close);
+                    // Folded drawer modules need rows before the hint session freezes the bar.
+                    self.shell.drawer_hints = true;
                     self.shell.refresh(&self.model, &self.config, &self.applets);
+                    self.shell.drawer_hints = false;
                     let monitor = self.model.monitors[(self.model.active - 1) as usize]
                         .min(self.monitors.len().saturating_sub(1));
                     self.shell.open_hints(&self.config, self.full_area(), monitor);
+                    if !self.shell.hints.opened {
+                        self.shell.refresh(&self.model, &self.config, &self.applets);
+                    }
                     if self.shell.hints.opened {
                         self.bar_restore = restore;
                     } else {
@@ -984,6 +990,11 @@ impl Manager {
                     self.finish_picker(crate::theme_picker::Outcome::Cancel);
                 }
                 self.finish_editor(shell::keybindings::Outcome::Close);
+                if kind == "drawer" {
+                    self.shell.drawer_pinned = !self.shell.drawer_pinned;
+                    self.shell.refresh(&self.model, &self.config, &self.applets);
+                    return;
+                }
                 let target = self.applets.attached(&kind).unwrap_or_else(|| kind.clone());
                 if self
                     .just_closed
@@ -1028,6 +1039,7 @@ impl Manager {
                     self.shell.close_popup();
                     self.applets.close();
                     self.just_closed = open.map(|k| (k, std::time::Instant::now()));
+                    self.shell.refresh(&self.model, &self.config, &self.applets);
                 }
             }
             Event::BarBackground => {
@@ -1060,6 +1072,7 @@ impl Manager {
                 if self.applets.open.is_none() && let Some(restore) = self.bar_restore.take() {
                     self.restore_focus(Some(restore));
                 }
+                self.shell.refresh(&self.model, &self.config, &self.applets);
             }
             Event::Dictate(down) => dictate::hold(down),
             Event::AppletData(name, generation, result) => {
@@ -1077,6 +1090,13 @@ impl Manager {
             }
             Event::AppletAction(name, action) => self.applets.action(&name, action),
             Event::Mouse(id) => {
+                let hovered = self.shell.is_bar(id);
+                if hovered != self.shell.drawer_hovered {
+                    self.shell.drawer_hovered = hovered;
+                    if !self.config.bar.drawer.is_empty() {
+                        self.shell.refresh(&self.model, &self.config, &self.applets);
+                    }
+                }
                 if self.config.wm.focus_follows_mouse
                     && !self.shell.interactive()
                     && self

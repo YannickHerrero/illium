@@ -123,7 +123,7 @@ right = ["battery", "cpu", "memory", "wifi"]
 clock_format = "%H:%M"
 ```
 
-Positions: top/bottom. Height: 16–100 logical pixels. Each section lists built-in modules and applet names in display order; an applet name must match a folder under `applets/` with an `applet.toml` (see [applets](applets.md)). Built-in modules: window-title, volume, battery, clock, cpu (overall load in percent since the previous refresh), memory (available RAM in GB with one decimal) and separator, a fine vertical divider in the subtext color that widens the gap between its neighbours, has no module action when clicked and may be listed as many times as wanted. Workspaces are supported on the left, at their listed position: for example, `left = ["winagotchi", "workspaces"]` places an installed `winagotchi` applet before the workspace buttons. The center is centered on the screen regardless of the side groups' widths. battery, cpu and memory show a monochrome icon in the theme's subtext color next to their value. Battery disappears when unavailable; audio is read from the default render endpoint. Clock substitutions, in English: `%A` weekday, `%a` short weekday, `%d` day, `%B` month, `%b` short month (Jan, Feb, Mar, Apr, May, June, July, Aug, Sept, Oct, Nov, Dec), `%H`, `%M`, `%S`. A bar is created on every monitor; its reservation is calculated directly, never from Explorer's taskbar work area. The bar's surface uses the theme's shared `background_opacity`, including live opacity shortcuts, while text, icons and the active workspace indicator stay opaque. Clicking an empty area of the bar toggles its background between that translucent surface color and fully transparent (the wallpaper shows through); a click that closes an open popup does not toggle. The toggle is not persisted across daemon restarts. The bar uses bundled JetBrains Mono,
+Positions: top/bottom. Height: 16–100 logical pixels. Each section lists built-in modules and applet names in display order; an applet name must match a folder under `applets/` with an `applet.toml` (see [applets](applets.md)). Built-in modules: window-title, volume, battery, clock, cpu (overall load in percent since the previous refresh), memory (available RAM in GB with one decimal), drawer (see [below](#drawer)) and separator, a fine vertical divider in the subtext color that widens the gap between its neighbours, has no module action when clicked and may be listed as many times as wanted. Workspaces are supported on the left, at their listed position: for example, `left = ["winagotchi", "workspaces"]` places an installed `winagotchi` applet before the workspace buttons. The center is centered on the screen regardless of the side groups' widths. battery, cpu and memory show a monochrome icon in the theme's subtext color next to their value. Battery disappears when unavailable; audio is read from the default render endpoint. Clock substitutions, in English: `%A` weekday, `%a` short weekday, `%d` day, `%B` month, `%b` short month (Jan, Feb, Mar, Apr, May, June, July, Aug, Sept, Oct, Nov, Dec), `%H`, `%M`, `%S`. A bar is created on every monitor; its reservation is calculated directly, never from Explorer's taskbar work area. The bar's surface uses the theme's shared `background_opacity`, including live opacity shortcuts, while text, icons and the active workspace indicator stay opaque. Clicking an empty area of the bar toggles its background between that translucent surface color and fully transparent (the wallpaper shows through); a click that closes an open popup does not toggle. The toggle is not persisted across daemon restarts. The bar uses bundled JetBrains Mono,
 rounded workspace indicators and subtle hover feedback. A fine border faces the desktop
 (bottom edge for a top bar, top edge for a bottom bar) and disappears with the background.
 For the airier design, use `height = 38`; existing heights remain supported.
@@ -141,6 +141,27 @@ The old default combined `clock_format` is treated as `%H:%M`; other custom form
 are preserved. The date opens the existing calendar (`attach = "clock"`), while
 the time opens the timezone viewer (`attach = "time"`). Each has its own keyboard
 hint and popup anchor. The reserved `time` module can also be listed alone.
+
+### Drawer
+
+Modules that are useful but not worth permanent space can be folded behind a
+chevron, in the spirit of Bartender on macOS:
+
+```toml
+right = ["drawer", "battery", "volume"]
+drawer = ["cpu", "memory", "wifi"]
+```
+
+`drawer` is a reserved module name and may appear once, in any section; the
+`drawer` list holds the folded modules (built-in modules or applets, everything
+but `workspaces` and `drawer` itself). Both must be present together or absent
+together. Collapsed, the drawer is a single chevron pointing left. Expanded, the
+folded modules appear to the left of the chevron in their listed order. Since
+the right section is anchored to the screen edge, listing `drawer` first there
+lets it grow towards the center without moving any other module. It expands, instantly and without delay, while the pointer is over
+a bar, while one of its popups is open, and during a keyboard hint session so
+every module keeps a hint. Clicking the chevron pins it open until the next
+click. Neither state is persisted across daemon restarts: it starts collapsed.
 
 ## launcher.toml
 

@@ -111,6 +111,55 @@ fn hint_centers_follow_layout_and_only_report_actionable_modules() {
 }
 
 #[test]
+fn modules_unfolded_right_before_a_hint_request_still_report_their_center() {
+    let adapter = Rc::new(RefCell::new(None));
+    slint::platform::set_platform(Box::new(Headless(adapter.clone()))).unwrap();
+    let bar = Bar::new().unwrap();
+    bar.set_surface_width(800.);
+    bar.set_surface_height(36.);
+    let item = |kind: &str, hint_id| StatusItem {
+        kind: kind.into(),
+        value: "test".into(),
+        hint_id,
+        ..Default::default()
+    };
+    let right = Rc::new(VecModel::from(vec![item("drawer", 0), item("battery", 1)]));
+    bar.set_right_items(ModelRc::from(right.clone()));
+    let reports = Rc::new(RefCell::new(vec![]));
+    let results = reports.clone();
+    bar.on_hint_position(move |epoch, index, x| results.borrow_mut().push((epoch, index, x)));
+    bar.show().unwrap();
+    let window = adapter.borrow().as_ref().unwrap().clone();
+    window.dispatch_event(WindowEvent::Resized {
+        size: slint::LogicalSize::new(800., 36.),
+    });
+    let draw = || {
+        window.request_redraw();
+        let mut pixels = vec![PremultipliedRgbaColor::default(); 800 * 36];
+        window.draw_if_needed(|renderer| {
+            renderer.render(&mut pixels, 800);
+        });
+        slint::platform::update_timers_and_animations();
+    };
+    draw();
+    // The drawer unfolds (new rows) and the hint request follows in the same frame.
+    right.insert(0, item("wifi", 3));
+    right.insert(0, item("cpu", 2));
+    bar.set_hint_request(4);
+    draw();
+    let mut first = reports.borrow().clone();
+    first.sort_by_key(|(_, index, _)| *index);
+    first.dedup_by_key(|(_, index, _)| *index);
+    assert_eq!(
+        first.iter().map(|(_, i, _)| *i).collect::<Vec<_>>(),
+        vec![1, 2, 3]
+    );
+    assert!(first.iter().all(|(epoch, _, _)| *epoch == 4));
+    let x = |index: i32| first.iter().find(|(_, i, _)| *i == index).unwrap().2;
+    assert!(x(2) > 400. && x(2) < x(3) && x(3) < x(1) && x(1) < 800., "{first:?}");
+}
+
+#[test]
 fn split_clock_has_independent_targets_and_border_follows_surface() {
     let adapter = Rc::new(RefCell::new(None));
     slint::platform::set_platform(Box::new(Headless(adapter.clone()))).unwrap();

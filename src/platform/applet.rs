@@ -85,7 +85,10 @@ impl Runtime {
         self.close();
         self.generation = self.generation.wrapping_add(1);
         let previous = std::mem::take(&mut self.entries);
-        for loaded in applets::referenced(&c.home, &[&c.bar.left, &c.bar.center, &c.bar.right]) {
+        for loaded in applets::referenced(
+            &c.home,
+            &[&c.bar.left, &c.bar.center, &c.bar.right, &c.bar.drawer],
+        ) {
             let applet = match loaded {
                 Ok(a) => a,
                 Err(e) => {

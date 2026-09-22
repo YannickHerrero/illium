@@ -38,6 +38,21 @@ fn left_sections_preserve_configured_workspace_position() {
     }
 }
 #[test]
+fn drawer_rows_fold_left_of_the_chevron() {
+    let modules: Vec<String> = ["battery", "drawer", "volume"].map(String::from).into();
+    let drawer: Vec<String> = ["cpu", "memory", "wifi"].map(String::from).into();
+    assert_eq!(
+        drawer_rows(&modules, &drawer, false),
+        ["battery", "drawer", "volume"]
+    );
+    assert_eq!(
+        drawer_rows(&modules, &drawer, true),
+        ["battery", "cpu", "memory", "wifi", "drawer", "volume"]
+    );
+    let plain: Vec<String> = ["battery", "volume"].map(String::from).into();
+    assert_eq!(drawer_rows(&plain, &drawer, true), ["battery", "volume"]);
+}
+#[test]
 fn bar_fades_only_its_background_and_honors_shared_override() {
     let window = Rc::new(RefCell::new(None));
     slint::platform::set_platform(Box::new(Headless(window.clone()))).unwrap();

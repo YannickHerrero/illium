@@ -30,7 +30,17 @@ component StatusModule inherits Rectangle {
     callback clicked(length);
     in property <int> hint-request;
     callback hint-position(int, int, length);
-    changed hint-request => {
+    changed hint-request => { root.report-hint(); }
+    // A module created after the request (the drawer just unfolded) sees no
+    // change; its position is only readable once the layout has run, so the
+    // report waits for the next iteration.
+    property <bool> report-pending: true;
+    Timer {
+        interval: 1ms;
+        running: root.report-pending;
+        triggered => { root.report-pending = false; root.report-hint(); }
+    }
+    function report-hint() {
         if root.hint-request > 0 && root.item.hint-id > 0 {
             root.hint-position(root.hint-request, root.item.hint-id, root.x + root.width / 2);
         }

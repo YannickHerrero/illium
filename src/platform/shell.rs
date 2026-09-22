@@ -135,6 +135,18 @@ fn split_workspaces(modules: &[String]) -> (&[String], &[String]) {
         None => (&[], modules),
     }
 }
+/// Expand the single `drawer` token into its folded modules, left of the
+/// chevron, while the drawer is open; the chevron alone otherwise.
+fn drawer_rows(modules: &[String], drawer: &[String], expanded: bool) -> Vec<String> {
+    let mut out = Vec::with_capacity(modules.len() + drawer.len());
+    for name in modules {
+        if name == "drawer" && expanded {
+            out.extend(drawer.iter().cloned());
+        }
+        out.push(name.clone());
+    }
+    out
+}
 fn sync<T: Clone + PartialEq + 'static>(model: &Rc<VecModel<T>>, rows: &[T]) {
     for (i, row) in rows.iter().enumerate() {
         match model.row_data(i) {
@@ -200,6 +212,14 @@ pub struct Shell {
     pub wallpaper_error: Option<String>,
     /// Bar icons of the volume module: sound on, then muted.
     volume_icons: [slint::Image; 2],
+    /// Collapsed and expanded chevrons of the bar drawer.
+    drawer_icons: [slint::Image; 2],
+    /// The drawer chevron was clicked open; stays until clicked again.
+    pub drawer_pinned: bool,
+    /// The pointer is over a bar; the drawer follows it without delay.
+    pub drawer_hovered: bool,
+    /// A hint session is starting: every module must be reachable.
+    pub drawer_hints: bool,
 }
 fn scan(path: &std::path::Path, out: &mut Vec<App>) {
     for path in crate::files::shortcuts(path, 8192, 16) {
@@ -283,8 +303,33 @@ impl Shell {
                 slint::Image::load_from_svg_data(include_bytes!("../../ui/icons/volume-muted.svg"))
                     .map_err(|e| e.to_string())?,
             ],
+            drawer_icons: [
+                slint::Image::load_from_svg_data(include_bytes!("../../ui/icons/chevron-left.svg"))
+                    .map_err(|e| e.to_string())?,
+                slint::Image::load_from_svg_data(include_bytes!(
+                    "../../ui/icons/chevron-right.svg"
+                ))
+                .map_err(|e| e.to_string())?,
+            ],
+            drawer_pinned: false,
+            drawer_hovered: false,
+            drawer_hints: false,
             tx,
         })
+    }
+    /// Whether one of the bars is the root window `id`.
+    pub fn is_bar(&self, window: isize) -> bool {
+        self.bars.iter().any(|b| id(b.window()) == window)
+    }
+    /// The drawer stays open while pinned, hovered, targeted by hints or
+    /// while a popup anchored under one of its modules is showing.
+    fn drawer_expanded(&self, applets: &super::applet::Runtime) -> bool {
+        self.drawer_pinned
+            || self.drawer_hovered
+            || self.drawer_hints
+            || self.hints.opened
+            || self.popup_open.is_some()
+            || applets.open.is_some()
     }
     fn background_opacity(c: &Config) -> f32 {
         let mut theme = c.theme.clone();
@@ -824,12 +869,20 @@ impl Shell {
             vec![]
         };
         let title = m.focused.map(native::title).unwrap_or_default();
+        let expanded = self.drawer_expanded(applets);
         // Preserve configured order and repeated separators. The clock expands
         // into independently actionable time and date items.
         let items = |modules: &[String]| {
             let mut out = Vec::new();
-            for name in modules {
-                let item = if let Some((label, icon)) = applets.item(name) {
+            for name in &drawer_rows(modules, &c.bar.drawer, expanded) {
+                let item = if name == "drawer" {
+                    StatusItem {
+                        kind: "drawer".into(),
+                        has_icon: true,
+                        icon: self.drawer_icons[usize::from(expanded)].clone(),
+                        ..Default::default()
+                    }
+                } else if let Some((label, icon)) = applets.item(name) {
                     StatusItem {
                         kind: name.clone().into(),
                         value: label.into(),

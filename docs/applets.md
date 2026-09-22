@@ -11,9 +11,11 @@ center = ["clock", "weather"]
 right = ["battery", "cpu", "memory", "wifi"]
 ```
 
-Built-in module names are reserved (`separator` among them; see
+Built-in module names are reserved (`separator` and `drawer` among them; see
 [configuration](configuration.md#bartoml)); any other name must match an applet
-folder holding an `applet.toml`, or the configuration is rejected.
+folder holding an `applet.toml`, or the configuration is rejected. Applets may
+also be listed in the `drawer` list, folded behind a chevron until the bar is
+hovered or the chevron clicked (see [drawer](configuration.md#drawer)).
 
 Winarchy ships `weather`, `wifi`, `calendar`, `timezones`, `volume` and `_template`; they
 are installed with the other defaults and never overwritten. `calendar` uses
