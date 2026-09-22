@@ -53,6 +53,9 @@ mod resident {
         match request {
             Request::Ping => Ok("ok".into()),
             Request::Quit => {
+                if APPS.with_borrow(|apps| apps.as_ref().is_some_and(|apps| apps.files.working())) {
+                    return Err("a file operation is still in progress; retry quit when it finishes".into());
+                }
                 slint::quit_event_loop().map_err(|e| e.to_string())?;
                 Ok("ok".into())
             }
@@ -60,7 +63,7 @@ mod resident {
                 apps.as_ref()
                     .ok_or("applications not ready")?
                     .files
-                    .show(dir.filter(|d| d.is_dir()))
+                    .show(dir)
                     .map(|()| "ok".into())
             }),
             Request::ShowShot => APPS.with_borrow(|apps| {

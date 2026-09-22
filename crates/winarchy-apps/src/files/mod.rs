@@ -259,6 +259,7 @@ mod app {
                 reader,
             })
         }
+        pub fn working(&self) -> bool { self.files.borrow().working }
         /// Show the retained snapshot first; theme and directory updates are asynchronous.
         pub fn show(&self, dir: Option<PathBuf>) -> Result<(), String> {
             // Theme subscription keeps the resident current; no disk read on show.
