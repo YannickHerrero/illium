@@ -6,3 +6,4 @@ focus_follows_mouse = true
 square_corners = true
 border_width = 2
 conceal = "park"
+stop_processes = ["SearchHost", "TextInputHost"]

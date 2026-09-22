@@ -1585,6 +1585,7 @@ pub fn run(replace: bool) -> Result<(), String> {
                 match result {
                     Ok(()) => {
                         tracing::info!("Winarchy ready");
+                        session::stop_processes(&m.config.wm.stop_processes);
                         apps::start_resident();
                         terminal::prewarm(m.config.apps.apps.get("terminal"));
                         browser::prewarm(m.config.apps.apps.get("browser"));

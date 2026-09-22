@@ -134,6 +134,50 @@ pub fn explorer(start: bool) -> Result<(), String> {
         Err("could not stop Explorer".into())
     }
 }
+/// Stops the session processes listed in the configuration, once Winarchy
+/// holds the shell. Windows keeps shell surfaces such as the search host or
+/// the text input host running for a desktop that no longer exists here.
+/// Windows restarts several of them on demand, so this only covers startup.
+pub fn stop_processes(names: &[String]) {
+    if names.is_empty() {
+        return;
+    }
+    let taskkill = match security::os_executable("taskkill.exe", true) {
+        Ok(path) => path,
+        Err(e) => return tracing::warn!(%e, "configured processes not stopped"),
+    };
+    let mut session = 0;
+    if let Err(e) = unsafe {
+        windows::Win32::System::RemoteDesktop::ProcessIdToSessionId(
+            std::process::id(),
+            &mut session,
+        )
+    } {
+        return tracing::warn!(%e, "configured processes not stopped");
+    }
+    for name in names {
+        let image = if name.to_ascii_lowercase().ends_with(".exe") {
+            name.clone()
+        } else {
+            format!("{name}.exe")
+        };
+        // taskkill reports failure when nothing matched, which is not an error.
+        let stopped = std::process::Command::new(&taskkill)
+            .args([
+                "/IM",
+                &image,
+                "/FI",
+                &format!("SESSION eq {session}"),
+                "/F",
+            ])
+            .creation_flags(0x08000000)
+            .status()
+            .is_ok_and(|status| status.success());
+        if stopped {
+            tracing::info!(process = %image, "configured process stopped");
+        }
+    }
+}
 /// Whether the Explorer shell is running: it owns the desktop shell window.
 pub fn explorer_running() -> bool {
     unsafe { !GetShellWindow().is_invalid() }

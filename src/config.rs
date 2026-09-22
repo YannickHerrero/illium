@@ -26,6 +26,10 @@ pub struct Wm {
     /// off screen, the default) or `hide` (ShowWindow).
     #[serde(default = "default_conceal")]
     pub conceal: String,
+    /// Windows session processes stopped once Winarchy has taken over the
+    /// shell, as executable names. Windows restarts some of them on demand.
+    #[serde(default)]
+    pub stop_processes: Vec<String>,
 }
 impl Wm {
     pub fn park(&self) -> bool {
@@ -388,6 +392,15 @@ impl Config {
         }
         if !["park", "hide"].contains(&c.wm.conceal.as_str()) {
             return Err("wm: conceal must be park or hide".into());
+        }
+        // The names reach taskkill as arguments; keep them to bare filenames.
+        if c.wm.stop_processes.iter().any(|n| {
+            n.is_empty()
+                || !n
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+        }) {
+            return Err("wm: stop_processes accepts executable names only".into());
         }
         if !(16..=100).contains(&c.bar.height)
             || !["top", "bottom"].contains(&c.bar.position.as_str())
