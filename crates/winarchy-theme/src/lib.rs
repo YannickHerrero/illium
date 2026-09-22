@@ -4,13 +4,14 @@
 #[cfg(feature = "live")]
 pub mod live;
 pub mod opacity;
+pub mod dynamic;
 #[cfg(feature = "assets")]
 pub mod pack;
 #[cfg(feature = "assets")]
 pub mod preview;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Theme {
     pub name: String,
