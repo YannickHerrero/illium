@@ -257,6 +257,7 @@ pub struct Shell {
     wallpaper_loader: crate::wallpaper::loader::Loader,
     wallpaper_pending: Option<wallpaper::Pending>,
     pub wallpaper_error: Option<String>,
+    wallpaper_palette_dirty: bool,
     /// Bar icons of the volume module: sound on, then muted.
     volume_icons: [slint::Image; 2],
     /// Collapsed and expanded chevrons of the bar drawer.
@@ -363,6 +364,7 @@ impl Shell {
             wallpaper_loader: crate::wallpaper::loader::Loader::default(),
             wallpaper_pending: None,
             wallpaper_error: None,
+            wallpaper_palette_dirty: false,
             volume_icons: [
                 slint::Image::load_from_svg_data(include_bytes!("../../ui/icons/volume.svg"))
                     .map_err(|e| e.to_string())?,
@@ -415,6 +417,11 @@ impl Shell {
     }
     /// Update existing surfaces in place; application index, geometry and UI state stay intact.
     pub fn apply_theme(&mut self, c: &Config) {
+        self.apply_palette(c);
+        self.refresh_wallpaper();
+    }
+    /// Palette-only refresh never schedules another wallpaper request.
+    pub fn apply_palette(&mut self, c: &Config) {
         self.hints.close();
         self.picker.apply_theme(c);
         self.editor.apply_theme(c);
@@ -439,7 +446,6 @@ impl Shell {
         self.launcher.set_fg(color(&c.theme.text));
         self.launcher.set_accent(color(&c.theme.accent));
         self.launcher.set_overlay(color(&c.theme.overlay));
-        self.refresh_wallpaper();
     }
     pub fn configure(&mut self, c: &Config, monitors: &[Rect]) -> Result<(), String> {
         self.hints.close();

@@ -429,6 +429,26 @@ impl Manager {
         self.model.focused = id;
         native::focus(id.unwrap_or_else(session::sink), id.is_some());
     }
+    /// Called before returning to the UI loop: wallpaper and shell colors land
+    /// in the same frame. Companion processes observe the published snapshot.
+    fn sync_wallpaper_palette(&mut self) {
+        if !self.shell.take_wallpaper_palette_dirty() { return; }
+        let result = (|| {
+            let mut theme = winarchy_theme::Theme::load(&self.config.home, &self.config.global.theme)?;
+            winarchy_theme::dynamic::apply(&self.config.home, &self.config.global.theme, &mut theme)?;
+            Ok::<_, String>(theme)
+        })();
+        match result {
+            Ok(theme) if theme != self.config.theme => {
+                self.config.theme = theme;
+                self.shell.apply_palette(&self.config);
+                self.applets.apply_theme(&self.config);
+                self.borders();
+            }
+            Err(error) => self.shell.wallpaper_error = Some(error),
+            _ => (),
+        }
+    }
     fn reload(&mut self) -> Result<(), String> {
         self.reload_config(true)
     }
@@ -825,6 +845,7 @@ impl Manager {
                 slint::quit_event_loop().map_err(|e| e.to_string())?;
             }
         }
+        self.sync_wallpaper_palette();
         Ok("ok".into())
     }
     /// Window to refocus when a full-screen surface closes: the foreground
@@ -1305,6 +1326,7 @@ impl Manager {
                 }
             }
         }
+        self.sync_wallpaper_palette();
     }
 }
 impl Drop for Manager {
@@ -1541,13 +1563,14 @@ pub fn run(replace: bool) -> Result<(), String> {
             drain(); // Safety net; normal input is handled by the immediate callback.
             let mut m = m.borrow_mut();
             m.poll_demo();
+            m.shell.poll_wallpaper();
+            m.sync_wallpaper_palette();
             let Manager {
                 shell,
                 config,
                 monitors,
                 ..
             } = &mut *m;
-            shell.poll_wallpaper();
             let outcome = shell.picker.poll();
             let pending = shell.pending;
             let ready = shell.arrange(config, monitors);

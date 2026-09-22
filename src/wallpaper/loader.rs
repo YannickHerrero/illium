@@ -15,6 +15,8 @@ pub struct Key {
     pub size: u64,
     pub modified: u128,
     pub screens: Vec<(u32, u32)>,
+    /// Some only for dynamic themes; both variants deliberately share this key.
+    pub dynamic_home: Option<PathBuf>,
 }
 #[derive(Debug)]
 pub struct Frame {
@@ -25,6 +27,7 @@ pub struct Frame {
 #[derive(Debug)]
 pub struct Prepared {
     pub frames: Vec<Arc<Frame>>,
+    pub palette: Option<winarchy_theme::dynamic::Snapshot>,
     bytes: usize,
 }
 type Pixels = Arc<Prepared>;
@@ -215,6 +218,11 @@ fn prepare(key: &Key, cancelled: &dyn Fn() -> bool) -> ResultPixels {
     }
     let pixels = winarchy_theme::pack::decode(&key.path)?;
     let decoded = started.elapsed();
+    if cancelled() { return Err("wallpaper request superseded".into()); }
+    let palette = if let Some(home) = &key.dynamic_home {
+        let source = key.path.file_name().and_then(|s| s.to_str()).ok_or("invalid wallpaper filename")?;
+        Some(winarchy_theme::dynamic::prepare(home, source, &pixels))
+    } else { None };
     let mut frames: Vec<Arc<Frame>> = Vec::new();
     for (index, &(width, height)) in key.screens.iter().enumerate() {
         if cancelled() {
@@ -240,7 +248,7 @@ fn prepare(key: &Key, cancelled: &dyn Fn() -> bool) -> ResultPixels {
         total_ms = started.elapsed().as_millis(),
         "wallpaper prepared in worker"
     );
-    Ok(Arc::new(Prepared { frames, bytes }))
+    Ok(Arc::new(Prepared { frames, palette, bytes }))
 }
 
 #[cfg(test)]
@@ -253,11 +261,13 @@ mod tests {
             size: 10,
             modified: 1,
             screens: vec![(2, 2)],
+            dynamic_home: None,
         }
     }
     fn pixels() -> Pixels {
         Arc::new(Prepared {
             frames: vec![],
+            palette: None,
             bytes: 16,
         })
     }
@@ -297,6 +307,7 @@ mod tests {
             key("huge"),
             Arc::new(Prepared {
                 frames: vec![],
+                palette: None,
                 bytes: 64,
             }),
         );
@@ -375,6 +386,25 @@ mod tests {
         assert!(receive.try_recv().is_err()); // one decode, not two
         loader.cancel();
         assert!(loader.take_result().is_none());
+    }
+    #[test]
+    fn dynamic_preparation_is_crop_independent_and_does_not_publish_preferences() {
+        let home = std::env::temp_dir().join(format!("dynamic-worker-{}", std::process::id()));
+        std::fs::create_dir_all(&home).unwrap();
+        let mut key = key("unused");
+        key.path = home.join("image.png");
+        std::fs::write(&key.path, include_bytes!("../../tests/fixtures/wallpaper.png")).unwrap();
+        key.dynamic_home = Some(home.clone());
+        let first = prepare(&key, &|| false).unwrap();
+        assert!(first.palette.is_some());
+        assert!(!home.join(winarchy_theme::dynamic::FILE).exists());
+        assert!(!home.join("wallpapers.json").exists());
+        key.screens = vec![(8,4), (4,8)];
+        assert_eq!(first.palette, prepare(&key, &|| false).unwrap().palette);
+        assert!(prepare(&key, &|| true).is_err());
+        key.dynamic_home = None;
+        assert!(prepare(&key, &|| false).unwrap().palette.is_none());
+        std::fs::remove_dir_all(home).unwrap();
     }
     #[test]
     fn tiny_images_prepare_once_for_identical_monitor_sizes() {

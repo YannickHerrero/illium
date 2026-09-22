@@ -24,6 +24,7 @@ impl Shell {
                     size,
                     modified,
                     screens: self.wallpaper_sizes.clone(),
+                    dynamic_home: winarchy_theme::dynamic::is_dynamic(&self.theme).then(|| self.home.clone()),
                 };
                 (name, key)
             })
@@ -56,10 +57,18 @@ impl Shell {
             );
         }
     }
-    fn clear_wallpaper(&mut self) {
+    fn clear_wallpaper(&mut self) -> Result<(), String> {
+        if winarchy_theme::dynamic::is_dynamic(&self.theme) {
+            winarchy_theme::dynamic::publish(&self.home, None)?;
+            self.wallpaper_palette_dirty = true;
+        }
         self.wallpaper_loader.cancel();
         self.wallpaper_pending = None;
         self.show_wallpaper(None, vec![], vec![], None);
+        Ok(())
+    }
+    pub fn take_wallpaper_palette_dirty(&mut self) -> bool {
+        std::mem::take(&mut self.wallpaper_palette_dirty)
     }
     fn begin_wallpaper(
         &mut self,
@@ -75,7 +84,7 @@ impl Shell {
         let Some((name, key)) = candidates.front() else {
             if fallback {
                 self.wallpaper_error = None;
-                self.clear_wallpaper();
+                self.clear_wallpaper()?;
                 return Ok(());
             }
             return Err("wallpaper not found in active theme".into());
@@ -141,12 +150,9 @@ impl Shell {
         let Some((name, key)) = pending.candidates.front() else {
             return;
         };
-        if pending.persist
-            && let Err(e) = Selections::load(&self.home).save_choice(
-                &self.home,
-                &self.theme,
-                Some(name.clone()),
-            )
+        if let Err(e) = crate::wallpaper::commit_choice(
+            &self.home, &self.theme, Some(name.clone()), pixels.palette.as_ref(), pending.persist,
+        )
         {
             tracing::warn!(%e, "wallpaper choice not saved");
             self.wallpaper_error = Some(e);
@@ -181,6 +187,7 @@ impl Shell {
                     .unwrap_or_default(),
             );
         }
+        self.wallpaper_palette_dirty = winarchy_theme::dynamic::is_dynamic(&self.theme);
         self.show_wallpaper(Some(name.clone()), images, blur, Some(key.clone()));
         self.wallpaper_error = None;
         tracing::info!(
@@ -240,8 +247,8 @@ impl Shell {
                 if pending.candidates.is_empty() {
                     let fallback = pending.fallback;
                     self.wallpaper_pending = None;
-                    if fallback {
-                        self.clear_wallpaper();
+                    if fallback && let Err(error) = self.clear_wallpaper() {
+                        self.wallpaper_error = Some(error);
                     }
                 } else {
                     self.request_wallpaper();
@@ -284,7 +291,9 @@ impl Shell {
         if let Err(e) = result {
             tracing::warn!(%e, "wallpapers unavailable");
             self.wallpaper_error = Some(e);
-            self.clear_wallpaper();
+            if let Err(error) = self.clear_wallpaper() {
+                self.wallpaper_error = Some(error);
+            }
         }
     }
     /// On a cold load, acknowledge the request immediately; errors remain visible
@@ -293,8 +302,8 @@ impl Shell {
         match name {
             Some(name) => self.begin_wallpaper(vec![name], true, false),
             None => {
-                Selections::load(&self.home).save_choice(&self.home, &self.theme, None)?;
-                self.clear_wallpaper();
+                crate::wallpaper::commit_choice(&self.home, &self.theme, None, None, true)?;
+                self.clear_wallpaper()?;
                 self.wallpaper_error = None;
                 Ok(())
             }

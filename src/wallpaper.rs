@@ -75,6 +75,35 @@ impl Selections {
         }
     }
 }
+/// Publish only fully prepared requests. If runtime publication fails, restore
+/// the saved selection before returning; the shell keeps its old image/colors.
+pub fn commit_choice(
+    home: &Path,
+    theme: &str,
+    name: Option<String>,
+    snapshot: Option<&winarchy_theme::dynamic::Snapshot>,
+    persist: bool,
+) -> Result<(), String> {
+    let dynamic = winarchy_theme::dynamic::is_dynamic(theme);
+    let path = home.join("wallpapers.json");
+    let previous = if dynamic && persist && path.try_exists().map_err(|e| e.to_string())? {
+        Some(crate::files::read_config(&path)?)
+    } else { None };
+    if persist { Selections::load(home).save_choice(home, theme, name)?; }
+    if dynamic && let Err(error) = winarchy_theme::dynamic::publish(home, snapshot) {
+        if persist {
+            let rollback = match previous {
+                Some(bytes) => std::str::from_utf8(&bytes).map_err(|e| e.to_string())
+                    .and_then(|text| crate::state::State::save(text, &path)),
+                None => std::fs::remove_file(&path).map_err(|e| e.to_string()),
+            };
+            if let Err(rollback) = rollback { return Err(format!("{error}; choice rollback failed: {rollback}")); }
+        }
+        return Err(error);
+    }
+    Ok(())
+}
+
 /// One full cycle, excluding no files: callers can skip unreadable images.
 pub fn next_candidates(names: &[String], current: Option<&str>) -> Vec<String> {
     let start = current
@@ -149,6 +178,28 @@ mod tests {
         assert_eq!(state.candidates("static", &names), names);
         state.save_choice(&home, "dynamic-dark", None).unwrap();
         assert!(Selections::load(&home).candidates("dynamic-light", &names).is_empty());
+        std::fs::remove_dir_all(home).unwrap();
+    }
+    #[test]
+    fn dynamic_publication_rolls_back_choice_on_failure_and_clear_uses_fallback() {
+        let home = std::env::temp_dir().join(format!("dynamic-commit-{}", std::process::id()));
+        crate::config::Config::install(&home).unwrap();
+        let before_config = crate::files::snapshot(&home).unwrap();
+        let pixels = image::RgbaImage::from_pixel(2, 2, image::Rgba([30, 90, 160, 255]));
+        let snapshot = winarchy_theme::dynamic::prepare(&home, "new.png", &pixels);
+        Selections::default().save_choice(&home, "dynamic-dark", Some("old.png".into())).unwrap();
+        let before = std::fs::read(home.join("wallpapers.json")).unwrap();
+        // A directory at the publication target makes atomic rename fail.
+        std::fs::create_dir(home.join(winarchy_theme::dynamic::FILE)).unwrap();
+        assert!(commit_choice(&home, "dynamic-dark", Some("new.png".into()), Some(&snapshot), true).is_err());
+        assert_eq!(std::fs::read(home.join("wallpapers.json")).unwrap(), before);
+        std::fs::remove_dir(home.join(winarchy_theme::dynamic::FILE)).unwrap();
+        commit_choice(&home, "dynamic-dark", Some("new.png".into()), Some(&snapshot), true).unwrap();
+        assert!(home.join(winarchy_theme::dynamic::FILE).is_file());
+        assert_eq!(crate::files::snapshot(&home).unwrap(), before_config);
+        commit_choice(&home, "dynamic-light", None, None, true).unwrap();
+        assert!(!home.join(winarchy_theme::dynamic::FILE).exists());
+        assert!(Selections::load(&home).candidates("dynamic-dark", &["new.png".into()]).is_empty());
         std::fs::remove_dir_all(home).unwrap();
     }
     #[test]

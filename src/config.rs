@@ -378,7 +378,7 @@ impl Config {
         if !winarchy_theme::valid_name(&global.theme) {
             return Err("invalid theme name".into());
         }
-        let c = Self {
+        let mut c = Self {
             home: home.into(),
             theme: parse(home, &format!("themes/{}.toml", global.theme))?,
             global,
@@ -453,6 +453,7 @@ impl Config {
         crate::clock::validate(&c.bar.clock_date_format)
             .map_err(|e| format!("clock_date_format: {e}"))?;
         c.theme.validate()?;
+        winarchy_theme::dynamic::apply(home, &c.global.theme, &mut c.theme)?;
         for r in &c.rules.rules {
             if r.workspace.is_some_and(|n| !(1..=9).contains(&n)) {
                 return Err("rule workspace must be 1..9".into());
