@@ -14,6 +14,18 @@ fn native_prewarm_retains_hwnd_without_stealing_focus() {
         .unwrap();
     let foreground = unsafe { GetForegroundWindow() };
     slint::Timer::single_shot(std::time::Duration::ZERO, move || {
+        let (tx, rx) = crate::queue::channel(1024);
+        let received = Rc::new(std::cell::Cell::new(0));
+        let drained = received.clone();
+        super::super::dispatch::install(move || {
+            drained.set(drained.get() + rx.try_iter().count());
+        });
+        tx.set_waker(super::super::dispatch::wake);
+        std::thread::spawn(move || {
+            for n in 0..256 {
+                tx.send(n).unwrap();
+            }
+        });
         let popup = Popup::new().unwrap();
         prewarm(&popup);
         // A user opening wins over the scheduled completion of prewarming.
@@ -31,6 +43,12 @@ fn native_prewarm_retains_hwnd_without_stealing_focus() {
         );
         opened.show().unwrap();
         slint::Timer::single_shot(std::time::Duration::from_millis(100), move || {
+            assert_eq!(
+                received.get(),
+                256,
+                "worker events must drain without a polling timer"
+            );
+            super::super::dispatch::clear();
             let hwnd = id(popup.window());
             assert_ne!(hwnd, 0);
             assert!(!native::visible(hwnd));

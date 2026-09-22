@@ -109,6 +109,10 @@ fn colorref(color: &str) -> COLORREF {
     let rgb = u32::from_str_radix(color.trim_start_matches('#'), 16).unwrap_or(0);
     COLORREF((rgb >> 16) | (rgb & 0xff00) | ((rgb & 0xff) << 16))
 }
+#[cfg(test)]
+#[path = "native_tests.rs"]
+mod tests;
+
 /// Click-through frame window drawn just outside a client's visible frame.
 /// It sits right above its client in the Z order: below it, the client's DWM
 /// shadow would darken it; any higher, it would cover unrelated windows.
