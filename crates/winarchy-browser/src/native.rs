@@ -1111,16 +1111,31 @@ impl Drop for Apartment {
     }
 }
 
-/// Resident resources outlive individual controllers/pages. COM is initialized
-/// once on this UI thread and uninitialized after all cached interfaces drop.
 type FilterStamp = Vec<Option<(u64, std::time::SystemTime)>>;
 type BrowserLibraries = (Rc<RefCell<Blocker>>, Rc<RefCell<Library>>);
 struct CachedBlocker { dir: PathBuf, stamp: FilterStamp, value: Rc<RefCell<Blocker>> }
+/// Resident resources outlive controllers/pages. Cached COM interfaces are
+/// released before the owning UI thread's apartment is uninitialized.
 pub struct Resources {
     env: Option<ICoreWebView2Environment>,
     blocker: Option<CachedBlocker>,
     library: Option<(PathBuf, Rc<RefCell<Library>>)>,
     _apartment: Apartment,
+}
+unsafe fn release_window() {
+    if let Some(app) = APP.with(|state| state.borrow_mut().take()) {
+        // Also cover initialization errors, which bypass the normal host loop.
+        unsafe {
+            if IsWindow(Some(app.hwnd)).as_bool() { let _ = DestroyWindow(app.hwnd); }
+            let views = std::mem::take(&mut *app.views.borrow_mut());
+            drop(views);
+            let _ = DeleteObject(app.brush.into());
+            let _ = DeleteObject(app.surface_brush.into());
+        }
+    }
+}
+impl Drop for Resources {
+    fn drop(&mut self) { unsafe { release_window(); } }
 }
 impl Resources {
     pub fn new() -> AppResult<Self> {
@@ -1605,12 +1620,7 @@ fn run_inner(
             DispatchMessageW(&msg);
         }
         eprintln!("metric blocked_requests={}", blocker.borrow().blocked);
-        if let Some(app) = APP.with(|a| a.borrow_mut().take()) {
-            let views = std::mem::take(&mut *app.views.borrow_mut());
-            drop(views);
-            let _ = DeleteObject(app.brush.into());
-            let _ = DeleteObject(app.surface_brush.into());
-        }
+        release_window();
         Ok(if quit { Exit::Quit } else { Exit::Closed })
     }
 }

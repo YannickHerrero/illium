@@ -39,6 +39,9 @@ fn demo_home_never_loads_the_normal_library() {
     let demo = winarchy_browser::demo::DemoData::new().unwrap();
     let demo_path = demo.path().to_owned();
     let mut checked = false;
+    let mut resources = Resources::new().unwrap();
+    let mut cached = None;
+    for _ in 0..2 {
     let result = run_inner(
         "",
         true,
@@ -59,14 +62,19 @@ fn demo_home_never_loads_the_normal_library() {
             }
         },
         Some(demo.path()),
-        &mut Resources::new().unwrap(),
+        &mut resources,
     );
     assert!(result.is_ok(), "{:?}", result.err());
+    let current = (resources.env.as_ref().unwrap().as_raw(), Rc::as_ptr(&resources.blocker.as_ref().unwrap().value));
+    if let Some(previous) = cached { assert_eq!(previous, current, "resident environment and filters must survive closing"); }
+    cached = Some(current);
+    }
     assert!(checked);
     assert_eq!(
         std::fs::read_to_string(personal).unwrap(),
         "DO NOT READ: personal library sentinel"
     );
+    drop(resources);
     drop(demo);
     assert!(!demo_path.exists(), "temporary profile was not cleaned up");
 }
