@@ -1,6 +1,6 @@
-//! Exposé surface: a full-monitor window over the dimmed desktop with one card
-//! per managed window of every workspace. Cards appear at once with title and
-//! icon; thumbnails fill in as the capture worker delivers them.
+//! Exposé surface: a full-monitor window over the blurred wallpaper with one
+//! card per managed window of every workspace. The DWM composes each window
+//! live into its card; icons arrive from a worker thread.
 use super::{ExposeCard, ExposeView, color, id, keybindings::key_from_text, tool};
 use crate::{
     config::Config,
@@ -8,9 +8,10 @@ use crate::{
     keybindings, keyboard,
     layout::Rect,
     platform::{
-        Event, EventSender,
-        capture::{self, Pixels},
-        dpi, native,
+        Event, EventSender, dpi,
+        icons::{self, Pixels},
+        native,
+        thumbnails::Thumbnails,
     },
 };
 use slint::{ComponentHandle, ModelRc, VecModel};
@@ -26,7 +27,6 @@ pub enum Input {
     Hover(i32),
     Dismiss,
     Icon(String, Pixels),
-    Thumbnail(isize, Option<Pixels>),
 }
 fn action(
     text: &str,
@@ -82,20 +82,22 @@ fn action(
         return None;
     })
 }
-fn image(p: &Pixels, premultiplied: bool) -> slint::Image {
-    let buffer =
-        slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(&p.rgba, p.width, p.height);
-    if premultiplied {
-        slint::Image::from_rgba8_premultiplied(buffer)
-    } else {
-        slint::Image::from_rgba8(buffer)
-    }
+fn image(p: &Pixels) -> slint::Image {
+    slint::Image::from_rgba8_premultiplied(
+        slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(&p.rgba, p.width, p.height),
+    )
 }
+/// Selected card border, kept clear of the DWM thumbnail drawn inside it.
+const BORDER: f32 = 2.0;
+const MINIMIZED_OPACITY: u8 = 140;
 /// Everything the manager gathers for one opening.
 pub struct Scene {
     pub entries: Vec<Entry>,
     /// Executable path per window, for the icon lookup.
     pub exes: HashMap<isize, String>,
+    /// Visible frame of each window relative to its own top-left corner, so
+    /// the thumbnail leaves out the invisible resize borders.
+    pub sources: HashMap<isize, Rect>,
     /// The configured `window close` bindings, which close the selected
     /// window from inside the exposé.
     pub close_chords: Vec<(u32, u8)>,
@@ -114,9 +116,9 @@ pub struct Expose {
     model: Model,
     /// Executable path per window, for the icon lookup.
     exes: HashMap<isize, String>,
-    /// Last thumbnail per window, kept across openings so a reopened exposé
-    /// shows cards at once while the capture worker refreshes them.
-    images: HashMap<isize, slint::Image>,
+    sources: HashMap<isize, Rect>,
+    /// Live previews, registered once the native window exists.
+    thumbnails: Option<Thumbnails>,
     /// Icons by executable path, kept across openings.
     icons: HashMap<String, slint::Image>,
     close_chords: Vec<(u32, u8)>,
@@ -166,7 +168,8 @@ impl Expose {
             },
             model: Model::default(),
             exes: HashMap::new(),
-            images: HashMap::new(),
+            sources: HashMap::new(),
+            thumbnails: None,
             icons: HashMap::new(),
             close_chords: vec![],
         })
@@ -186,6 +189,7 @@ impl Expose {
         let Scene {
             entries,
             exes,
+            sources,
             close_chords,
             backdrop,
         } = scene;
@@ -210,43 +214,34 @@ impl Expose {
                 .into(),
         );
         self.close_chords = close_chords;
-        let jobs = entries
-            .iter()
-            .map(|e| (e.id, exes.get(&e.id).cloned().unwrap_or_default()))
+        let missing: Vec<String> = exes
+            .values()
+            .filter(|exe| !self.icons.contains_key(*exe))
+            .cloned()
             .collect();
-        self.images
-            .retain(|id, _| entries.iter().any(|e| e.id == *id));
         self.model = Model::new(entries);
         self.exes = exes;
+        self.sources = sources;
         self.render();
         if self.ui.show().is_err() {
             return;
         }
         self.opened = true;
         self.pending_window = true;
-        // Capture at the widest card's physical width: sharp on the card, nothing more.
-        let width = self
-            .model
-            .slots
-            .iter()
-            .map(|s| s.w)
-            .fold(0.0, f32::max)
-            .max(320.0);
-        capture::start(
-            self.epoch.get(),
-            jobs,
-            dpi::scale(monitor, width as i32),
-            self.tx.clone(),
-        );
+        if !missing.is_empty() {
+            icons::start(self.epoch.get(), missing, self.tx.clone());
+        }
     }
     pub fn close(&mut self) -> Option<isize> {
         if !self.opened {
             return None;
         }
         self.epoch.set(self.epoch.get().wrapping_add(1));
-        capture::cancel();
+        icons::cancel();
         self.opened = false;
         self.pending_window = false;
+        // Unregister before the window hides: DWM keeps drawing otherwise.
+        self.thumbnails = None;
         let _ = self.ui.hide();
         self.rows.set_vec(vec![]);
         self.model = Model::default();
@@ -262,6 +257,10 @@ impl Expose {
         self.ui.set_ready(true);
         self.ui.invoke_focus_view();
         self.pending_window = false;
+        if self.thumbnails.is_none() {
+            self.thumbnails = Some(Thumbnails::new(id(self.ui.window())));
+        }
+        self.place_thumbnails();
     }
     pub fn display_changed(&mut self, monitor: Rect) {
         if !self.opened {
@@ -279,8 +278,40 @@ impl Expose {
             return;
         }
         self.model.remove(id);
-        self.images.remove(&id);
+        if let Some(thumbnails) = &mut self.thumbnails {
+            thumbnails.remove(id);
+        }
         self.render();
+    }
+    /// Destination rectangles in physical client pixels of the surface, inset
+    /// by the border Slint draws around each card.
+    fn place_thumbnails(&mut self) {
+        let Some(thumbnails) = &mut self.thumbnails else {
+            return;
+        };
+        let monitor = self.monitor;
+        let physical = |v: f32| dpi::scale(monitor, v.round() as i32);
+        let mut shown = Vec::with_capacity(self.model.shown.len());
+        for (index, slot) in self.model.shown.iter().zip(&self.model.slots) {
+            let e = &self.model.entries[*index];
+            if !e.live {
+                continue;
+            }
+            shown.push(e.id);
+            let dest = Rect {
+                x: physical(slot.x + BORDER),
+                y: physical(slot.y + BORDER),
+                w: physical(slot.w - 2.0 * BORDER).max(1),
+                h: physical(slot.h - 2.0 * BORDER).max(1),
+            };
+            // A minimized window's rectangle is a placeholder: show it whole.
+            let region = (!e.minimized)
+                .then(|| self.sources.get(&e.id).copied())
+                .flatten();
+            let opacity = if e.minimized { MINIMIZED_OPACITY } else { 255 };
+            thumbnails.place(e.id, dest, region, opacity);
+        }
+        thumbnails.hide_others(&shown);
     }
     fn render(&mut self) {
         let (w, h) = (
@@ -296,13 +327,11 @@ impl Expose {
             .map(|(index, slot)| {
                 let e = &self.model.entries[*index];
                 let icon = self.exes.get(&e.id).and_then(|exe| self.icons.get(exe));
-                let image = self.images.get(&e.id);
                 ExposeCard {
                     title: e.title.clone().into(),
                     app: e.app.clone().into(),
                     workspace: e.workspace.to_string().into(),
-                    image: image.cloned().unwrap_or_default(),
-                    has_image: image.is_some(),
+                    live: e.live,
                     icon: icon.cloned().unwrap_or_default(),
                     has_icon: icon.is_some(),
                     focused: e.focused,
@@ -317,6 +346,7 @@ impl Expose {
         super::sync(&self.rows, &rows);
         self.ui.set_selected(self.model.selected as i32);
         self.ui.set_query(self.model.query.clone().into());
+        self.place_thumbnails();
         let n = self.model.shown.len();
         self.ui.set_count(
             match n {
@@ -355,13 +385,7 @@ impl Expose {
             }
             Input::Dismiss => Outcome::Close,
             Input::Icon(exe, pixels) => {
-                self.icons.insert(exe, image(&pixels, true));
-                Outcome::None
-            }
-            Input::Thumbnail(id, pixels) => {
-                if let Some(pixels) = pixels {
-                    self.images.insert(id, image(&pixels, false));
-                }
+                self.icons.insert(exe, image(&pixels));
                 Outcome::None
             }
         };

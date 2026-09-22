@@ -10,7 +10,7 @@
 - `layout.rs`: pure Fibonacci rectangles and deterministic geometric neighbor scoring.
 - `model.rs`: ordered client list, nine workspaces, monitor associations and recent history.
 - `platform/native.rs`: HWND filtering, enumeration, title/process lookup, batching, focus, off-screen parking and process launch.
-- `expose.rs`: pure exposé state, card grid geometry, filtering and navigation. `platform/capture.rs` produces window thumbnails (PrintWindow into a DIB, scaled with GDI) and shell icons on a worker thread; `platform/shell/expose.rs` and `ui/expose.slint` manage the full-monitor surface, generation-tagged input and the Slint images.
+- `expose.rs`: pure exposé state, card grid geometry, filtering and navigation. `platform/thumbnails.rs` registers live DWM thumbnails of the windows into the surface (parked windows keep composing, so every workspace is live); `platform/icons.rs` draws shell icons on a worker thread; `platform/shell/expose.rs` and `ui/expose.slint` manage the full-monitor surface, generation-tagged input and the Slint images.
 - `platform/input.rs`: keyboard/mouse hooks and WinEvent hooks on a dedicated Win32 message thread; hidden broadcast window receives display changes.
 - `platform/mod.rs`: serialized manager state, command execution and event dispatch.
 - `platform/shell.rs`, `ui/shell.slint`: same-process Slint surfaces and fuzzy launcher.
@@ -33,7 +33,7 @@ Slint defers native window creation. Surface positioning waits until valid HWNDs
 
 Each HWND has one workspace and one position in the global ordered vector. Layout filters that order by active workspace and excludes floating/fullscreen/minimized clients. Each client has a per-window generation property scoped to the current session; numeric handle reuse invalidates the old record. The managed list is capped at 512 windows. Fibonacci alternates horizontal/vertical bisection; once a split is physically impossible, remaining clients stack. Directions use window centers with squared forward distance plus four times squared perpendicular distance, with HWND tie-breaking.
 
-Workspace switches park managed clients off screen (left edge at x = -32000, where Windows puts minimized windows; DWM cloaking is refused to other processes), or show/hide them with `conceal = "hide"`: a parked window stays visible for Win32 and keeps painting, so revealing it needs no repaint and the exposé can capture it while it is off screen. The client remembers its rectangle from before parking. A client carries its floating state and saved fullscreen geometry. Monitor associations are workspace-local; only one global workspace is active. This deliberately is not an independent-workspace-per-monitor system.
+Workspace switches park managed clients off screen (left edge at x = -32000, where Windows puts minimized windows; DWM cloaking is refused to other processes), or show/hide them with `conceal = "hide"`: a parked window stays visible for Win32 and keeps painting, so revealing it needs no repaint and the DWM keeps composing it for the exposé while it is off screen. The client remembers its rectangle from before parking. A client carries its floating state and saved fullscreen geometry. Monitor associations are workspace-local; only one global workspace is active. This deliberately is not an independent-workspace-per-monitor system.
 
 ## IPC and recovery
 

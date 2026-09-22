@@ -2,10 +2,10 @@ mod applet;
 mod apps;
 mod audio;
 mod browser;
-mod capture;
 mod demo;
 mod dictate;
 mod dpi;
+mod icons;
 use winarchy_ipc::identity;
 mod input;
 mod instance;
@@ -18,6 +18,7 @@ mod session_tests;
 mod shell;
 mod status;
 mod terminal;
+mod thumbnails;
 use crate::{
     command::Command,
     config::Config,
@@ -733,7 +734,7 @@ impl Manager {
                     self.applets.close();
                     self.finish_picker(crate::theme_picker::Outcome::Cancel);
                     self.finish_editor(shell::keybindings::Outcome::Close);
-                    let (entries, exes) = self.expose_entries();
+                    let (entries, exes, sources) = self.expose_entries();
                     let close_chords = self
                         .config
                         .keys
@@ -748,6 +749,7 @@ impl Manager {
                     let scene = shell::expose::Scene {
                         entries,
                         exes,
+                        sources,
                         close_chords,
                         backdrop: self.shell.backdrop(index),
                     };
@@ -852,10 +854,12 @@ impl Manager {
     ) -> (
         Vec<crate::expose::Entry>,
         std::collections::HashMap<isize, String>,
+        std::collections::HashMap<isize, Rect>,
     ) {
         let mut clients: Vec<&Client> = self.model.clients.iter().collect();
         clients.sort_by_key(|c| c.workspace);
         let mut exes = std::collections::HashMap::new();
+        let mut sources = std::collections::HashMap::new();
         let entries = clients
             .into_iter()
             .map(|c| {
@@ -865,19 +869,29 @@ impl Manager {
                     .map(|stem| stem.to_string_lossy().into_owned())
                     .unwrap_or_default();
                 exes.insert(c.id, exe);
-                let frame = native::frame(c.id);
+                let (window, frame) = (native::rect(c.id), native::frame(c.id));
+                sources.insert(
+                    c.id,
+                    Rect {
+                        x: frame.x - window.x,
+                        y: frame.y - window.y,
+                        w: frame.w,
+                        h: frame.h,
+                    },
+                );
                 crate::expose::Entry {
                     id: c.id,
                     title: native::title(c.id),
                     app,
                     workspace: c.workspace,
                     aspect: crate::expose::clamp_aspect(frame.w as f32 / frame.h.max(1) as f32),
+                    live: native::visible(c.id),
                     minimized: native::minimized(c.id),
                     focused: Some(c.id) == self.model.focused,
                 }
             })
             .collect();
-        (entries, exes)
+        (entries, exes, sources)
     }
     fn finish_expose(&mut self, outcome: crate::expose::Outcome) {
         use crate::expose::Outcome;

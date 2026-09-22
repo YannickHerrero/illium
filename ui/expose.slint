@@ -1,12 +1,13 @@
 // Exposé: every managed window of every workspace as a card over the blurred
 // wallpaper. Geometry is computed by the daemon (src/expose.rs); the view only
-// draws the slots it is given and reports keys, clicks and hovers.
+// draws the slots it is given and reports keys, clicks and hovers. Live
+// previews are DWM thumbnails composed over the card area by the daemon.
 export struct ExposeCard {
     title: string,
     app: string,
     workspace: string,
-    image: image,
-    has-image: bool,
+    /// The DWM composes the window into the thumbnail area; nothing to draw there.
+    live: bool,
     icon: image,
     has-icon: bool,
     focused: bool,
@@ -113,19 +114,12 @@ export component ExposeView inherits Window {
             property <bool> current: root.selected == index;
             Rectangle {
                 x: 0; y: 0; width: card.width; height: card.height;
-                background: root.surface.with-alpha(card.has-image ? 1.0 : 0.85);
+                background: root.surface.with-alpha(card.live ? 1.0 : 0.85);
                 border-width: box.current ? 2px : 1px;
                 border-color: box.current ? root.accent : card.focused ? root.accent.with-alpha(0.55) : root.fg.with-alpha(0.25);
                 border-radius: 2px;
                 clip: true;
-                if card.has-image: Image {
-                    x: 1px; y: 1px; width: parent.width - 2px; height: parent.height - 2px;
-                    source: card.image;
-                    image-fit: fill;
-                    image-rendering: smooth;
-                    opacity: card.minimized ? 0.45 : 1.0;
-                }
-                if !card.has-image && card.has-icon: Image {
+                if !card.live && card.has-icon: Image {
                     width: min(96px, parent.width / 3, parent.height / 2); height: self.width;
                     x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
                     source: card.icon;
@@ -133,21 +127,11 @@ export component ExposeView inherits Window {
                     image-rendering: smooth;
                     opacity: card.minimized ? 0.45 : 0.9;
                 }
-                if !card.has-image && !card.has-icon: Text {
+                if !card.live && !card.has-icon: Text {
                     width: parent.width; height: parent.height;
                     text: card.app; color: root.muted; font-size: 16px;
                     horizontal-alignment: center; vertical-alignment: center;
                     overflow: elide;
-                }
-                if card.minimized: Rectangle {
-                    x: 0; y: parent.height - self.height;
-                    width: parent.width; height: 20px;
-                    background: root.bg.with-alpha(0.75);
-                    Text {
-                        width: parent.width; height: parent.height;
-                        text: "minimized"; color: root.muted; font-size: 11px;
-                        horizontal-alignment: center; vertical-alignment: center;
-                    }
                 }
             }
             HorizontalLayout {
@@ -174,7 +158,8 @@ export component ExposeView inherits Window {
                         overflow: elide;
                     }
                     Text {
-                        text: card.app; color: root.muted; font-size: 11px;
+                        text: card.minimized ? card.app + " · minimized" : card.app;
+                        color: root.muted; font-size: 11px;
                         overflow: elide;
                     }
                 }

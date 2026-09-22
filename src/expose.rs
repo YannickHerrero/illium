@@ -10,6 +10,9 @@ pub struct Entry {
     pub workspace: u8,
     /// Width over height of the window's visible frame; the card keeps it.
     pub aspect: f32,
+    /// Visible for Win32 (shown or parked), so the DWM can compose it live;
+    /// a hidden window's card shows its icon instead.
+    pub live: bool,
     pub minimized: bool,
     pub focused: bool,
 }
@@ -274,6 +277,7 @@ mod tests {
             app: app.into(),
             workspace,
             aspect: 1.6,
+            live: true,
             minimized: false,
             focused: id == 2,
         }
