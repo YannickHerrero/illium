@@ -1,8 +1,8 @@
-# Current conditions and a three-day outlook from Open-Meteo (no API key).
+# Current conditions, the next twelve hours and a six-day outlook from Open-Meteo (no API key).
 icon = "icon.svg"
 interval = "10m"
 label = "{temperature}°"
-popup = { width = 640, height = 300 }
+popup = { width = 600, height = 650 }
 
 [settings]
 latitude = 48.8566
