@@ -15,13 +15,37 @@ mod app {
         ui::{self, FileRow, FilesWindow},
     };
     use slint::{ComponentHandle, ModelRc, VecModel};
-    use std::{cell::RefCell, path::PathBuf, rc::Rc};
+    use std::{cell::{Cell, RefCell}, path::PathBuf, rc::Rc, sync::mpsc};
+    /// At most one read is in flight. Further input only replaces the model's
+    /// pending intention, so rapid cursor movement cannot spawn a thread storm.
+    struct Reader {
+        busy: Cell<bool>,
+        files: Rc<RefCell<Files>>,
+        window: slint::Weak<FilesWindow>,
+        tx: mpsc::SyncSender<model::ReadResult>,
+    }
+    impl Reader {
+        fn schedule(&self) {
+            if self.busy.get() { return; }
+            let Some(job) = self.files.borrow_mut().take_read() else { return; };
+            self.busy.set(true);
+            let tx = self.tx.clone();
+            let window = self.window.clone();
+            std::thread::spawn(move || {
+                let result = job.run();
+                if tx.send(result).is_ok() {
+                    let _ = window.upgrade_in_event_loop(|window| window.invoke_read_ready());
+                }
+            });
+        }
+    }
     /// The window and its state; `resident` makes `q` hide instead of quit.
     pub struct App {
         window: FilesWindow,
         _theme: winarchy_theme::live::Subscription,
         files: Rc<RefCell<Files>>,
         render: Rc<dyn Fn(&Files)>,
+        reader: Rc<Reader>,
     }
     fn render(window: &FilesWindow, f: &Files) {
         let row = |e: &model::Entry| FileRow {
@@ -57,7 +81,8 @@ mod app {
         window.set_preview_rows(rows(preview_rows));
         window.set_preview_lines(ui::strings(&lines));
         let (left, right) = f.status();
-        window.set_status_left(left.into());
+        window.set_loading(f.loading);
+        window.set_status_left(if f.loading { "Reading…".into() } else { left.into() });
         window.set_status_right(right.into());
         window.set_help(f.mode == Mode::Help);
     }
@@ -67,7 +92,7 @@ mod app {
             let user = PathBuf::from(std::env::var_os("USERPROFILE").unwrap_or_default());
             let window = FilesWindow::new().map_err(|e| e.to_string())?;
             window.set_help_lines(ui::strings(&model::HELP));
-            let files = Rc::new(RefCell::new(Files::open(user.clone(), user)));
+            let files = Rc::new(RefCell::new(Files::deferred(user.clone(), user)));
             let render: Rc<dyn Fn(&Files)> = {
                 let window = window.as_weak();
                 Rc::new(move |f: &Files| {
@@ -76,8 +101,26 @@ mod app {
                     }
                 })
             };
+            let (tx, rx) = mpsc::sync_channel(1);
+            let reader = Rc::new(Reader {
+                busy: Cell::new(false), files: files.clone(), window: window.as_weak(), tx,
+            });
+            {
+                let reader = reader.clone();
+                let render = render.clone();
+                window.on_read_ready(move || {
+                    if let Ok(result) = rx.try_recv() {
+                        reader.busy.set(false);
+                        let mut f = reader.files.borrow_mut();
+                        if f.apply_read(result) { render(&f); }
+                        drop(f);
+                        reader.schedule();
+                    }
+                });
+            }
             {
                 let files = files.clone();
+                let reader = reader.clone();
                 let render = render.clone();
                 let weak = window.as_weak();
                 window.on_key(move |text, ctrl, _shift| {
@@ -131,6 +174,8 @@ mod app {
                         f.notice = e;
                     }
                     render(&f);
+                    drop(f);
+                    reader.schedule();
                 });
             }
             let theme = ui::watch_theme(&window)?;
@@ -139,15 +184,13 @@ mod app {
                 _theme: theme,
                 files,
                 render,
+                reader,
             })
         }
         /// Shows the window, in `dir` when given, with the theme read again so
         /// a long-lived process follows theme changes.
         pub fn show(&self, dir: Option<PathBuf>) -> Result<(), String> {
-            ui::apply(
-                self.window.global::<ui::Palette>(),
-                &winarchy_theme::Theme::current(&ui::config_home()),
-            );
+            // Theme subscription keeps the resident current; no disk read on show.
             {
                 let mut f = self.files.borrow_mut();
                 match dir {
@@ -161,6 +204,7 @@ mod app {
             // fresh one so a stale or empty surface never stays on screen.
             self.window.window().request_redraw();
             ui::raise(&self.window);
+            self.reader.schedule();
             Ok(())
         }
     }

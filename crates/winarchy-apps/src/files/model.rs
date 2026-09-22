@@ -109,6 +109,53 @@ pub const HELP: [&str; 15] = [
     "?                  this help",
     "q                  quit",
 ];
+/// Read-only jobs contain no UI state and can safely run on one worker.
+pub enum ReadRequest {
+    Directory { revision: u64, cwd: Option<PathBuf> },
+    Preview { revision: u64, entry: Option<Entry>, hidden: bool, sort: Sort },
+}
+pub enum ReadResult {
+    Directory { revision: u64, entries: Vec<Entry>, parent: Vec<Entry>, notice: String },
+    Preview { revision: u64, preview: Preview },
+}
+impl ReadRequest {
+    pub fn run(self) -> ReadResult {
+        match self {
+            Self::Directory { revision, cwd } => {
+                let (entries, notice) = match &cwd {
+                    Some(dir) => match read_dir(dir) {
+                        Ok((entries, notice)) => (entries, notice.unwrap_or_default()),
+                        Err(error) => (vec![], error),
+                    },
+                    None => (root_entries(), String::new()),
+                };
+                let parent = match cwd.as_ref() {
+                    None => vec![],
+                    Some(dir) => match dir.parent() {
+                        Some(parent) => read_dir(parent).map(|(entries, _)| entries).unwrap_or_default(),
+                        None => root_entries(),
+                    },
+                };
+                ReadResult::Directory { revision, entries, parent, notice }
+            }
+            Self::Preview { revision, entry, hidden, sort } => {
+                let preview = match entry {
+                    None => Preview::Empty,
+                    Some(e) if e.dir => match read_dir(&e.path) {
+                        Ok((mut entries, _)) => {
+                            arrange_entries(&mut entries, "", hidden, sort);
+                            entries.truncate(PREVIEW_ENTRIES);
+                            Preview::Dir(entries)
+                        }
+                        Err(error) => Preview::Info(vec![error]),
+                    },
+                    Some(e) => preview_file(&e),
+                };
+                ReadResult::Preview { revision, preview }
+            }
+        }
+    }
+}
 pub struct Files {
     /// Current directory; `None` lists the drives.
     pub cwd: Option<PathBuf>,
@@ -131,6 +178,20 @@ pub struct Files {
     memory: HashMap<PathBuf, String>,
     all: Vec<Entry>,
     home: PathBuf,
+    deferred: bool,
+    directory_revision: u64,
+    preview_revision: u64,
+    directory_pending: bool,
+    preview_pending: bool,
+    pub loading: bool,
+}
+fn arrange_entries(entries: &mut Vec<Entry>, filter: &str, hidden: bool, sort: Sort) {
+    entries.retain(|e| (hidden || !e.hidden) && matches(filter, &e.name));
+    entries.sort_by(|a, b| b.dir.cmp(&a.dir).then_with(|| match sort {
+        Sort::Natural => natural(&a.name, &b.name),
+        Sort::Size => b.size.cmp(&a.size).then_with(|| natural(&a.name, &b.name)),
+        Sort::Modified => b.modified.cmp(&a.modified).then_with(|| natural(&a.name, &b.name)),
+    }));
 }
 /// Case-insensitive comparison treating digit runs as numbers: `a2` < `a10`.
 pub fn natural(a: &str, b: &str) -> Ordering {
@@ -256,7 +317,15 @@ fn root_entries() -> Vec<Entry> {
         .collect()
 }
 impl Files {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn open(start: PathBuf, home: PathBuf) -> Self {
+        Self::new(start, home, false)
+    }
+    /// Construct without touching disk; the UI schedules `take_read()` jobs.
+    pub fn deferred(start: PathBuf, home: PathBuf) -> Self {
+        Self::new(start, home, true)
+    }
+    fn new(start: PathBuf, home: PathBuf, deferred: bool) -> Self {
         let mut f = Self {
             cwd: None,
             entries: vec![],
@@ -275,6 +344,12 @@ impl Files {
             memory: HashMap::new(),
             all: vec![],
             home,
+            deferred,
+            directory_revision: 0,
+            preview_revision: 0,
+            directory_pending: false,
+            preview_pending: false,
+            loading: false,
         };
         f.enter(Some(start));
         f
@@ -283,6 +358,15 @@ impl Files {
     fn enter(&mut self, dir: Option<PathBuf>) {
         if let (Some(cwd), Some(e)) = (&self.cwd, self.entries.get(self.cursor)) {
             self.memory.insert(cwd.clone(), e.name.clone());
+        }
+        if self.deferred && self.cwd != dir {
+            // Never make the previous directory's rows actionable under a new path.
+            self.entries.clear();
+            self.all.clear();
+            self.parent.clear();
+            self.parent_cursor = None;
+            self.preview = Preview::Empty;
+            self.cursor = 0;
         }
         self.cwd = dir;
         self.filter.clear();
@@ -303,6 +387,14 @@ impl Files {
     }
     /// Re-reads the current directory, keeping the cursor on the same name.
     pub fn reload(&mut self) {
+        if self.deferred {
+            self.directory_revision = self.directory_revision.wrapping_add(1);
+            self.preview_revision = self.preview_revision.wrapping_add(1);
+            self.directory_pending = true;
+            self.preview_pending = false;
+            self.loading = true;
+            return;
+        }
         let name = self.entries.get(self.cursor).map(|e| e.name.clone());
         self.notice.clear();
         match &self.cwd {
@@ -350,17 +442,45 @@ impl Files {
         self.refresh_preview();
     }
     fn arrange(&self, entries: &mut Vec<Entry>, filter: &str) {
-        entries.retain(|e| (self.show_hidden || !e.hidden) && matches(filter, &e.name));
-        entries.sort_by(|a, b| {
-            b.dir.cmp(&a.dir).then_with(|| match self.sort {
-                Sort::Natural => natural(&a.name, &b.name),
-                Sort::Size => b.size.cmp(&a.size).then_with(|| natural(&a.name, &b.name)),
-                Sort::Modified => b
-                    .modified
-                    .cmp(&a.modified)
-                    .then_with(|| natural(&a.name, &b.name)),
+        arrange_entries(entries, filter, self.show_hidden, self.sort);
+    }
+    pub fn take_read(&mut self) -> Option<ReadRequest> {
+        if std::mem::take(&mut self.directory_pending) {
+            Some(ReadRequest::Directory { revision: self.directory_revision, cwd: self.cwd.clone() })
+        } else if !self.loading && std::mem::take(&mut self.preview_pending) {
+            Some(ReadRequest::Preview {
+                revision: self.preview_revision, entry: self.current().cloned(),
+                hidden: self.show_hidden, sort: self.sort,
             })
-        });
+        } else { None }
+    }
+    /// Apply only data, never a worker's copy of selection, filter or clipboard.
+    pub fn apply_read(&mut self, result: ReadResult) -> bool {
+        match result {
+            ReadResult::Directory { revision, entries, mut parent, notice } => {
+                if revision != self.directory_revision { return false; }
+                let name = self.current().map(|e| e.name.clone()).or_else(|| {
+                    self.cwd.as_ref().and_then(|cwd| self.memory.get(cwd).cloned())
+                });
+                self.all = entries;
+                self.arrange(&mut parent, "");
+                self.parent_cursor = self.cwd.as_ref().and_then(|cwd| parent.iter().position(|e| &e.path == cwd));
+                self.parent = parent;
+                self.notice = notice;
+                self.loading = false;
+                self.apply_view();
+                self.cursor = name.and_then(|name| self.entries.iter().position(|e| e.name == name))
+                    .unwrap_or(self.cursor.min(self.entries.len().saturating_sub(1)));
+                let existing: BTreeSet<_> = self.all.iter().map(|e| &e.path).collect();
+                self.selected.retain(|p| existing.contains(p));
+                self.refresh_preview();
+            }
+            ReadResult::Preview { revision, preview } => {
+                if revision != self.preview_revision { return false; }
+                self.preview = preview;
+            }
+        }
+        true
     }
     fn apply_view(&mut self) {
         let mut entries = self.all.clone();
@@ -368,6 +488,12 @@ impl Files {
         self.entries = entries;
     }
     fn refresh_preview(&mut self) {
+        if self.deferred {
+            self.preview_revision = self.preview_revision.wrapping_add(1);
+            self.preview_pending = true;
+            self.preview = Preview::Empty;
+            return;
+        }
         self.preview = match self.entries.get(self.cursor) {
             None => Preview::Empty,
             Some(e) if e.dir => match read_dir(&e.path) {
@@ -782,6 +908,52 @@ mod tests {
     }
     fn names(f: &Files) -> Vec<&str> {
         f.entries.iter().map(|e| e.name.as_str()).collect()
+    }
+    fn finish_reads(f: &mut Files) {
+        while let Some(job) = f.take_read() { assert!(f.apply_read(job.run())); }
+    }
+    #[test]
+    fn deferred_open_and_latest_directory_win() {
+        let t = tree();
+        let mut f = Files::deferred(t.0.clone(), t.0.clone());
+        assert!(f.loading && f.entries.is_empty());
+        let stale = f.take_read().unwrap();
+        f.go(t.0.join("docs"));
+        assert!(!f.apply_read(stale.run()));
+        assert!(f.loading && f.entries.is_empty());
+        finish_reads(&mut f);
+        assert!(!f.loading);
+        assert_eq!(names(&f), ["notes"]);
+    }
+    #[test]
+    fn refresh_preserves_live_selection_filter_and_clipboard() {
+        let t = tree();
+        let mut f = Files::deferred(t.0.clone(), t.0.clone());
+        finish_reads(&mut f);
+        f.reload();
+        let job = f.take_read().unwrap();
+        assert!(!f.entries.is_empty()); // stale-while-revalidate
+        f.seek("file2.txt");
+        f.selected.insert(t.0.join("file2.txt"));
+        f.clipboard = Some((vec![t.0.join("file10.txt")], false));
+        f.filter = "file".into();
+        assert!(f.apply_read(job.run()));
+        assert_eq!(names(&f), ["file2.txt", "file10.txt"]);
+        assert_eq!(f.current().unwrap().name, "file2.txt");
+        assert!(f.selected.contains(&t.0.join("file2.txt")));
+        assert!(f.clipboard.is_some());
+    }
+    #[test]
+    fn stale_preview_cannot_replace_current_cursor() {
+        let t = tree();
+        let mut f = Files::deferred(t.0.clone(), t.0.clone());
+        finish_reads(&mut f);
+        f.seek("file2.txt");
+        let old = f.take_read().unwrap();
+        f.seek("file10.txt");
+        assert!(!f.apply_read(old.run()));
+        finish_reads(&mut f);
+        assert_eq!(f.preview, Preview::Text(vec!["ten".into(), "lines".into()]));
     }
     #[test]
     fn natural_order() {
