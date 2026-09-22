@@ -112,7 +112,11 @@ fn colorref(color: &str) -> COLORREF {
 /// Click-through frame window drawn just outside a client's visible frame.
 /// It sits right above its client in the Z order: below it, the client's DWM
 /// shadow would darken it; any higher, it would cover unrelated windows.
-pub struct Border(isize);
+pub struct Border {
+    id: isize,
+    shape: Option<(i32, i32, i32)>,
+    color: Option<u32>,
+}
 impl Border {
     pub fn new() -> Option<Self> {
         unsafe extern "system" fn procedure(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT {
@@ -159,12 +163,12 @@ impl Border {
             )
             .ok()?;
             corners(h.0 as isize, true);
-            Some(Self(h.0 as isize))
+            Some(Self { id: h.0 as isize, shape: None, color: None })
         }
     }
     /// Surrounds `frame` with a `width`-pixel ring of `color`, just above `client`.
-    pub fn place(&self, client: isize, frame: Rect, width: i32, color: &str) {
-        let h = hwnd(self.0);
+    pub fn place(&mut self, client: isize, frame: Rect, width: i32, color: &str) {
+        let h = hwnd(self.id);
         let (w, hgt) = (frame.w + 2 * width, frame.h + 2 * width);
         unsafe {
             let above = GetWindow(hwnd(client), GW_HWNDPREV).unwrap_or_default();
@@ -175,18 +179,29 @@ impl Border {
             } else {
                 (Some(above), SET_WINDOW_POS_FLAGS(0))
             };
-            let key = wide(BORDER_COLOR);
-            let _ = SetPropW(
-                h,
-                PCWSTR(key.as_ptr()),
-                Some(HANDLE(colorref(color).0 as usize as *mut _)),
-            );
-            let outer = CreateRectRgn(0, 0, w, hgt);
-            let inner = CreateRectRgn(width, width, w - width, hgt - width);
-            let _ = CombineRgn(Some(outer), Some(outer), Some(inner), RGN_DIFF);
-            let _ = DeleteObject(inner.into());
-            // The system owns the region after SetWindowRgn.
-            SetWindowRgn(h, Some(outer), true);
+            let color = colorref(color).0;
+            let recolor = self.color != Some(color);
+            if recolor {
+                let key = wide(BORDER_COLOR);
+                if SetPropW(h, PCWSTR(key.as_ptr()), Some(HANDLE(color as usize as *mut _))).is_ok() {
+                    self.color = Some(color);
+                }
+            }
+            let shape = (w, hgt, width);
+            let reshape = self.shape != Some(shape);
+            if reshape {
+                let outer = CreateRectRgn(0, 0, w, hgt);
+                let inner = CreateRectRgn(width, width, w - width, hgt - width);
+                let _ = CombineRgn(Some(outer), Some(outer), Some(inner), RGN_DIFF);
+                let _ = DeleteObject(inner.into());
+                // Ownership transfers only on success; retry a failed update.
+                if SetWindowRgn(h, Some(outer), true) != 0 {
+                    self.shape = Some(shape);
+                } else {
+                    let _ = DeleteObject(outer.into());
+                }
+            }
+            // Never skip visibility or stacking repair, even with cached paint.
             let _ = SetWindowPos(
                 h,
                 insert,
@@ -196,17 +211,17 @@ impl Border {
                 hgt,
                 SWP_NOACTIVATE | SWP_SHOWWINDOW | order,
             );
-            let _ = InvalidateRect(Some(h), None, true);
+            if recolor || reshape { let _ = InvalidateRect(Some(h), None, true); }
         }
     }
     pub fn hide(&self) {
-        show(self.0, false);
+        show(self.id, false);
     }
 }
 impl Drop for Border {
     fn drop(&mut self) {
         unsafe {
-            let _ = DestroyWindow(hwnd(self.0));
+            let _ = DestroyWindow(hwnd(self.id));
         }
     }
 }
