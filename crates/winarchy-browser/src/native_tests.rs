@@ -59,6 +59,7 @@ fn demo_home_never_loads_the_normal_library() {
             }
         },
         Some(demo.path()),
+        &mut Resources::new().unwrap(),
     );
     assert!(result.is_ok(), "{:?}", result.err());
     assert!(checked);
