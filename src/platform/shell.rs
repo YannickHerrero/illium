@@ -196,6 +196,7 @@ pub struct Shell {
     pub picker: theme_picker::Picker,
     pub editor: keybindings::Editor,
     pub expose: expose::Expose,
+    surface_key: Option<(Vec<Rect>, bool, String, i32)>,
     pub backgrounds: Vec<Background>,
     pub bars: Vec<Bar>,
     /// Bars show the wallpaper through; toggled by clicking an empty bar area.
@@ -297,6 +298,7 @@ impl Shell {
             picker: theme_picker::Picker::new(tx.clone())?,
             editor: keybindings::Editor::new(tx.clone())?,
             expose: expose::Expose::new(tx.clone())?,
+            surface_key: None,
             backgrounds: vec![],
             bars: vec![],
             bar_transparent: false,
@@ -427,6 +429,16 @@ impl Shell {
             self.wallpaper_key = None;
         }
         self.refresh_wallpaper();
+        let surface_key = (monitors.to_vec(), c.bar.enabled, c.bar.position.clone(), c.bar.height);
+        if self.surface_key.as_ref() != Some(&surface_key) {
+            self.create_surfaces(c, monitors)?;
+            self.surface_key = Some(surface_key);
+        }
+        self.apply_theme(c);
+        self.configure_apps(c);
+        Ok(())
+    }
+    fn create_surfaces(&mut self, c: &Config, monitors: &[Rect]) -> Result<(), String> {
         for b in self.bars.drain(..) {
             let _ = b.hide();
         }
@@ -499,10 +511,9 @@ impl Shell {
                 self.bars.push(b);
             }
         }
-        self.launcher.set_bg(color(&c.theme.background));
-        self.launcher.set_fg(color(&c.theme.text));
-        self.launcher.set_accent(color(&c.theme.accent));
-        self.launcher.set_overlay(color(&c.theme.overlay));
+        Ok(())
+    }
+    fn configure_apps(&mut self, c: &Config) {
         self.aliases = c
             .apps
             .apps
@@ -524,7 +535,6 @@ impl Shell {
         }
         self.rebuild_apps(c.launcher.max_results);
         self.reindex(); // Explicit reload also discovers installed/removed applications.
-        Ok(())
     }
     fn rebuild_apps(&mut self, max: usize) {
         self.apps = self.aliases.iter().chain(&self.indexed_apps).cloned().collect();
