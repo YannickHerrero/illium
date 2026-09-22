@@ -157,3 +157,94 @@ mod tests {
         std::fs::remove_dir_all(home).unwrap();
     }
 }
+
+/// Downsampling factor of the exposé backdrop.
+const BLUR_SCALE: u32 = 16;
+/// Small blurred copy of a wallpaper frame (straight RGBA, top row first):
+/// every 16x16 block averaged, then two 3x3 box passes. Scaled back up with
+/// smooth filtering it reads as a heavy blur, for a fraction of the cost.
+pub fn blurred(pixels: &[u8], width: u32, height: u32) -> Option<(Vec<u8>, u32, u32)> {
+    let (w, h) = (width / BLUR_SCALE, height / BLUR_SCALE);
+    if w == 0 || h == 0 || pixels.len() < (width * height * 4) as usize {
+        return None;
+    }
+    let mut small = vec![255u8; (w * h * 4) as usize];
+    let count = BLUR_SCALE * BLUR_SCALE;
+    for y in 0..h {
+        for x in 0..w {
+            let mut acc = [0u32; 3];
+            for dy in 0..BLUR_SCALE {
+                let row = ((y * BLUR_SCALE + dy) * width + x * BLUR_SCALE) as usize * 4;
+                for px in pixels[row..row + (BLUR_SCALE * 4) as usize].chunks_exact(4) {
+                    acc[0] += u32::from(px[0]);
+                    acc[1] += u32::from(px[1]);
+                    acc[2] += u32::from(px[2]);
+                }
+            }
+            let o = ((y * w + x) * 4) as usize;
+            for c in 0..3 {
+                small[o + c] = (acc[c] / count) as u8;
+            }
+        }
+    }
+    for _ in 0..2 {
+        small = box3(&small, w, h);
+    }
+    Some((small, w, h))
+}
+fn box3(src: &[u8], w: u32, h: u32) -> Vec<u8> {
+    let mut out = vec![255u8; src.len()];
+    let (w, h) = (w as i64, h as i64);
+    for y in 0..h {
+        for x in 0..w {
+            let mut acc = [0u32; 3];
+            let mut n = 0;
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    let (sx, sy) = (x + dx, y + dy);
+                    if sx < 0 || sy < 0 || sx >= w || sy >= h {
+                        continue;
+                    }
+                    let i = ((sy * w + sx) * 4) as usize;
+                    for c in 0..3 {
+                        acc[c] += u32::from(src[i + c]);
+                    }
+                    n += 1;
+                }
+            }
+            let o = ((y * w + x) * 4) as usize;
+            for c in 0..3 {
+                out[o + c] = (acc[c] / n) as u8;
+            }
+        }
+    }
+    out
+}
+#[cfg(test)]
+mod blur_tests {
+    use super::*;
+    #[test]
+    fn backdrop_is_downsampled_and_smoothed() {
+        let (w, h) = (64u32, 48u32);
+        let mut pixels = vec![0u8; (w * h * 4) as usize];
+        // Left half white, right half black, opaque.
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 4) as usize;
+                let v = if x < w / 2 { 255 } else { 0 };
+                pixels[i..i + 3].copy_from_slice(&[v, v, v]);
+                pixels[i + 3] = 255;
+            }
+        }
+        let (small, sw, sh) = blurred(&pixels, w, h).unwrap();
+        assert_eq!((sw, sh), (4, 3));
+        assert_eq!(small.len(), 4 * 3 * 4);
+        let px = |x: usize| small[x * 4];
+        assert!(
+            px(0) > px(1) && px(1) > px(2) && px(2) > px(3),
+            "edge is smoothed"
+        );
+        assert!(small.chunks_exact(4).all(|p| p[3] == 255));
+        assert!(blurred(&pixels, 8, 8).is_none());
+    }
+}

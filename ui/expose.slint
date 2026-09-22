@@ -1,5 +1,5 @@
-// Exposé: every managed window of every workspace as a card over the dimmed
-// desktop. Geometry is computed by the daemon (src/expose.rs); the view only
+// Exposé: every managed window of every workspace as a card over the blurred
+// wallpaper. Geometry is computed by the daemon (src/expose.rs); the view only
 // draws the slots it is given and reports keys, clicks and hovers.
 export struct ExposeCard {
     title: string,
@@ -11,6 +11,7 @@ export struct ExposeCard {
     has-icon: bool,
     focused: bool,
     minimized: bool,
+    /// Thumbnail rectangle; the label strip hangs below it.
     x: length, y: length,
     width: length, height: length,
 }
@@ -18,6 +19,7 @@ export struct ExposeCard {
 export component ExposeView inherits Window {
     title: "Winarchy Exposé";
     no-frame: true;
+    default-font-family: "JetBrains Mono";
     in property <length> surface-width;
     in property <length> surface-height;
     width: surface-width; height: surface-height;
@@ -30,19 +32,34 @@ export component ExposeView inherits Window {
     in property <[ExposeCard]> cards;
     in-out property <int> selected: 0;
     in property <string> query;
+    /// "6 windows", for the right side of the filter box.
+    in property <string> count;
     in property <string> hint;
+    /// Blurred wallpaper of the monitor; the theme background shows without one.
+    in property <image> backdrop;
+    in property <bool> has-backdrop;
     /// Set once the native window has its final size, like the keybindings
     /// editor: the first frame then repaints the whole surface.
     in property <bool> ready;
     /// Height of the label strip under each thumbnail (src/expose.rs LABEL).
-    in property <length> label-height: 40px;
+    in property <length> label-height: 64px;
     callback key(string, bool, bool, bool, bool);
     callback activate(int);
     callback close-window(int);
     callback hover(int);
     callback dismiss();
-    background: root.ready ? bg.with-alpha(0.7) : transparent;
+    background: root.bg;
     forward-focus: keys;
+    if root.has-backdrop && root.ready: Image {
+        width: root.width; height: root.height;
+        source: root.backdrop;
+        image-fit: cover;
+        image-rendering: smooth;
+    }
+    Rectangle {
+        width: root.width; height: root.height;
+        background: root.bg.with-alpha(root.has-backdrop ? 0.55 : 0.0);
+    }
     keys := FocusScope {
         width: root.width; height: root.height;
         key-pressed(event) => {
@@ -52,13 +69,35 @@ export component ExposeView inherits Window {
         key-released(event) => { return accept; }
         // Declared first so the cards' own touch areas stay above it.
         TouchArea { clicked => { root.dismiss(); } }
-        Text {
+        // Filter box.
+        Rectangle {
             visible: root.ready;
-            x: 0; y: 20px; width: root.width;
-            text: root.query == "" ? "Type to filter · Enter focus · Esc close" : root.query;
-            color: root.query == "" ? root.muted : root.fg;
-            font-size: root.query == "" ? 13px : 18px;
-            horizontal-alignment: center;
+            width: min(600px, root.width - 160px); height: 48px;
+            x: (root.width - self.width) / 2; y: 28px;
+            background: root.bg.with-alpha(0.85);
+            border-width: 1px;
+            border-color: root.query == "" ? root.fg.with-alpha(0.35) : root.accent;
+            border-radius: 3px;
+            HorizontalLayout {
+                padding-left: 16px; padding-right: 16px; spacing: 12px;
+                Image {
+                    width: 16px; height: 16px;
+                    y: (parent.height - self.height) / 2;
+                    source: @image-url("icons/search.svg");
+                    colorize: root.query == "" ? root.muted : root.accent;
+                }
+                Text {
+                    text: root.query == "" ? "Type to filter windows…" : root.query;
+                    color: root.query == "" ? root.muted : root.fg;
+                    font-size: 15px;
+                    vertical-alignment: center; overflow: elide;
+                    horizontal-stretch: 1;
+                }
+                Text {
+                    text: root.count; color: root.muted; font-size: 12px;
+                    vertical-alignment: center;
+                }
+            }
         }
         Text {
             visible: root.ready && root.cards.length == 0;
@@ -69,30 +108,30 @@ export component ExposeView inherits Window {
         }
         for card[index] in root.cards: box := Rectangle {
             visible: root.ready;
-            x: card.x; y: card.y; width: card.width; height: card.height;
+            x: card.x; y: card.y;
+            width: card.width; height: card.height + root.label-height;
             property <bool> current: root.selected == index;
-            background: box.current ? root.surface : root.bg;
-            border-width: box.current ? 2px : 1px;
-            border-color: box.current ? root.accent : card.focused ? root.accent.with-alpha(0.6) : root.overlay;
-            border-radius: 6px;
-            clip: true;
             Rectangle {
-                x: 0; y: 0; width: parent.width; height: parent.height - root.label-height;
+                x: 0; y: 0; width: card.width; height: card.height;
+                background: root.surface.with-alpha(card.has-image ? 1.0 : 0.85);
+                border-width: box.current ? 2px : 1px;
+                border-color: box.current ? root.accent : card.focused ? root.accent.with-alpha(0.55) : root.fg.with-alpha(0.25);
+                border-radius: 2px;
+                clip: true;
                 if card.has-image: Image {
-                    width: parent.width - 8px; height: parent.height - 8px;
-                    x: 4px; y: 4px;
+                    x: 1px; y: 1px; width: parent.width - 2px; height: parent.height - 2px;
                     source: card.image;
-                    image-fit: contain;
+                    image-fit: fill;
                     image-rendering: smooth;
-                    opacity: card.minimized ? 0.5 : 1.0;
+                    opacity: card.minimized ? 0.45 : 1.0;
                 }
                 if !card.has-image && card.has-icon: Image {
-                    width: min(96px, parent.width / 3); height: self.width;
+                    width: min(96px, parent.width / 3, parent.height / 2); height: self.width;
                     x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
                     source: card.icon;
                     image-fit: contain;
                     image-rendering: smooth;
-                    opacity: card.minimized ? 0.5 : 0.9;
+                    opacity: card.minimized ? 0.45 : 0.9;
                 }
                 if !card.has-image && !card.has-icon: Text {
                     width: parent.width; height: parent.height;
@@ -100,40 +139,56 @@ export component ExposeView inherits Window {
                     horizontal-alignment: center; vertical-alignment: center;
                     overflow: elide;
                 }
-                if card.minimized: Text {
-                    x: 0; y: parent.height - self.height - 6px; width: parent.width;
-                    text: "minimized"; color: root.muted; font-size: 11px;
-                    horizontal-alignment: center;
+                if card.minimized: Rectangle {
+                    x: 0; y: parent.height - self.height;
+                    width: parent.width; height: 20px;
+                    background: root.bg.with-alpha(0.75);
+                    Text {
+                        width: parent.width; height: parent.height;
+                        text: "minimized"; color: root.muted; font-size: 11px;
+                        horizontal-alignment: center; vertical-alignment: center;
+                    }
                 }
             }
             HorizontalLayout {
-                x: 0; y: parent.height - root.label-height;
-                width: parent.width; height: root.label-height;
-                padding-left: 10px; padding-right: 10px; spacing: 8px;
+                x: 0; y: card.height;
+                width: card.width; height: root.label-height;
+                padding-top: 12px; spacing: 12px;
                 if card.has-icon: Image {
-                    width: 18px; height: 18px;
-                    y: (parent.height - self.height) / 2;
+                    width: 28px; height: 28px;
                     source: card.icon;
                     image-fit: contain;
                     image-rendering: smooth;
                 }
-                Text {
-                    text: card.title == "" ? card.app : card.title;
-                    color: box.current ? root.fg : root.fg.with-alpha(0.85);
-                    font-size: 13px;
-                    vertical-alignment: center; overflow: elide;
-                    horizontal-stretch: 1;
+                if !card.has-icon: Rectangle {
+                    width: 28px; height: 28px;
+                    background: root.overlay; border-radius: 4px;
                 }
-                Rectangle {
-                    width: badge.preferred-width + 12px; height: 20px;
-                    y: (parent.height - self.height) / 2;
-                    background: card.focused ? root.accent : root.overlay;
-                    border-radius: 4px;
-                    badge := Text {
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: start; spacing: 2px;
+                    Text {
+                        text: card.title == "" ? card.app : card.title;
+                        color: box.current ? root.fg : root.fg.with-alpha(0.9);
+                        font-size: 13px; font-weight: box.current ? 700 : 400;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: card.app; color: root.muted; font-size: 11px;
+                        overflow: elide;
+                    }
+                }
+                VerticalLayout {
+                    alignment: start; spacing: 2px;
+                    Text {
                         text: card.workspace;
-                        color: card.focused ? root.bg : root.fg;
-                        font-size: 11px; font-weight: 700;
-                        horizontal-alignment: center; vertical-alignment: center;
+                        color: card.focused ? root.accent : root.fg;
+                        font-size: 14px; font-weight: 700;
+                        horizontal-alignment: right;
+                    }
+                    Text {
+                        text: "Workspace"; color: root.muted; font-size: 10px;
+                        horizontal-alignment: right;
                     }
                 }
             }
@@ -149,7 +204,7 @@ export component ExposeView inherits Window {
         }
         Text {
             visible: root.ready && root.cards.length > 0;
-            x: 0; y: root.height - 36px; width: root.width;
+            x: 0; y: root.height - 44px; width: root.width;
             text: root.hint;
             color: root.muted; font-size: 12px;
             horizontal-alignment: center;

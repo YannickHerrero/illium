@@ -743,9 +743,15 @@ impl Manager {
                         .filter_map(|(chord, _)| crate::keyboard::chord(chord).ok())
                         .collect();
                     let monitor = self.full_area();
-                    self.shell
-                        .expose
-                        .open(&self.config, monitor, restore, entries, exes, close_chords);
+                    let index = self.model.monitors[(self.model.active - 1) as usize]
+                        .min(self.monitors.len().saturating_sub(1));
+                    let scene = shell::expose::Scene {
+                        entries,
+                        exes,
+                        close_chords,
+                        backdrop: self.shell.backdrop(index),
+                    };
+                    self.shell.expose.open(&self.config, monitor, restore, scene);
                 }
             }
             Command::App(name) => apps::open(name),
@@ -859,11 +865,13 @@ impl Manager {
                     .map(|stem| stem.to_string_lossy().into_owned())
                     .unwrap_or_default();
                 exes.insert(c.id, exe);
+                let frame = native::frame(c.id);
                 crate::expose::Entry {
                     id: c.id,
                     title: native::title(c.id),
                     app,
                     workspace: c.workspace,
+                    aspect: crate::expose::clamp_aspect(frame.w as f32 / frame.h.max(1) as f32),
                     minimized: native::minimized(c.id),
                     focused: Some(c.id) == self.model.focused,
                 }

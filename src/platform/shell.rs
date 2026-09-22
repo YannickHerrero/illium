@@ -207,6 +207,8 @@ pub struct Shell {
     theme: String,
     pub wallpaper: Option<String>,
     wallpaper_images: Vec<slint::Image>,
+    /// Small blurred copies of the wallpaper, one per monitor, for the exposé.
+    wallpaper_blur: Vec<slint::Image>,
     wallpaper_sizes: Vec<(u32, u32)>,
     wallpaper_key: Option<crate::wallpaper::loader::Key>,
     wallpaper_loader: crate::wallpaper::loader::Loader,
@@ -295,6 +297,7 @@ impl Shell {
             theme: String::new(),
             wallpaper: None,
             wallpaper_images: vec![],
+            wallpaper_blur: vec![],
             wallpaper_sizes: vec![],
             wallpaper_key: None,
             wallpaper_loader: crate::wallpaper::loader::Loader::default(),
@@ -319,6 +322,10 @@ impl Shell {
             drawer_hints: false,
             tx,
         })
+    }
+    /// Blurred wallpaper of monitor `index`, or an empty image on a solid background.
+    pub fn backdrop(&self, index: usize) -> slint::Image {
+        self.wallpaper_blur.get(index).cloned().unwrap_or_default()
     }
     /// Whether one of the bars is the root window `id`.
     pub fn is_bar(&self, window: isize) -> bool {

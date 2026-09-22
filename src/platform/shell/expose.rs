@@ -91,6 +91,17 @@ fn image(p: &Pixels, premultiplied: bool) -> slint::Image {
         slint::Image::from_rgba8(buffer)
     }
 }
+/// Everything the manager gathers for one opening.
+pub struct Scene {
+    pub entries: Vec<Entry>,
+    /// Executable path per window, for the icon lookup.
+    pub exes: HashMap<isize, String>,
+    /// The configured `window close` bindings, which close the selected
+    /// window from inside the exposé.
+    pub close_chords: Vec<(u32, u8)>,
+    /// Blurred wallpaper of the monitor, empty on a solid background.
+    pub backdrop: slint::Image,
+}
 pub struct Expose {
     ui: ExposeView,
     rows: Rc<VecModel<ExposeCard>>,
@@ -166,20 +177,16 @@ impl Expose {
         self.ui.set_muted(color(&c.theme.subtext));
         self.ui.set_accent(color(&c.theme.accent));
     }
-    /// `close_chords` are the configured `window close` bindings, which close
-    /// the selected window from inside the exposé.
-    pub fn open(
-        &mut self,
-        c: &Config,
-        monitor: Rect,
-        restore: Option<isize>,
-        entries: Vec<Entry>,
-        exes: HashMap<isize, String>,
-        close_chords: Vec<(u32, u8)>,
-    ) {
+    pub fn open(&mut self, c: &Config, monitor: Rect, restore: Option<isize>, scene: Scene) {
         if self.opened {
             return;
         }
+        let Scene {
+            entries,
+            exes,
+            close_chords,
+            backdrop,
+        } = scene;
         self.epoch.set(self.epoch.get().wrapping_add(1));
         self.apply_theme(c);
         self.restore = restore;
@@ -188,24 +195,24 @@ impl Expose {
         self.ui.set_surface_height(dpi::logical(monitor, monitor.h));
         self.ui.set_ready(false);
         self.ui.set_label_height(expose::LABEL);
+        let has_backdrop = backdrop.size().width > 0;
+        self.ui.set_backdrop(backdrop);
+        self.ui.set_has_backdrop(has_backdrop);
         let close = close_chords
             .first()
             .and_then(|(vk, modifiers)| keyboard::format(*vk, *modifiers))
-            .map(|chord| format!(" · {} close", keybindings::pretty(&chord)))
+            .map(|chord| format!("   {} close window", keybindings::pretty(&chord)))
             .unwrap_or_default();
-        self.ui
-            .set_hint(format!("Enter or click focus{close} · middle click close · Esc").into());
-        self.close_chords = close_chords;
-        let (cols, slots) = expose::grid(
-            entries.len(),
-            dpi::logical(monitor, monitor.w),
-            dpi::logical(monitor, monitor.h),
+        self.ui.set_hint(
+            format!("← ↑ ↓ → navigate   Enter open{close}   middle click close window   Esc close")
+                .into(),
         );
+        self.close_chords = close_chords;
         let jobs = entries
             .iter()
             .map(|e| (e.id, exes.get(&e.id).cloned().unwrap_or_default()))
             .collect();
-        self.model = Model::new(entries, cols);
+        self.model = Model::new(entries);
         self.exes = exes;
         self.images.clear();
         self.render();
@@ -214,8 +221,14 @@ impl Expose {
         }
         self.opened = true;
         self.pending_window = true;
-        // Capture at the card's physical width: sharp on the card, nothing more.
-        let width = slots.first().map_or(640.0, |s| s.w);
+        // Capture at the widest card's physical width: sharp on the card, nothing more.
+        let width = self
+            .model
+            .slots
+            .iter()
+            .map(|s| s.w)
+            .fold(0.0, f32::max)
+            .max(320.0);
         capture::start(
             self.epoch.get(),
             jobs,
@@ -272,13 +285,12 @@ impl Expose {
             dpi::logical(self.monitor, self.monitor.w),
             dpi::logical(self.monitor, self.monitor.h),
         );
-        let (cols, slots) = expose::grid(self.model.shown.len(), w, h);
-        self.model.cols = cols;
+        self.model.arrange(w, h);
         let rows: Vec<ExposeCard> = self
             .model
             .shown
             .iter()
-            .zip(slots)
+            .zip(self.model.slots.iter().copied())
             .map(|(index, slot)| {
                 let e = &self.model.entries[*index];
                 let icon = self.exes.get(&e.id).and_then(|exe| self.icons.get(exe));
@@ -303,6 +315,14 @@ impl Expose {
         super::sync(&self.rows, &rows);
         self.ui.set_selected(self.model.selected as i32);
         self.ui.set_query(self.model.query.clone().into());
+        let n = self.model.shown.len();
+        self.ui.set_count(
+            match n {
+                1 => "1 window".to_owned(),
+                n => format!("{n} windows"),
+            }
+            .into(),
+        );
     }
     pub fn input(&mut self, epoch: u64, input: Input) -> Outcome {
         if !self.opened || epoch != self.epoch.get() {

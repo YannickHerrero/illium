@@ -40,10 +40,12 @@ impl Shell {
         &mut self,
         name: Option<String>,
         images: Vec<slint::Image>,
+        blur: Vec<slint::Image>,
         key: Option<Key>,
     ) {
         self.wallpaper = name;
         self.wallpaper_images = images;
+        self.wallpaper_blur = blur;
         self.wallpaper_key = key;
         for (index, background) in self.backgrounds.iter().enumerate() {
             background.set_wallpaper(
@@ -57,7 +59,7 @@ impl Shell {
     fn clear_wallpaper(&mut self) {
         self.wallpaper_loader.cancel();
         self.wallpaper_pending = None;
-        self.show_wallpaper(None, vec![], None);
+        self.show_wallpaper(None, vec![], vec![], None);
     }
     fn begin_wallpaper(
         &mut self,
@@ -151,12 +153,14 @@ impl Shell {
             return;
         }
         let mut images: Vec<slint::Image> = Vec::new();
+        let mut blur: Vec<slint::Image> = Vec::new();
         for (index, frame) in pixels.frames.iter().enumerate() {
             if let Some(previous) = pixels.frames[..index]
                 .iter()
                 .position(|f| Arc::ptr_eq(frame, f))
             {
                 images.push(images[previous].clone());
+                blur.push(blur[previous].clone());
                 continue;
             }
             let buffer = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
@@ -165,8 +169,19 @@ impl Shell {
                 frame.height,
             );
             images.push(slint::Image::from_rgba8(buffer));
+            blur.push(
+                crate::wallpaper::blurred(&frame.pixels, frame.width, frame.height)
+                    .map(|(pixels, w, h)| {
+                        slint::Image::from_rgba8(
+                            slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
+                                &pixels, w, h,
+                            ),
+                        )
+                    })
+                    .unwrap_or_default(),
+            );
         }
-        self.show_wallpaper(Some(name.clone()), images, Some(key.clone()));
+        self.show_wallpaper(Some(name.clone()), images, blur, Some(key.clone()));
         self.wallpaper_error = None;
         tracing::info!(
             cached,
