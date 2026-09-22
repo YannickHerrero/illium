@@ -41,7 +41,7 @@ This does **not** stop Explorer. Defaults are installed without overwriting exis
 - Floating clients, reversible fullscreen and normal application close requests
 - Configured low-level keyboard shortcuts, with **Alt** as the default modifier
 - Named-pipe commands with owner-only permissions and readable errors
-- Catppuccin Mocha/Latte; modular TOML configuration and directory-change reloads
+- Catppuccin Mocha/Latte and wallpaper-driven Dynamic Dark/Light; modular TOML configuration and directory-change reloads
 - Start Menu shortcut discovery, fuzzy search, native process launching
 - Theme background, bar with workspaces, clock, battery, CPU and memory modules and detail popups
 - Applets: icon + Slint popup fed by a PowerShell script or a built-in provider, examples included (weather, wifi network chooser, calendar, volume)

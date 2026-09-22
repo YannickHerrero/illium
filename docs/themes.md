@@ -1,6 +1,7 @@
 # Themes
 
-Built-in themes use the official Catppuccin Mocha and Latte palettes. Mocha is the first-run default. Every visible color is supplied by theme properties, including the launcher's input and selection.
+Built-in themes include the official Catppuccin Mocha and Latte palettes, plus
+wallpaper-driven **Dynamic Dark** and **Dynamic Light**. Mocha is the first-run default. Every visible color is supplied by theme properties, including the launcher's input and selection.
 
 ```powershell
 winarchyctl theme set catppuccin-latte
@@ -66,6 +67,78 @@ Existing `keybindings.toml` files are not overwritten during upgrades: add the
 two bindings from [configuration](configuration.md#keybindingstoml) if missing.
 
 Select with `winarchyctl theme set my-theme`. Names cannot contain slashes, backslashes or dots. Editing the active palette triggers the directory watcher.
+
+## Dynamic Dark and Dynamic Light
+
+These two built-in themes generate shell colors and all sixteen terminal colors
+from your selected wallpaper, entirely locally in Rust. No Python, external
+palette generator, network access or theme-pack installation is required.
+
+Place your personal PNG/JPEG images in this **shared** directory:
+
+```text
+%USERPROFILE%\.config\winarchy\wallpapers\dynamic\
+```
+
+With `WINARCHY_CONFIG_HOME`, use `<config-home>/wallpapers/dynamic/` instead. The
+daemon creates the empty directory on installation/upgrade; no personal images
+are shipped or committed. The ordinary wallpaper size/count/link restrictions
+below apply. Images are never modified. Do not put these wallpapers in the
+Winarchy source tree or the external theme-pack repository.
+
+```powershell
+winarchyctl theme set dynamic-dark
+winarchyctl wallpaper picker
+# The same wallpaper, with a light palette:
+winarchyctl theme set dynamic-light
+```
+
+**Ctrl+Alt+Shift+W**, the Wallpaper menu, `wallpaper set` and `wallpaper next` all
+use this library. Dark and Light remember one shared choice in `wallpapers.json`;
+static themes retain their independent choices. Browsing the carousel has no
+side effects. Both dynamic themes have built-in, original geometric preview
+images so they remain selectable even with an empty library. These previews are
+illustrations, not screenshots or live palette previews.
+
+On confirmation, the existing worker prepares the wallpaper and its two palettes
+before publishing either. Superseded requests cannot replace a newer selection.
+The shell updates its colors and wallpaper in the same UI cycle; terminal,
+Files, Tasks and browser processes follow through their live theme subscriptions.
+Install matching upgraded binaries for these consumers. No application sessions
+or applet providers restart. Switching wallpapers preserves the current opacity
+override; switching theme identifiers retains the usual opacity-reset behavior.
+External applications are not automatically reconfigured.
+
+Generation samples the uncropped source, weights visible pixels, selects a
+representative chromatic accent, then constructs gamut-mapped OKLCH surfaces,
+text and harmonized semantic/ANSI colors. Semantic hues stay recognizably red,
+green, yellow, etc. Text, subtext, accent and semantic colors target at least
+4.5:1 contrast against the opaque background/surface/overlay. Transparency and
+content behind a window can reduce the real displayed contrast. Monochrome,
+black, white and fully transparent images use a stable blue-accent fallback.
+Monitor crops/resolutions do not change the palette.
+
+The first use calculates both variants. Subsequent uses reuse a bounded local
+cache under `cache/dynamic-palettes/` (at most 64 small palette files), keyed by
+SHA-256 of decoded pixels, dimensions and generator version. Source images still
+need decoding to display the desktop. Corrupt/unwritable caches are harmless;
+you may delete the cache whenever you like. Cached palettes are not installed
+into `themes/` and never overwrite the built-in TOML files.
+
+The last applied pair is atomically published in `dynamic-theme.state`, separate
+from the cache, installed palettes and preferences. All theme consumers apply
+this state only to dynamic themes, before the temporary opacity override.
+
+- Empty library or **Solid background**: matching built-in fallback palette and
+  solid background. The explicit solid choice survives restarts.
+- Explicit unreadable image or publication failure: retain the current image,
+  palette and saved choice. Inspect `wallpaper_pending` / `wallpaper_error` in
+  `winarchyctl status`; pending includes palette preparation.
+- Missing/unreadable remembered image on activation: try the other images,
+  then the matching solid fallback.
+- Image edits/additions/removals: detected by the existing wallpaper watcher;
+  an edited source is regenerated when loaded.
+- Returning to a static theme: dynamic state is ignored completely.
 
 ## Visual theme picker
 
@@ -206,7 +279,9 @@ The installer validates the palette and decodes the images, installs assets unde
 
 ## Wallpapers
 
-For an installed `my-theme.toml`, place images in `themes/my-theme/wallpapers/`. No manifest entries are needed. The first readable JPEG/PNG in alphabetical order is used on first activation. The menu **Alt+Shift+Space → Wallpaper** opens the same visual carousel as the theme picker, starting on the current (or pending) image. Left/Right or Tab/Shift+Tab browse, typing filters filenames, and Enter or clicking the selected card applies that exact image through the existing wallpaper loader. Escape clears the filter, then cancels; clicking outside cancels. Browsing never changes the desktop or saved choices. **Alt+Shift+Space → Solid background** retains the explicit solid-color choice without adding an artificial image card. Without readable wallpapers, the carousel stays empty and can be cancelled. If the active theme changes while browsing wallpapers, the picker cancels rather than applying an old filename to the new theme. **Ctrl+Alt+Shift+W** opens the wallpaper picker directly. The `winarchyctl wallpaper next` command still cycles through the same theme's images, wrapping around and skipping unreadable files. From a solid background it starts with the first image; without images it does nothing.
+For an installed static `my-theme.toml`, place images in `themes/my-theme/wallpapers/`.
+The two dynamic themes instead share `wallpapers/dynamic/` as described above.
+No manifest entries are needed. The first readable JPEG/PNG in alphabetical order is used on first activation. The menu **Alt+Shift+Space → Wallpaper** opens the same visual carousel as the theme picker, starting on the current (or pending) image. Left/Right or Tab/Shift+Tab browse, typing filters filenames, and Enter or clicking the selected card applies that exact image through the existing wallpaper loader. Escape clears the filter, then cancels; clicking outside cancels. Browsing never changes the desktop or saved choices. **Alt+Shift+Space → Solid background** retains the explicit solid-color choice without adding an artificial image card. Without readable wallpapers, the carousel stays empty and can be cancelled. If the active theme changes while browsing wallpapers, the picker cancels rather than applying an old filename to the new theme. **Ctrl+Alt+Shift+W** opens the wallpaper picker directly. The `winarchyctl wallpaper next` command still cycles through the same theme's images, wrapping around and skipping unreadable files. From a solid background it starts with the first image; without images it does nothing.
 
 ```powershell
 winarchyctl wallpaper picker

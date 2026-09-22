@@ -14,6 +14,37 @@ python3 scripts/check-cli-dependencies.py
 
 The Linux test suite covers the command grammar, configuration loading and invalid reloads, palettes, rule matching, keyboard chords and modifier tracking, Fibonacci geometry and non-overlap, directional navigation, workspace ordering, IPC framing and timeouts, and the models of the companion applications (process sorting and filtering, file listing, selection, clipboard and prompts against a temporary tree). The dependency check keeps `winarchyctl` free of the daemon and UI toolkit. CI runs the same checks on `windows-latest` and packages the release binaries.
 
+## Dynamic wallpaper themes
+
+Portable tests cover deterministic OKLCH generation, opaque contrast targets,
+transparent/monochrome images, ANSI colors, bounded content-addressed caching,
+corrupt caches, shared Dark/Light selection, publication rollback, effective
+palette subscriptions and recovery from invalid disposable state:
+
+```sh
+cargo test -p winarchy-theme --features live
+cargo test -p winarchy --lib dynamic
+```
+
+Windows additionally exercises the production wallpaper coordinator with a
+headless Slint backend, temporary configuration and no HWNDs. It covers rapid
+selection, explicit decode failure retaining the old pair/preferences, Dark/Light
+switching, opacity preservation, fresh-coordinator restoration, source removal
+and edits, clear/fallback and cancellation when returning to a static theme:
+
+```powershell
+cargo test -p winarchy --lib dynamic_wallpaper_lifecycle -- --test-threads=1
+cargo test -p winarchy --lib headless_picker -- --test-threads=1
+cargo test -p winarchy-terminal --lib reload
+```
+
+Implementation validation passed on Linux and the targeted tests ran on Windows
+via WSL interop. Windows GNU checks passed for the daemon, CLI, theme library,
+terminal, apps and browser. A whole-workspace GNU check is blocked by Dictate's
+ONNX Runtime dependency, which does not supply GNU Windows binaries. These checks
+do not replace a visual check of native composition/transparency and simultaneous
+updates across real application windows after deployment.
+
 ## Native terminal
 
 See [terminal validation and performance probes](terminal.md#reproduce-validation).
