@@ -227,7 +227,8 @@ pub struct Shell {
     pub popup_open: Option<String>,
     popup_pending: Option<Rect>,
     popup_keyboard: bool,
-    pub apps: Vec<App>,
+    apps: Vec<App>,
+    search_names: Vec<String>,
     indexed_apps: Vec<App>,
     index_generation: u64,
     index_running: bool,
@@ -282,14 +283,23 @@ fn scan(path: &std::path::Path, out: &mut Vec<App>) {
     }
 }
 fn score(query: &str, text: &str) -> Option<usize> {
-    let text = text.to_lowercase();
+    score_folded(&query.to_lowercase(), &text.to_lowercase())
+}
+fn score_folded(query: &str, text: &str) -> Option<usize> {
     let mut chars = text.char_indices();
     let mut total = 0;
-    for q in query.to_lowercase().chars() {
+    for q in query.chars() {
         let (i, _) = chars.find(|(_, c)| *c == q)?;
         total += i;
     }
     Some(total)
+}
+#[test]
+fn folded_launcher_matching_preserves_unicode_subsequence_scores() {
+    assert_eq!(score("ED", "Editor"), Some(1));
+    assert_eq!(score("É語", "Éditeur 日本語"), Some(15));
+    assert_eq!(score_folded("", "editor"), Some(0));
+    assert_eq!(score_folded("dx", "editor"), None);
 }
 impl Shell {
     pub fn new(tx: EventSender) -> Result<Self, String> {
@@ -328,6 +338,7 @@ impl Shell {
             popup_pending: None,
             popup_keyboard: false,
             apps: vec![],
+            search_names: vec![],
             indexed_apps: vec![],
             index_generation: 0,
             index_running: false,
@@ -557,8 +568,9 @@ impl Shell {
     }
     fn rebuild_apps(&mut self, max: usize) {
         self.apps = self.aliases.iter().chain(&self.indexed_apps).cloned().collect();
-        self.apps.sort_by_key(|a| a.name.to_lowercase());
+        self.apps.sort_by_cached_key(|a| a.name.to_lowercase());
         self.apps.dedup_by(|a, b| a.name == b.name);
+        self.search_names = self.apps.iter().map(|app| app.name.to_lowercase()).collect();
         let query = self.launcher.get_query();
         self.search(&query, max);
     }
@@ -762,7 +774,7 @@ impl Shell {
                 .iter()
                 .filter_map(|(name, command)| score(q, name).map(|s| (s, name, command)))
                 .collect();
-            matches.sort_by_key(|(s, name, _)| (*s, (*name).clone()));
+            matches.sort_by(|(a, name_a, _), (b, name_b, _)| a.cmp(b).then_with(|| name_a.cmp(name_b)));
             let shown: Vec<slint::SharedString> = matches
                 .iter()
                 .take(max)
@@ -777,12 +789,14 @@ impl Shell {
                 .set_results(ModelRc::from(Rc::new(VecModel::from(shown))));
             return;
         }
+        let query = q.to_lowercase();
         let mut matches: Vec<_> = self
             .apps
             .iter()
-            .filter_map(|a| score(q, &a.name).map(|s| (s, a)))
+            .zip(&self.search_names)
+            .filter_map(|(a, name)| score_folded(&query, name).map(|s| (s, a)))
             .collect();
-        matches.sort_by_key(|(s, a)| (*s, a.name.clone()));
+        matches.sort_by(|(a, app_a), (b, app_b)| a.cmp(b).then_with(|| app_a.name.cmp(&app_b.name)));
         self.results = matches
             .into_iter()
             .take(max)
