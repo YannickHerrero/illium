@@ -4,6 +4,8 @@ fn runtime() -> Runtime {
     let mut runtime = Runtime::new(tx);
     runtime.generation = 2;
     runtime.entries.push(Entry {
+        generation: 2,
+        fingerprint: None,
         applet: Applet {
             name: "wifi".into(),
             dir: std::path::PathBuf::new(),
@@ -22,6 +24,50 @@ fn runtime() -> Runtime {
         instance: None,
     });
     runtime
+}
+#[test]
+fn volume_reads_never_queue_and_absolute_slider_intent_coalesces() {
+    let mut runtime = runtime();
+    runtime.entries[0].applet.manifest.provider = Some("builtin:volume".into());
+    for action in ["levels", "refresh", "set 10", "set 20", "toggle-mute", "set 30"] {
+        runtime.action("wifi", Some(action.into()));
+    }
+    assert_eq!(runtime.entries[0].pending_actions.iter().map(String::as_str).collect::<Vec<_>>(),
+        vec!["set 20", "toggle-mute", "set 30"]);
+}
+#[test]
+fn reload_keeps_unchanged_workers_and_invalidates_nested_source_edits() {
+    let home = std::env::temp_dir().join(format!("winarchy-reload-applet-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&home);
+    Config::install(&home).unwrap();
+    let dir = home.join("applets/fixture");
+    std::fs::create_dir_all(dir.join("imports")).unwrap();
+    std::fs::write(dir.join("applet.toml"), "icon = \"\"\ninterval = \"1h\"\n").unwrap();
+    std::fs::write(dir.join("imports/shared.slint"), "old").unwrap();
+    let mut config = Config::load(&home).unwrap();
+    config.bar.left = vec!["fixture".into()];
+    config.bar.right.clear(); config.bar.center.clear(); config.bar.drawer.clear();
+    let (tx, _) = crate::queue::channel(8);
+    let mut runtime = Runtime::new(tx);
+    runtime.load(&config);
+    let generation = runtime.entries[0].generation;
+    let due = Instant::now() + Duration::from_secs(123);
+    runtime.entries[0].due = due;
+    runtime.entries[0].running = true;
+    runtime.entries[0].pending_actions.push_back("queued".into());
+    runtime.load(&config);
+    assert_eq!(runtime.entries[0].generation, generation);
+    assert!(runtime.entries[0].running);
+    assert_eq!(runtime.entries[0].due, due);
+    assert_eq!(runtime.entries[0].pending_actions.pop_front().as_deref(), Some("queued"));
+    runtime.apply("fixture", generation, Ok("{\"value\":1}".into()));
+    assert_eq!(runtime.entries[0].data["value"], 1);
+    std::fs::write(dir.join("imports/shared.slint"), "changed source").unwrap();
+    runtime.load(&config);
+    assert_ne!(runtime.entries[0].generation, generation);
+    runtime.apply("fixture", generation, Ok("{\"value\":2}".into()));
+    assert_eq!(runtime.entries[0].data["value"], 1);
+    std::fs::remove_dir_all(home).unwrap();
 }
 #[test]
 fn large_popups_respect_bar_and_monitor_edges() {

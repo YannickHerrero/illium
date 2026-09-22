@@ -37,6 +37,8 @@ fn set_colors(instance: &ComponentInstance, theme: &crate::config::Theme) {
 }
 pub struct Entry {
     pub applet: Applet,
+    generation: u64,
+    fingerprint: Option<Vec<(std::path::PathBuf, Vec<u8>)>>,
     pub icon: Option<slint::Image>,
     /// File the loaded icon came from, so data refreshes only reload on a change.
     icon_file: Option<String>,
@@ -87,7 +89,7 @@ impl Runtime {
     pub fn load(&mut self, c: &Config) {
         self.close();
         self.generation = self.generation.wrapping_add(1);
-        let previous = std::mem::take(&mut self.entries);
+        let mut previous = std::mem::take(&mut self.entries);
         for loaded in applets::referenced(
             &c.home,
             &[&c.bar.left, &c.bar.center, &c.bar.right, &c.bar.drawer],
@@ -99,13 +101,25 @@ impl Runtime {
                     continue;
                 }
             };
-            let old = previous.iter().find(|e| e.applet.name == applet.name);
+            let fingerprint = crate::files::applet_snapshot(&applet.dir).ok();
+            let old = previous.iter().position(|e| e.applet.name == applet.name)
+                .map(|index| previous.swap_remove(index));
+            if fingerprint.is_some() && old.as_ref().is_some_and(|entry| entry.fingerprint == fingerprint) {
+                let entry = old.unwrap();
+                if let Some(instance) = &entry.instance { set_colors(instance, &c.theme); }
+                // Keep generation, running worker, action queue, due time and
+                // instance together. In-flight results remain valid for this entry.
+                self.entries.push(entry);
+                continue;
+            }
             let mut entry = Entry {
+                generation: self.generation,
+                fingerprint,
                 interval: applets::interval(&applet.manifest.interval)
                     .unwrap_or(Duration::from_secs(60)),
                 icon: None,
                 icon_file: None,
-                data: old.map_or(serde_json::Value::Null, |o| o.data.clone()),
+                data: old.map_or(serde_json::Value::Null, |o| o.data),
                 error: None,
                 running: false,
                 traffic: applet.manifest.wifi_traffic.then(traffic::Monitor::default),
@@ -158,7 +172,7 @@ impl Runtime {
             if let Some(traffic) = &mut e.traffic {
                 traffic.poll(
                     &e.applet.name,
-                    self.generation,
+                    e.generation,
                     self.open.as_deref() == Some(&e.applet.name),
                     &self.tx,
                 );
@@ -202,14 +216,15 @@ impl Runtime {
         {
             let result = builtin(provider, action.as_deref());
             let name = e.applet.name.clone();
-            self.apply(&name, self.generation, result);
+            let generation = e.generation;
+            self.apply(&name, generation, result);
             return;
         }
         e.running = true;
         if let Some(instance) = &e.instance {
             let _ = instance.set_property("busy", Value::Bool(true));
         }
-        let generation = self.generation;
+        let generation = e.generation;
         let name = e.applet.name.clone();
         let command = applets::command(&e.applet);
         let env = applets::environment(&e.applet);
@@ -234,10 +249,7 @@ impl Runtime {
     }
     /// Stores a provider result and pushes it to the open view.
     pub fn apply(&mut self, name: &str, generation: u64, result: Result<String, String>) {
-        if generation != self.generation {
-            return;
-        }
-        let Some(index) = self.entries.iter().position(|e| e.applet.name == name) else {
+        let Some(index) = self.entries.iter().position(|e| e.applet.name == name && e.generation == generation) else {
             return;
         };
         let e = &mut self.entries[index];
@@ -301,10 +313,7 @@ impl Runtime {
         interface: &str,
         result: Result<crate::traffic::Sample, String>,
     ) {
-        if generation != self.generation {
-            return;
-        }
-        let Some(e) = self.entries.iter_mut().find(|e| e.applet.name == name) else {
+        let Some(e) = self.entries.iter_mut().find(|e| e.applet.name == name && e.generation == generation) else {
             return;
         };
         let Some(traffic) = &mut e.traffic else {

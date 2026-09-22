@@ -93,28 +93,38 @@ pub fn snapshot(home: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, String> {
     // fingerprint rather than content, so edits reload without rereading.
     if let Ok(applets) = std::fs::read_dir(home.join("applets")) {
         for applet in applets.flatten().take(64) {
-            let Ok(files) = std::fs::read_dir(applet.path()) else {
-                continue;
-            };
-            for file in files.flatten().take(32) {
-                let Ok(meta) = file.metadata() else { continue };
-                if !meta.is_file() {
-                    continue;
-                }
-                let modified = meta
-                    .modified()
-                    .ok()
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map_or(0, |d| d.as_nanos());
-                result.push((
-                    file.path(),
-                    format!("{}:{modified}", meta.len()).into_bytes(),
-                ));
+            if applet.file_type().is_ok_and(|kind| kind.is_dir()) {
+                result.extend(applet_snapshot(&applet.path())?);
             }
         }
     }
     result.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(result)
+}
+/// Fingerprint installed applet sources, including imported views/connectors.
+/// Incomplete or linked trees cannot be used to validate compiled definitions.
+pub fn applet_snapshot(dir: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, String> {
+    let mut pending = vec![(dir.to_owned(), 0)];
+    let mut files = Vec::new();
+    let mut examined = 0;
+    while let Some((path, depth)) = pending.pop() {
+        examined += 1;
+        if examined > 512 || depth > 16 { return Err(format!("{}: applet source tree exceeds limits", dir.display())); }
+        let meta = std::fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+        if reparse(&meta) { return Err(format!("{}: linked applet source refused", path.display())); }
+        if meta.is_dir() {
+            for entry in std::fs::read_dir(&path).map_err(|e| e.to_string())? {
+                if pending.len() + examined >= 512 { return Err(format!("{}: applet source tree exceeds limits", dir.display())); }
+                pending.push((entry.map_err(|e| e.to_string())?.path(), depth + 1));
+            }
+        } else if meta.is_file() {
+            let modified = meta.modified().map_err(|e| e.to_string())?
+                .duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_nanos();
+            files.push((path, format!("{}:{modified}", meta.len()).into_bytes()));
+        }
+    }
+    files.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(files)
 }
 /// Iterative traversal: never recurse through links/junctions, and stop at limits.
 pub fn shortcuts(root: &Path, max_entries: usize, max_depth: usize) -> Vec<PathBuf> {
@@ -175,6 +185,21 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+    #[test]
+    fn applet_fingerprints_include_nested_changes_and_refuse_partial_trees() {
+        let t = Temp::new("applet-sources");
+        std::fs::create_dir_all(t.0.join("connectors")).unwrap();
+        let file = t.0.join("connectors/provider.ps1");
+        std::fs::write(&file, "before").unwrap();
+        let before = applet_snapshot(&t.0).unwrap();
+        assert_eq!(before, applet_snapshot(&t.0).unwrap());
+        std::fs::write(&file, "after edit").unwrap();
+        assert_ne!(before, applet_snapshot(&t.0).unwrap());
+        std::fs::remove_file(file).unwrap();
+        assert!(applet_snapshot(&t.0).unwrap().is_empty());
+        for i in 0..512 { std::fs::write(t.0.join(format!("{i}.slint")), "").unwrap(); }
+        assert!(applet_snapshot(&t.0).is_err());
     }
     #[test]
     fn temporary_opacity_does_not_reload_shell_configuration() {
@@ -245,5 +270,6 @@ mod tests {
         std::os::unix::fs::symlink(&file, t.0.join("link.toml")).unwrap();
         assert!(read_config(&t.0.join("link.toml")).is_err());
         assert!(shortcuts(&t.0, 100, 16).is_empty());
+        assert!(applet_snapshot(&t.0).is_err());
     }
 }
