@@ -433,6 +433,31 @@ pub fn monitors() -> Vec<Rect> {
     }
     out
 }
+/// Repaints the bottom-right corner of every monitor, where Windows draws the
+/// activation watermark. That watermark has no window of its own, so nothing
+/// can cover it: only a repaint of the region clears it. Explorer provided
+/// that repaint as the shell, which is why the watermark stays on screen once
+/// Winarchy stops it. The drawing process could not be identified: it is
+/// neither Explorer nor sihost, both of which were ruled out with a
+/// DrawTextExW hook, so the region is refreshed rather than the draw blocked.
+pub fn repaint_corners() {
+    for monitor in monitors() {
+        let band = RECT {
+            left: monitor.x + monitor.w - super::dpi::scale(monitor, 420),
+            top: monitor.y + monitor.h - super::dpi::scale(monitor, 180),
+            right: monitor.x + monitor.w,
+            bottom: monitor.y + monitor.h,
+        };
+        unsafe {
+            let _ = RedrawWindow(
+                None,
+                Some(&band),
+                None,
+                RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW,
+            );
+        }
+    }
+}
 /// Windows 11 rounds top-level windows; tiled windows look wrong with gaps
 /// between rounded corners. `square` false restores the system default.
 pub fn corners(id: isize, square: bool) {
