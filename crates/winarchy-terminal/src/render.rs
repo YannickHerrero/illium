@@ -117,7 +117,9 @@ impl Graphics {
 pub struct Fonts {
     write: IDWriteFactory,
     format: IDWriteTextFormat,
-    cache: RefCell<HashMap<(String, u8), IDWriteTextLayout>>,
+    // Separate style buckets allow borrowed &str lookup without allocating a
+    // (String, style) key for every visible cell on every frame.
+    cache: RefCell<[HashMap<String, IDWriteTextLayout>; 4]>,
     pub width: f32,
     pub height: f32,
 }
@@ -141,7 +143,7 @@ impl Fonts {
             Ok(Self {
                 write: write.clone(),
                 format,
-                cache: RefCell::new(HashMap::new()),
+                cache: RefCell::new(std::array::from_fn(|_| HashMap::new())),
                 width: metrics.widthIncludingTrailingWhitespace.max(1.),
                 height: metrics.height.ceil().max(1.),
             })
@@ -149,9 +151,9 @@ impl Fonts {
     }
     fn layout(&self, text: &str, style: u8) -> Result<IDWriteTextLayout> {
         unsafe {
-            let key = (text.to_owned(), style);
+            let bucket = usize::from(style & 3);
             let mut cache = self.cache.borrow_mut();
-            if let Some(layout) = cache.get(&key) {
+            if let Some(layout) = cache[bucket].get(text) {
                 return Ok(layout.clone());
             }
             let utf16: Vec<_> = text.encode_utf16().collect();
@@ -168,10 +170,10 @@ impl Fonts {
             if style & 2 != 0 {
                 layout.SetFontStyle(DWRITE_FONT_STYLE_ITALIC, range)?;
             }
-            if cache.len() >= 4096 {
-                cache.clear();
+            if cache.iter().map(HashMap::len).sum::<usize>() >= 4096 {
+                for bucket in cache.iter_mut() { bucket.clear(); }
             }
-            cache.insert(key, layout.clone());
+            cache[bucket].insert(text.to_owned(), layout.clone());
             Ok(layout)
         }
     }
