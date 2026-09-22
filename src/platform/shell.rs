@@ -170,6 +170,7 @@ pub enum MetaEntry {
     Run(crate::command::Command),
 }
 pub(super) mod bar_hints;
+pub(super) mod expose;
 pub(super) mod keybindings;
 pub(super) mod theme_picker;
 mod wallpaper;
@@ -177,6 +178,7 @@ pub struct Shell {
     pub hints: bar_hints::Hints,
     pub picker: theme_picker::Picker,
     pub editor: keybindings::Editor,
+    pub expose: expose::Expose,
     pub backgrounds: Vec<Background>,
     pub bars: Vec<Bar>,
     /// Bars show the wallpaper through; toggled by clicking an empty bar area.
@@ -269,6 +271,7 @@ impl Shell {
             hints: bar_hints::Hints::new()?,
             picker: theme_picker::Picker::new(tx.clone())?,
             editor: keybindings::Editor::new(tx.clone())?,
+            expose: expose::Expose::new(tx.clone())?,
             backgrounds: vec![],
             bars: vec![],
             bar_transparent: false,
@@ -348,6 +351,7 @@ impl Shell {
         self.hints.close();
         self.picker.apply_theme(c);
         self.editor.apply_theme(c);
+        self.expose.apply_theme(c);
         self.home = c.home.clone();
         self.theme = c.global.theme.clone();
         self.popup.set_bg(color(&c.theme.background));
@@ -375,6 +379,7 @@ impl Shell {
         self.pending = true;
         self.picker.apply_theme(c);
         self.editor.apply_theme(c);
+        self.expose.apply_theme(c);
         self.descriptions = c.launcher.show_descriptions;
         self.home = c.home.clone();
         self.theme = c.global.theme.clone();
@@ -575,6 +580,7 @@ impl Shell {
         }
         self.picker.arrange();
         self.editor.arrange();
+        self.expose.arrange();
         true
     }
     pub fn toggle_bar_background(&mut self) {
@@ -686,7 +692,11 @@ impl Shell {
             ))));
     }
     pub fn interactive(&self) -> bool {
-        self.hints.opened || self.visible || self.picker.opened || self.editor.opened
+        self.hints.opened
+            || self.visible
+            || self.picker.opened
+            || self.editor.opened
+            || self.expose.opened
     }
     pub fn dismiss(&mut self) {
         let _ = self.launcher.hide();

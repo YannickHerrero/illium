@@ -3,6 +3,7 @@ pub mod applets;
 pub mod bar_hints;
 pub mod clock;
 pub mod config;
+pub mod expose;
 pub mod files;
 pub mod keybindings;
 pub mod keyboard;

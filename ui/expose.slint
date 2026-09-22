@@ -1,0 +1,159 @@
+// Exposé: every managed window of every workspace as a card over the dimmed
+// desktop. Geometry is computed by the daemon (src/expose.rs); the view only
+// draws the slots it is given and reports keys, clicks and hovers.
+export struct ExposeCard {
+    title: string,
+    app: string,
+    workspace: string,
+    image: image,
+    has-image: bool,
+    icon: image,
+    has-icon: bool,
+    focused: bool,
+    minimized: bool,
+    x: length, y: length,
+    width: length, height: length,
+}
+
+export component ExposeView inherits Window {
+    title: "Winarchy Exposé";
+    no-frame: true;
+    in property <length> surface-width;
+    in property <length> surface-height;
+    width: surface-width; height: surface-height;
+    in property <color> bg;
+    in property <color> surface;
+    in property <color> overlay;
+    in property <color> fg;
+    in property <color> muted;
+    in property <color> accent;
+    in property <[ExposeCard]> cards;
+    in-out property <int> selected: 0;
+    in property <string> query;
+    in property <string> hint;
+    /// Set once the native window has its final size, like the keybindings
+    /// editor: the first frame then repaints the whole surface.
+    in property <bool> ready;
+    /// Height of the label strip under each thumbnail (src/expose.rs LABEL).
+    in property <length> label-height: 40px;
+    callback key(string, bool, bool, bool, bool);
+    callback activate(int);
+    callback close-window(int);
+    callback hover(int);
+    callback dismiss();
+    background: root.ready ? bg.with-alpha(0.7) : transparent;
+    forward-focus: keys;
+    keys := FocusScope {
+        width: root.width; height: root.height;
+        key-pressed(event) => {
+            root.key(event.text, event.modifiers.control, event.modifiers.shift, event.modifiers.alt, event.modifiers.meta);
+            return accept;
+        }
+        key-released(event) => { return accept; }
+        // Declared first so the cards' own touch areas stay above it.
+        TouchArea { clicked => { root.dismiss(); } }
+        Text {
+            visible: root.ready;
+            x: 0; y: 20px; width: root.width;
+            text: root.query == "" ? "Type to filter · Enter focus · Esc close" : root.query;
+            color: root.query == "" ? root.muted : root.fg;
+            font-size: root.query == "" ? 13px : 18px;
+            horizontal-alignment: center;
+        }
+        Text {
+            visible: root.ready && root.cards.length == 0;
+            width: root.width; height: root.height;
+            text: root.query == "" ? "No windows" : "No matching window";
+            color: root.muted; font-size: 16px;
+            horizontal-alignment: center; vertical-alignment: center;
+        }
+        for card[index] in root.cards: box := Rectangle {
+            visible: root.ready;
+            x: card.x; y: card.y; width: card.width; height: card.height;
+            property <bool> current: root.selected == index;
+            background: box.current ? root.surface : root.bg;
+            border-width: box.current ? 2px : 1px;
+            border-color: box.current ? root.accent : card.focused ? root.accent.with-alpha(0.6) : root.overlay;
+            border-radius: 6px;
+            clip: true;
+            Rectangle {
+                x: 0; y: 0; width: parent.width; height: parent.height - root.label-height;
+                if card.has-image: Image {
+                    width: parent.width - 8px; height: parent.height - 8px;
+                    x: 4px; y: 4px;
+                    source: card.image;
+                    image-fit: contain;
+                    image-rendering: smooth;
+                    opacity: card.minimized ? 0.5 : 1.0;
+                }
+                if !card.has-image && card.has-icon: Image {
+                    width: min(96px, parent.width / 3); height: self.width;
+                    x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                    source: card.icon;
+                    image-fit: contain;
+                    image-rendering: smooth;
+                    opacity: card.minimized ? 0.5 : 0.9;
+                }
+                if !card.has-image && !card.has-icon: Text {
+                    width: parent.width; height: parent.height;
+                    text: card.app; color: root.muted; font-size: 16px;
+                    horizontal-alignment: center; vertical-alignment: center;
+                    overflow: elide;
+                }
+                if card.minimized: Text {
+                    x: 0; y: parent.height - self.height - 6px; width: parent.width;
+                    text: "minimized"; color: root.muted; font-size: 11px;
+                    horizontal-alignment: center;
+                }
+            }
+            HorizontalLayout {
+                x: 0; y: parent.height - root.label-height;
+                width: parent.width; height: root.label-height;
+                padding-left: 10px; padding-right: 10px; spacing: 8px;
+                if card.has-icon: Image {
+                    width: 18px; height: 18px;
+                    y: (parent.height - self.height) / 2;
+                    source: card.icon;
+                    image-fit: contain;
+                    image-rendering: smooth;
+                }
+                Text {
+                    text: card.title == "" ? card.app : card.title;
+                    color: box.current ? root.fg : root.fg.with-alpha(0.85);
+                    font-size: 13px;
+                    vertical-alignment: center; overflow: elide;
+                    horizontal-stretch: 1;
+                }
+                Rectangle {
+                    width: badge.preferred-width + 12px; height: 20px;
+                    y: (parent.height - self.height) / 2;
+                    background: card.focused ? root.accent : root.overlay;
+                    border-radius: 4px;
+                    badge := Text {
+                        text: card.workspace;
+                        color: card.focused ? root.bg : root.fg;
+                        font-size: 11px; font-weight: 700;
+                        horizontal-alignment: center; vertical-alignment: center;
+                    }
+                }
+            }
+            TouchArea {
+                clicked => { root.activate(index); }
+                moved => { if (self.has-hover) { root.hover(index); } }
+                pointer-event(event) => {
+                    if (event.kind == PointerEventKind.down && event.button == PointerEventButton.middle) {
+                        root.close-window(index);
+                    }
+                }
+            }
+        }
+        Text {
+            visible: root.ready && root.cards.length > 0;
+            x: 0; y: root.height - 36px; width: root.width;
+            text: root.hint;
+            color: root.muted; font-size: 12px;
+            horizontal-alignment: center;
+        }
+    }
+    public function focus-view() { keys.focus(); }
+}

@@ -54,6 +54,8 @@ pub enum Command {
     WallpaperNext,
     /// Open the keybindings viewer and editor.
     Keybindings,
+    /// Toggle the exposé: every managed window of every workspace as a card.
+    Expose,
     /// Toggle keyboard hints for status bar applets.
     BarHints,
     /// Push-to-talk dictation through `winarchy-dictate.exe`: bound to a held
@@ -127,6 +129,7 @@ impl FromStr for Command {
             ["launcher", "toggle"] => Self::Launcher,
             ["meta", "toggle"] => Self::Meta,
             ["keybindings", "toggle"] => Self::Keybindings,
+            ["expose", "toggle"] => Self::Expose,
             ["bar", "hints"] => Self::BarHints,
             ["dictate"] => Self::Dictate,
             ["demo"] => Self::Demo,
@@ -182,6 +185,8 @@ mod tests {
         assert!("opacity increase extra".parse::<Command>().is_err());
         assert!("opacity set nan".parse::<Command>().is_err());
         assert_eq!("keybindings toggle".parse(), Ok(Command::Keybindings));
+        assert_eq!("expose toggle".parse(), Ok(Command::Expose));
+        assert!("expose".parse::<Command>().is_err());
         assert_eq!("bar hints".parse(), Ok(Command::BarHints));
         assert_eq!("dictate".parse(), Ok(Command::Dictate));
         assert_eq!("demo".parse(), Ok(Command::Demo));

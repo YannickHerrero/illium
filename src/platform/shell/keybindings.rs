@@ -27,7 +27,7 @@ pub enum Input {
 }
 /// Slint reports keys as text: modifier and special keys as control or
 /// private-use characters, everything else as what the key types.
-fn key_from_text(text: &str) -> u32 {
+pub(super) fn key_from_text(text: &str) -> u32 {
     use slint::platform::Key as K;
     let Some(c) = text.chars().next() else {
         return 0;

@@ -109,6 +109,7 @@ pub fn describe(command: &str) -> String {
         Command::WallpaperPicker => "Wallpaper picker".into(),
         Command::WallpaperNext => "Next wallpaper".into(),
         Command::Keybindings => "Keybindings".into(),
+        Command::Expose => "Exposé: all windows".into(),
         Command::BarHints => "Bar applet hints".into(),
         Command::Dictate => "Dictate while held".into(),
         Command::Wallpaper(None) => "Solid background".into(),

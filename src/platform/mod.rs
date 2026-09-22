@@ -2,6 +2,7 @@ mod applet;
 mod apps;
 mod audio;
 mod browser;
+mod capture;
 mod demo;
 mod dictate;
 mod dpi;
@@ -78,6 +79,8 @@ pub enum Event {
     Capture(u32, u8, bool),
     /// The `dictate` key went down (`true`) or up (`false`).
     Dictate(bool),
+    /// Exposé input and worker results, tagged with its opening generation.
+    Expose(u64, shell::expose::Input),
 }
 struct Manager {
     config: Config,
@@ -488,6 +491,9 @@ impl Manager {
             let restore = self.bar_restore.take();
             self.restore_focus(restore);
         }
+        if self.shell.expose.opened && !matches!(c, Command::Expose | Command::Status) {
+            self.finish_expose(crate::expose::Outcome::Close);
+        }
         if self.prune() {
             self.layout();
         }
@@ -513,6 +519,7 @@ impl Manager {
                 "wallpaper_error": self.shell.wallpaper_error,
                 "gap": self.config.wm.gap, "launcher": self.shell.visible,
                 "bar_hints": self.shell.hints.opened,
+                "expose": self.shell.expose.opened,
                 "bar_applet": self.applets.open.as_ref().or(self.shell.popup_open.as_ref()),
                 "bar_background_opacity": self.shell.bars.first().map(|bar| bar.get_background_opacity()),
                 "theme_picker": self.shell.picker.opened && self.shell.picker.wallpaper_theme.is_none(),
@@ -716,6 +723,31 @@ impl Manager {
                     self.shell.editor.open(&self.config, monitor, restore);
                 }
             }
+            Command::Expose => {
+                if self.shell.expose.opened {
+                    self.finish_expose(crate::expose::Outcome::Close);
+                } else {
+                    let restore = self.restore_target(foreground);
+                    self.shell.dismiss();
+                    self.shell.close_popup();
+                    self.applets.close();
+                    self.finish_picker(crate::theme_picker::Outcome::Cancel);
+                    self.finish_editor(shell::keybindings::Outcome::Close);
+                    let (entries, exes) = self.expose_entries();
+                    let close_chords = self
+                        .config
+                        .keys
+                        .keybindings
+                        .iter()
+                        .filter(|(_, command)| command.parse::<Command>() == Ok(Command::Close))
+                        .filter_map(|(chord, _)| crate::keyboard::chord(chord).ok())
+                        .collect();
+                    let monitor = self.full_area();
+                    self.shell
+                        .expose
+                        .open(&self.config, monitor, restore, entries, exes, close_chords);
+                }
+            }
             Command::App(name) => apps::open(name),
             Command::Dictate => dictate::toggle(),
             Command::Reload => self.reload()?,
@@ -808,6 +840,67 @@ impl Manager {
         }
         self.restore_focus(restore);
     }
+    /// One card per managed window, grouped by workspace in tiling order.
+    fn expose_entries(
+        &self,
+    ) -> (
+        Vec<crate::expose::Entry>,
+        std::collections::HashMap<isize, String>,
+    ) {
+        let mut clients: Vec<&Client> = self.model.clients.iter().collect();
+        clients.sort_by_key(|c| c.workspace);
+        let mut exes = std::collections::HashMap::new();
+        let entries = clients
+            .into_iter()
+            .map(|c| {
+                let exe = native::process(c.id).map(|(_, exe)| exe).unwrap_or_default();
+                let app = std::path::Path::new(&exe)
+                    .file_stem()
+                    .map(|stem| stem.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                exes.insert(c.id, exe);
+                crate::expose::Entry {
+                    id: c.id,
+                    title: native::title(c.id),
+                    app,
+                    workspace: c.workspace,
+                    minimized: native::minimized(c.id),
+                    focused: Some(c.id) == self.model.focused,
+                }
+            })
+            .collect();
+        (entries, exes)
+    }
+    fn finish_expose(&mut self, outcome: crate::expose::Outcome) {
+        use crate::expose::Outcome;
+        match outcome {
+            Outcome::None => {}
+            Outcome::Close => {
+                if self.shell.expose.opened {
+                    let restore = self.shell.expose.close();
+                    self.restore_focus(restore);
+                }
+            }
+            Outcome::Activate(id) => {
+                let restore = self.shell.expose.close();
+                match self.model.clients.iter().find(|c| c.id == id) {
+                    Some(c) => {
+                        if c.workspace != self.model.active {
+                            self.model.switch(c.workspace);
+                            self.layout();
+                        }
+                        self.model.focused = Some(id);
+                        native::focus(id, true);
+                    }
+                    None => self.restore_focus(restore),
+                }
+            }
+            Outcome::CloseWindow(id) => {
+                native::close(id);
+                self.shell.expose.remove(id);
+            }
+        }
+    }
     fn finish_editor(&mut self, outcome: shell::keybindings::Outcome) {
         use shell::keybindings::Outcome;
         match outcome {
@@ -881,6 +974,7 @@ impl Manager {
             }
             Event::Window(event, id) => match event {
                 EVENT_OBJECT_DESTROY => {
+                    self.shell.expose.remove(id);
                     if self.model.clients.iter().any(|c| c.id == id) {
                         // A delayed destroy event must not remove a new window
                         // that has reused the same numeric HWND.
@@ -954,6 +1048,10 @@ impl Manager {
                 let outcome = self.shell.editor.input(epoch, input);
                 self.finish_editor(outcome);
             }
+            Event::Expose(epoch, input) => {
+                let outcome = self.shell.expose.input(epoch, input);
+                self.finish_expose(outcome);
+            }
             Event::Capture(vk, modifiers, down) => {
                 let outcome = self.shell.editor.capture(vk, modifiers, down);
                 self.finish_editor(outcome);
@@ -1012,6 +1110,7 @@ impl Manager {
                     self.finish_picker(crate::theme_picker::Outcome::Cancel);
                 }
                 self.finish_editor(shell::keybindings::Outcome::Close);
+                self.finish_expose(crate::expose::Outcome::Close);
                 if kind == "drawer" {
                     self.shell.drawer_pinned = !self.shell.drawer_pinned;
                     self.shell.refresh(&self.model, &self.config, &self.applets);
@@ -1147,6 +1246,7 @@ impl Manager {
                 let monitor = self.full_area();
                 self.shell.picker.display_changed(monitor);
                 self.shell.editor.display_changed(monitor);
+                self.shell.expose.display_changed(monitor);
             }
             Event::Wallpapers => {
                 self.shell.refresh_wallpaper();
