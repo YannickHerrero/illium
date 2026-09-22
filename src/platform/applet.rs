@@ -224,7 +224,15 @@ impl Runtime {
                 if e.applet.manifest.provider.as_deref() == Some("builtin:volume") {
                     // Periodic reads never queue behind user intent. Consecutive
                     // absolute slider values replace each other, unlike mute toggles.
-                    if matches!(action.as_str(), "levels" | "refresh" | "") { return; }
+                    if action == "levels" { return; }
+                    if matches!(action.as_str(), "refresh" | "") {
+                        if e.pending_actions.len() < 8 && !e.pending_actions.iter().any(|a| a == "refresh") {
+                            e.pending_actions.push_back("refresh".into());
+                        }
+                        return;
+                    }
+                    // Explicit user intent outranks the single deferred list read.
+                    e.pending_actions.retain(|a| a != "refresh");
                     for prefix in ["set ", "input-set "] {
                         if action.starts_with(prefix)
                             && e.pending_actions.back().is_some_and(|last| last.starts_with(prefix)) {
@@ -261,8 +269,9 @@ impl Runtime {
         let dir = e.applet.dir.clone();
         let tx = self.tx.clone();
         let audio = e.applet.manifest.provider.as_deref() == Some("builtin:volume");
+        let full_audio = !e.data["outputs"].is_array();
         std::thread::spawn(move || {
-            let result = if audio { super::audio::query(action.as_deref()) }
+            let result = if audio { super::audio::query(action.as_deref(), full_audio) }
                 else { run(&command, &env, &dir, action.as_deref()) };
             let mut event = Event::AppletData(name, generation, result);
             loop {
@@ -629,7 +638,7 @@ fn builtin(provider: &str, action: Option<&str>) -> Result<String, String> {
     match provider {
         "builtin:clock" => Ok(clock().to_string()),
         "builtin:system" => Ok(system().to_string()),
-        "builtin:volume" => super::audio::query(action),
+        "builtin:volume" => super::audio::query(action, true),
         other => Err(format!("unknown provider {other}")),
     }
 }

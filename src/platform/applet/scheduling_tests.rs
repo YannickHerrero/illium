@@ -26,9 +26,11 @@ fn runtime() -> Runtime {
     runtime
 }
 #[test]
-fn volume_reads_never_queue_and_absolute_slider_intent_coalesces() {
+fn volume_polls_coalesce_and_user_slider_intent_takes_priority() {
     let mut runtime = runtime();
     runtime.entries[0].applet.manifest.provider = Some("builtin:volume".into());
+    for _ in 0..20 { runtime.action("wifi", Some("refresh".into())); }
+    assert_eq!(runtime.entries[0].pending_actions.len(), 1);
     for action in ["levels", "refresh", "set 10", "set 20", "toggle-mute", "set 30"] {
         runtime.action("wifi", Some(action.into()));
     }

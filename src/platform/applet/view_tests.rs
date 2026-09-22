@@ -117,6 +117,41 @@ fn escape_closes_applet_even_when_its_cancel_callback_would_handle_it() {
 }
 
 #[test]
+fn volume_keyboard_intent_is_optimistic_until_authoritative_completion() {
+    let windows = Rc::new(RefCell::new(Vec::new()));
+    slint::platform::set_platform(Box::new(Headless(windows.clone()))).unwrap();
+    let home = std::env::temp_dir().join(format!("winarchy-volume-view-{}", std::process::id()));
+    Config::install(&home).unwrap();
+    let def = compile(&applets::load(&home, "volume").unwrap()).unwrap();
+    let instance = def.create().unwrap();
+    let actions = Rc::new(RefCell::new(Vec::new()));
+    let recorded = actions.clone();
+    instance.set_callback("action", move |args| {
+        recorded.borrow_mut().push(action_argument(args).unwrap());
+        Value::Void
+    }).unwrap();
+    let mut data = serde_json::json!({"volume":40,"muted":false,"output_name":"Fixture",
+        "outputs":[],"input_volume":0,"input_muted":false,"input_level":0,"inputs":[],"sessions":[]});
+    set_data(&instance, &def, &data).unwrap();
+    instance.show().unwrap();
+    let window = windows.borrow().last().unwrap().clone();
+    window.set_size(slint::PhysicalSize::new(380, 640));
+    press(&window, slint::platform::Key::RightArrow.into());
+    press(&window, slint::platform::Key::RightArrow.into());
+    assert_eq!(*actions.borrow(), vec!["set 45", "set 50"]);
+    // A previous refresh may complete before the queued action. It must not
+    // undo the user's displayed intent or affect subsequent relative keys.
+    data["volume"] = serde_json::json!(30);
+    set_data(&instance, &def, &data).unwrap();
+    press(&window, slint::platform::Key::RightArrow.into());
+    assert_eq!(actions.borrow().last().unwrap(), "set 55");
+    instance.invoke("completed", &[]).unwrap();
+    press(&window, slint::platform::Key::RightArrow.into());
+    assert_eq!(actions.borrow().last().unwrap(), "set 35");
+    instance.hide().unwrap();
+    std::fs::remove_dir_all(home).unwrap();
+}
+#[test]
 fn timezone_columns_align_despite_different_label_widths() {
     let windows = Rc::new(RefCell::new(Vec::new()));
     slint::platform::set_platform(Box::new(Headless(windows.clone()))).unwrap();

@@ -181,14 +181,14 @@ pub fn volume_state() -> Option<(u32, bool)> {
     *BAR_LEVEL.lock().unwrap_or_else(|e| e.into_inner())
 }
 /// Worker-only provider entry, with a balanced COM apartment per invocation.
-pub fn query(action: Option<&str>) -> Result<String, String> {
+pub fn query(action: Option<&str>, full: bool) -> Result<String, String> {
     with_com(|| {
         if let Some(action) = action.filter(|a| !matches!(*a, "refresh" | "levels" | "")) {
             apply(action)?;
         }
         let cheap = action.is_some_and(|a| a == "levels" || a.starts_with("set ")
             || a.starts_with("input-set ") || matches!(a, "up" | "down" | "toggle-mute" | "input-toggle-mute"));
-        Ok(if cheap { levels()? } else { snapshot()? }.to_string())
+        Ok(if cheap && !full { levels()? } else { snapshot()? }.to_string())
     })
 }
 /// Fast path: no device lists, session enumeration or process-name lookups.

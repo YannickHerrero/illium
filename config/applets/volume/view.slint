@@ -99,14 +99,14 @@ export component View inherits Window {
     // paused while a slider is held so the rows under the pointer stay put.
     Timer {
         interval: 200ms;
-        running: root.open && !root.dragging && !root.busy;
-        triggered => { root.action("levels"); }
+        running: root.open;
+        triggered => { if !root.dragging && !root.busy { root.action("levels"); } }
     }
     // Sessions/devices still follow external changes while open, at low rate.
     Timer {
         interval: 2s;
-        running: root.open && !root.dragging && !root.busy;
-        triggered => { root.action("refresh"); }
+        running: root.open;
+        triggered => { if !root.dragging { root.action("refresh"); } }
     }
     keys := FocusScope {
         key-pressed(event) => {
