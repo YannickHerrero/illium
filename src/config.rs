@@ -453,7 +453,11 @@ impl Config {
         crate::clock::validate(&c.bar.clock_date_format)
             .map_err(|e| format!("clock_date_format: {e}"))?;
         c.theme.validate()?;
-        winarchy_theme::dynamic::apply(home, &c.global.theme, &mut c.theme)?;
+        // Runtime state is disposable, not user configuration. A damaged state
+        // must not prevent startup: the wallpaper worker will regenerate it.
+        if let Err(error) = winarchy_theme::dynamic::apply(home, &c.global.theme, &mut c.theme) {
+            tracing::warn!(%error, "using installed dynamic fallback until wallpaper is prepared");
+        }
         for r in &c.rules.rules {
             if r.workspace.is_some_and(|n| !(1..=9).contains(&n)) {
                 return Err("rule workspace must be 1..9".into());
@@ -570,6 +574,15 @@ mod tests {
             assert!(Config::load(&p).is_err(), "{right} / {drawer}");
         }
         std::fs::remove_dir_all(p).unwrap();
+    }
+    #[test]
+    fn dynamic_runtime_corruption_does_not_invalidate_installed_configuration() {
+        let home = std::env::temp_dir().join(format!("winarchy-dynamic-config-{}", std::process::id()));
+        Config::install(&home).unwrap();
+        std::fs::write(home.join("winarchy.toml"), "theme = 'dynamic-light'").unwrap();
+        std::fs::write(home.join(winarchy_theme::dynamic::FILE), "broken").unwrap();
+        assert_eq!(Config::load(&home).unwrap().theme, winarchy_theme::Theme::load(&home, "dynamic-light").unwrap());
+        std::fs::remove_dir_all(home).unwrap();
     }
     #[test]
     fn bundled_images_install_without_overwriting_user_assets() {
