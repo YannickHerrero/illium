@@ -69,23 +69,51 @@ export component View inherits Window {
     in property <bool> open: false;
     in property <string> provider-error;
     callback action(string);
+    callback completed();
+    private property <int> pending-output: -1;
+    private property <int> pending-input: -1;
+    private property <int> pending-mute: -1;
+    private property <int> output-volume: pending-output < 0 ? data.volume : pending-output;
+    private property <int> input-volume: pending-input < 0 ? data.input-volume : pending-input;
+    private property <bool> output-muted: pending-mute < 0 ? data.muted : pending-mute == 1;
+    completed => { pending-output = -1; pending-input = -1; pending-mute = -1; }
+    function set-output(level: int) {
+        pending-output = clamp(level, 0, 100);
+        if pending-output > 0 { pending-mute = 0; }
+        root.action("set \{pending-output}");
+    }
+    function set-input(level: int) {
+        pending-input = clamp(level, 0, 100);
+        root.action("input-set \{pending-input}");
+    }
+    function toggle-mute() {
+        pending-mute = output-muted ? 0 : 1;
+        root.action("toggle-mute");
+    }
+    changed open => { if root.open { root.action("refresh"); } }
     property <bool> dragging: false;
-    property <color> level-fill: root.data.muted ? root.muted : root.fg;
+    property <color> level-fill: root.output-muted ? root.muted : root.fg;
     background: bg;
     forward-focus: keys;
     // Live input meter and changes made elsewhere (media keys, other apps);
     // paused while a slider is held so the rows under the pointer stay put.
     Timer {
         interval: 200ms;
-        running: root.open && !root.dragging;
+        running: root.open && !root.dragging && !root.busy;
+        triggered => { root.action("levels"); }
+    }
+    // Sessions/devices still follow external changes while open, at low rate.
+    Timer {
+        interval: 2s;
+        running: root.open && !root.dragging && !root.busy;
         triggered => { root.action("refresh"); }
     }
     keys := FocusScope {
         key-pressed(event) => {
-            if (event.text == Key.LeftArrow || event.text == "h" || event.text == "j" || event.text == Key.DownArrow) { root.action("down"); return accept; }
-            if (event.text == Key.RightArrow || event.text == "l" || event.text == "k" || event.text == Key.UpArrow) { root.action("up"); return accept; }
-            if (event.text == "m") { root.action("toggle-mute"); return accept; }
-            if (event.text == "0") { root.action("set 0"); return accept; }
+            if (event.text == Key.LeftArrow || event.text == "h" || event.text == "j" || event.text == Key.DownArrow) { root.set-output(root.output-volume - 5); return accept; }
+            if (event.text == Key.RightArrow || event.text == "l" || event.text == "k" || event.text == Key.UpArrow) { root.set-output(root.output-volume + 5); return accept; }
+            if (event.text == "m") { root.toggle-mute(); return accept; }
+            if (event.text == "0") { root.set-output(0); return accept; }
             return reject;
         }
         Rectangle {
@@ -94,7 +122,7 @@ export component View inherits Window {
                 padding: 18px; spacing: 14px;
                 HorizontalLayout {
                     height: 44px; spacing: 14px;
-                    Image { source: root.data.muted ? @image-url("speaker-muted.svg") : @image-url("speaker.svg"); colorize: root.fg; width: 34px; height: 34px; vertical-alignment: center; }
+                    Image { source: root.output-muted ? @image-url("speaker-muted.svg") : @image-url("speaker.svg"); colorize: root.fg; width: 34px; height: 34px; vertical-alignment: center; }
                     VerticalLayout {
                         spacing: 3px; horizontal-stretch: 1;
                         Text { text: "Audio"; color: root.fg; font-size: 21px; font-weight: 600; }
@@ -110,7 +138,7 @@ export component View inherits Window {
                             background: root.data.muted ? root.muted : root.fg;
                             animate x { duration: 120ms; }
                         }
-                        TouchArea { clicked => { root.action("toggle-mute"); } }
+                        TouchArea { clicked => { root.toggle-mute(); } }
                     }
                 }
                 Rectangle { height: 1px; background: root.overlay; }
@@ -119,11 +147,11 @@ export component View inherits Window {
                     viewport-height: max(self.height, body.preferred-height);
                     body := VerticalLayout {
                         alignment: start; spacing: 12px;
-                        SectionHeader { label: "OUTPUT"; value: "\{root.data.volume}%"; fg: root.data.muted ? root.muted : root.fg; muted: root.muted; }
+                        SectionHeader { label: "OUTPUT"; value: "\{root.output-volume}%"; fg: root.output-muted ? root.muted : root.fg; muted: root.muted; }
                         Slider {
-                            value: root.data.volume; fill: root.level-fill; track: root.overlay; knob: root.fg;
+                            value: root.output-volume; fill: root.level-fill; track: root.overlay; knob: root.fg;
                             grabbed(held) => { root.dragging = held; }
-                            changed(level) => { root.action("set \{level}"); }
+                            changed(level) => { root.set-output(level); }
                         }
                         for d in root.data.outputs: DeviceRow {
                             device: d; icon: @image-url("output.svg"); fg: root.fg; muted: root.muted; surface: root.surface;
@@ -131,11 +159,11 @@ export component View inherits Window {
                         }
                         if root.data.outputs.length == 0: Text { text: "No output device"; color: root.muted; font-size: 12px; height: 24px; vertical-alignment: center; }
                         Rectangle { height: 1px; background: root.overlay; }
-                        SectionHeader { label: "INPUT"; value: root.data.inputs.length == 0 ? "" : "\{root.data.input-volume}%"; fg: root.data.input-muted ? root.muted : root.fg; muted: root.muted; }
+                        SectionHeader { label: "INPUT"; value: root.data.inputs.length == 0 ? "" : "\{root.input-volume}%"; fg: root.data.input-muted ? root.muted : root.fg; muted: root.muted; }
                         Slider {
-                            value: root.data.input-volume; fill: root.data.input-muted ? root.muted : root.fg; track: root.overlay; knob: root.fg;
+                            value: root.input-volume; fill: root.data.input-muted ? root.muted : root.fg; track: root.overlay; knob: root.fg;
                             grabbed(held) => { root.dragging = held; }
-                            changed(level) => { root.action("input-set \{level}"); }
+                            changed(level) => { root.set-input(level); }
                         }
                         Rectangle {
                             height: 6px; background: root.overlay; border-radius: 3px;

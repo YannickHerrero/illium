@@ -154,9 +154,54 @@ fn level(endpoint: &IAudioEndpointVolume) -> Option<(u32, bool)> {
         ))
     }
 }
-/// Master volume in percent and mute state of the default output device.
+fn with_com<T>(f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    unsafe { CoInitializeEx(None, COINIT_MULTITHREADED).ok().map_err(|e| e.to_string())?; }
+    struct Apartment;
+    impl Drop for Apartment { fn drop(&mut self) { unsafe { CoUninitialize(); } } }
+    let _apartment = Apartment;
+    f()
+}
+static BAR_LEVEL: std::sync::Mutex<Option<(u32, bool)>> = std::sync::Mutex::new(None);
+static BAR_READING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+thread_local! {
+    static BAR_READ_AT: std::cell::Cell<Option<std::time::Instant>> = const { std::cell::Cell::new(None) };
+}
+/// Nonblocking stale-while-revalidate bar reading. COM never runs on the UI.
 pub fn volume_state() -> Option<(u32, bool)> {
-    level(&endpoint(eRender)?)
+    use std::sync::atomic::Ordering;
+    let due = BAR_READ_AT.with(|last| last.get().is_none_or(|at| at.elapsed() >= std::time::Duration::from_millis(500)));
+    if due && !BAR_READING.swap(true, Ordering::AcqRel) {
+        BAR_READ_AT.with(|last| last.set(Some(std::time::Instant::now())));
+        std::thread::spawn(|| {
+            let value = with_com(|| Ok(endpoint(eRender).and_then(|e| level(&e)))).ok().flatten();
+            *BAR_LEVEL.lock().unwrap_or_else(|e| e.into_inner()) = value;
+            BAR_READING.store(false, Ordering::Release);
+        });
+    }
+    *BAR_LEVEL.lock().unwrap_or_else(|e| e.into_inner())
+}
+/// Worker-only provider entry, with a balanced COM apartment per invocation.
+pub fn query(action: Option<&str>) -> Result<String, String> {
+    with_com(|| {
+        if let Some(action) = action.filter(|a| !matches!(*a, "refresh" | "levels" | "")) {
+            apply(action)?;
+        }
+        let cheap = action.is_some_and(|a| a == "levels" || a.starts_with("set ")
+            || a.starts_with("input-set ") || matches!(a, "up" | "down" | "toggle-mute" | "input-toggle-mute"));
+        Ok(if cheap { levels()? } else { snapshot()? }.to_string())
+    })
+}
+/// Fast path: no device lists, session enumeration or process-name lookups.
+pub fn levels() -> Result<serde_json::Value, String> {
+    let output = endpoint(eRender).ok_or("no audio output device")?;
+    let state = level(&output).ok_or("no audio output device")?;
+    *BAR_LEVEL.lock().unwrap_or_else(|e| e.into_inner()) = Some(state);
+    let (volume, muted) = state;
+    let (input_volume, input_muted) = endpoint(eCapture).and_then(|e| level(&e)).unwrap_or((0, true));
+    Ok(serde_json::json!({
+        "volume": volume, "muted": muted, "input_volume": input_volume,
+        "input_muted": input_muted, "input_level": input_level().unwrap_or(0),
+    }))
 }
 /// Frees and converts a COM-allocated wide string.
 unsafe fn take_string(p: PWSTR) -> String {

@@ -177,6 +177,17 @@ impl Runtime {
         let e = &mut self.entries[index];
         if e.running {
             if let Some(action) = action {
+                if e.applet.manifest.provider.as_deref() == Some("builtin:volume") {
+                    // Periodic reads never queue behind user intent. Consecutive
+                    // absolute slider values replace each other, unlike mute toggles.
+                    if matches!(action.as_str(), "levels" | "refresh" | "") { return; }
+                    for prefix in ["set ", "input-set "] {
+                        if action.starts_with(prefix)
+                            && e.pending_actions.back().is_some_and(|last| last.starts_with(prefix)) {
+                            e.pending_actions.pop_back();
+                        }
+                    }
+                }
                 if e.pending_actions.len() < 8 {
                     e.pending_actions.push_back(action);
                 } else {
@@ -186,7 +197,9 @@ impl Runtime {
             return;
         }
         e.due = Instant::now() + e.interval;
-        if let Some(provider) = &e.applet.manifest.provider {
+        if let Some(provider) = &e.applet.manifest.provider
+            && provider != "builtin:volume"
+        {
             let result = builtin(provider, action.as_deref());
             let name = e.applet.name.clone();
             self.apply(&name, self.generation, result);
@@ -202,9 +215,21 @@ impl Runtime {
         let env = applets::environment(&e.applet);
         let dir = e.applet.dir.clone();
         let tx = self.tx.clone();
+        let audio = e.applet.manifest.provider.as_deref() == Some("builtin:volume");
         std::thread::spawn(move || {
-            let result = run(&command, &env, &dir, action.as_deref());
-            let _ = tx.send(Event::AppletData(name, generation, result));
+            let result = if audio { super::audio::query(action.as_deref()) }
+                else { run(&command, &env, &dir, action.as_deref()) };
+            let mut event = Event::AppletData(name, generation, result);
+            loop {
+                match tx.send(event) {
+                    Ok(()) => break,
+                    Err(std::sync::mpsc::TrySendError::Full(e)) => {
+                        event = e;
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(std::sync::mpsc::TrySendError::Disconnected(_)) => break,
+                }
+            }
         });
     }
     /// Stores a provider result and pushes it to the open view.
@@ -219,14 +244,19 @@ impl Runtime {
         e.running = false;
         if let Some(instance) = &e.instance {
             let _ = instance.set_property("busy", Value::Bool(false));
-            let _ = instance.invoke("completed", &[]);
         }
         match result.and_then(|text| {
             serde_json::from_str::<serde_json::Value>(&text)
                 .map_err(|err| format!("invalid JSON: {err}"))
         }) {
             Ok(data) => {
-                e.data = data;
+                if e.applet.manifest.provider.as_deref() == Some("builtin:volume")
+                    && let (Some(current), Some(fields)) = (e.data.as_object_mut(), data.as_object())
+                {
+                    current.extend(fields.clone());
+                } else {
+                    e.data = data;
+                }
                 refresh_icon(e);
                 if let Some(traffic) = &mut e.traffic {
                     let interface = if e.data["connected"].as_bool() == Some(true) {
@@ -258,6 +288,10 @@ impl Runtime {
         }
         if let Some(action) = e.pending_actions.pop_front() {
             self.refresh(index, Some(action));
+        } else if let Some(instance) = &e.instance {
+            // Reconcile optimistic controls only after all user intent has
+            // completed and the authoritative data/error has been published.
+            let _ = instance.invoke("completed", &[]);
         }
     }
     pub fn apply_traffic(
@@ -573,12 +607,7 @@ fn builtin(provider: &str, action: Option<&str>) -> Result<String, String> {
     match provider {
         "builtin:clock" => Ok(clock().to_string()),
         "builtin:system" => Ok(system().to_string()),
-        "builtin:volume" => {
-            if let Some(action) = action.filter(|a| *a != "refresh") {
-                super::audio::apply(action)?;
-            }
-            Ok(super::audio::snapshot()?.to_string())
-        }
+        "builtin:volume" => super::audio::query(action),
         other => Err(format!("unknown provider {other}")),
     }
 }
