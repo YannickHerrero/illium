@@ -100,6 +100,13 @@ pub fn wallpaper_dir(home: &Path, theme: &str) -> Result<PathBuf, String> {
     if !crate::valid_name(theme) || !plain_name(theme) {
         return Err("invalid theme name".into());
     }
+    if crate::dynamic::is_dynamic(theme) {
+        let parent = home.join("wallpapers");
+        if parent.try_exists().map_err(|e| e.to_string())? {
+            metadata(&parent, true)?;
+        }
+        return Ok(parent.join("dynamic"));
+    }
     let themes = home.join("themes");
     metadata(&themes, true)?;
     let assets = themes.join(theme);

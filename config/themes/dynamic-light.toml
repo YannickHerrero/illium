@@ -1,0 +1,22 @@
+# Built-in fallback; generated colors live in dynamic-theme.state, not here.
+mode = "light"
+name = "Dynamic Light"
+background = "#eff1f5"
+surface = "#ccd0da"
+overlay = "#bcc0cc"
+text = "#4c4f69"
+subtext = "#6c6f85"
+accent = "#8839ef"
+green = "#40a02b"
+yellow = "#df8e1d"
+red = "#d20f39"
+
+# Terminal palette (Catppuccin): black, red, green, yellow, blue, magenta, cyan, white.
+ansi = [
+  "#bcc0cc", "#d20f39", "#40a02b", "#df8e1d",
+  "#1e66f5", "#ea76cb", "#179299", "#5c5f77",
+]
+brights = [
+  "#acb0be", "#d20f39", "#40a02b", "#df8e1d",
+  "#1e66f5", "#ea76cb", "#179299", "#6c6f85",
+]

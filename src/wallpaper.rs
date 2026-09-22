@@ -39,6 +39,7 @@ impl Selections {
         {
             return Err("invalid wallpaper selection".into());
         }
+        let theme = winarchy_theme::dynamic::selection_key(theme);
         let old = self.themes.insert(theme.into(), name);
         let result = (|| {
             let json = serde_json::to_string(self).map_err(|e| e.to_string())?;
@@ -62,7 +63,7 @@ impl Selections {
     /// Try the remembered image first, then the others. Missing/corrupt images
     /// must not make an otherwise valid theme unusable.
     pub fn candidates(&self, theme: &str, names: &[String]) -> Vec<String> {
-        match self.themes.get(theme) {
+        match self.themes.get(winarchy_theme::dynamic::selection_key(theme)) {
             Some(None) => vec![],
             Some(Some(selected)) => names
                 .iter()
@@ -134,6 +135,20 @@ mod tests {
             .save_choice(&home, "catppuccin-mocha", None)
             .unwrap();
         assert_eq!(crate::files::snapshot(&home).unwrap(), before);
+        std::fs::remove_dir_all(home).unwrap();
+    }
+    #[test]
+    fn dynamic_variants_share_choice_but_not_static_themes() {
+        let home = std::env::temp_dir().join(format!("winarchy-dynamic-choice-{}", std::process::id()));
+        std::fs::create_dir_all(&home).unwrap();
+        let names = vec!["a.png".into(), "b.png".into()];
+        let mut state = Selections::default();
+        state.save_choice(&home, "dynamic-light", Some("b.png".into())).unwrap();
+        let mut state = Selections::load(&home);
+        assert_eq!(state.candidates("dynamic-dark", &names), ["b.png", "a.png"]);
+        assert_eq!(state.candidates("static", &names), names);
+        state.save_choice(&home, "dynamic-dark", None).unwrap();
+        assert!(Selections::load(&home).candidates("dynamic-light", &names).is_empty());
         std::fs::remove_dir_all(home).unwrap();
     }
     #[test]

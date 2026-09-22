@@ -163,6 +163,8 @@ const DEFAULTS: &[(&str, &str)] = &[
         "themes/catppuccin-latte.toml",
         include_str!("../config/themes/catppuccin-latte.toml"),
     ),
+    ("themes/dynamic-dark.toml", include_str!("../config/themes/dynamic-dark.toml")),
+    ("themes/dynamic-light.toml", include_str!("../config/themes/dynamic-light.toml")),
     (
         "applets/weather/applet.toml",
         include_str!("../config/applets/weather/applet.toml"),
@@ -286,6 +288,8 @@ const DEFAULT_ASSETS: &[(&str, &[u8])] = &[
         "themes/catppuccin-mocha/preview.png",
         include_bytes!("../config/themes/catppuccin-mocha/preview.png"),
     ),
+    ("themes/dynamic-dark/preview.png", include_bytes!("../config/themes/dynamic-dark/preview.png")),
+    ("themes/dynamic-light/preview.png", include_bytes!("../config/themes/dynamic-light/preview.png")),
     (
         "themes/catppuccin-mocha/wallpapers/1-totoro.png",
         include_bytes!("../config/themes/catppuccin-mocha/wallpapers/1-totoro.png"),
@@ -363,6 +367,8 @@ impl Config {
                 Err(e) => return Err(e.to_string()),
             }
         }
+        crate::files::create_directory(&home.join("wallpapers"))?;
+        crate::files::create_directory(&home.join("wallpapers/dynamic"))?;
         Ok(())
     }
     pub fn load(home: &Path) -> Result<Self, String> {
@@ -578,7 +584,12 @@ mod tests {
             }
         }
         let catalog = winarchy_theme::preview::catalog(&home).unwrap();
-        assert_eq!(catalog.len(), 2);
+        assert_eq!(catalog.len(), 4);
+        for id in ["dynamic-dark", "dynamic-light"] {
+            assert!(catalog.iter().any(|entry| entry.id == id));
+            assert_eq!(winarchy_theme::pack::wallpaper_dir(&home, id).unwrap(), home.join("wallpapers/dynamic"));
+        }
+        assert!(home.join("wallpapers/dynamic").is_dir());
         for (id, count) in [("catppuccin-mocha", 4), ("catppuccin-latte", 2)] {
             let dir = winarchy_theme::pack::wallpaper_dir(&home, id).unwrap();
             assert_eq!(winarchy_theme::pack::images(&dir).unwrap().len(), count);
