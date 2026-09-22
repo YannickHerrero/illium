@@ -151,6 +151,7 @@ impl Theme {
     pub fn effective(home: &Path) -> Result<Self, String> {
         let name = Self::selected(home)?;
         let mut theme = Self::load(home, &name)?;
+        dynamic::apply(home, &name, &mut theme)?;
         opacity::apply(home, &name, &mut theme);
         Ok(theme)
     }

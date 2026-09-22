@@ -3,6 +3,7 @@ use crate::Theme;
 use serde::{Deserialize, Serialize};
 
 pub const VERSION: u32 = 1;
+pub const FILE: &str = "dynamic-theme.state";
 pub fn is_dynamic(name: &str) -> bool {
     matches!(name, "dynamic-dark" | "dynamic-light")
 }
@@ -38,6 +39,13 @@ impl Palettes {
         Ok(())
     }
 }
+
+mod state;
+pub use state::{Snapshot, apply, publish};
+#[cfg(feature = "assets")]
+mod cache;
+#[cfg(feature = "assets")]
+pub use cache::prepare;
 
 #[cfg(feature = "assets")]
 mod generate;

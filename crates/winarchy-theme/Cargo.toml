@@ -8,12 +8,13 @@ repository = "https://github.com/YannickHerrero/winarchy"
 
 [features]
 default = ["assets"]
-assets = ["dep:image", "dep:fast_image_resize"]
+assets = ["dep:image", "dep:fast_image_resize", "dep:sha2"]
 live = ["dep:notify"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
+sha2 = { version = "0.10", optional = true }
 notify = { version = "8", optional = true }
 image = { version = "0.25", optional = true, default-features = false, features = ["jpeg", "png"] }
 fast_image_resize = { version = "6.1", optional = true, default-features = false, features = ["std", "only_u8x4"] }

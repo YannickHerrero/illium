@@ -10,6 +10,7 @@ use std::{
 fn relevant(home: &Path, path: &Path) -> bool {
     path == home.join("winarchy.toml")
         || path == home.join(opacity::FILE)
+        || path == home.join(crate::dynamic::FILE)
         || path == home.join("themes")
         || (path.parent() == Some(home.join("themes").as_path())
             && path

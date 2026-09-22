@@ -26,6 +26,7 @@ fn relevant(home: &Path, path: &Path) -> bool {
     path == home.join("winarchy.toml")
         || path == home.join("terminal.toml")
         || path == home.join(winarchy_theme::opacity::FILE)
+        || path == home.join(winarchy_theme::dynamic::FILE)
         || path == home.join("themes")
         || (path.parent() == Some(home.join("themes").as_path())
             && path
@@ -101,6 +102,7 @@ mod tests {
         for p in [
             "terminal.toml",
             winarchy_theme::opacity::FILE,
+            winarchy_theme::dynamic::FILE,
             "winarchy.toml",
             "themes",
             "themes/test.toml",
