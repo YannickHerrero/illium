@@ -378,9 +378,8 @@ impl Runtime {
         let Some(e) = self.entries.iter_mut().find(|e| e.applet.name == name) else {
             return Err(format!("unknown applet {name}"));
         };
-        if let Some(err) = &e.error {
-            return Err(err.clone());
-        }
+        // A failed refresh must not make cached content inaccessible. Render
+        // the error alongside the last snapshot and let opening request a retry.
         let instance = instantiate(e, &self.tx)?;
         if let Some(traffic) = &mut e.traffic {
             traffic.due = Instant::now();
@@ -392,10 +391,11 @@ impl Runtime {
         let def = e.definition.as_ref().expect("compiled above");
         set_colors(&instance, &c.theme);
         let _ = instance.set_property("busy", Value::Bool(e.running));
-        let _ = instance.set_property("open", Value::Bool(true));
+        let _ = instance.set_property("provider-error", Value::String(e.error.clone().unwrap_or_default().into()));
         if e.data != serde_json::Value::Null {
             set_data(&instance, def, &e.data)?;
         }
+        let _ = instance.set_property("open", Value::Bool(true));
         let size = &e.applet.manifest.popup;
         let rect = popup_rect(
             monitor,

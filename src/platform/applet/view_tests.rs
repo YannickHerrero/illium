@@ -86,6 +86,8 @@ fn escape_closes_applet_even_when_its_cancel_callback_would_handle_it() {
     let (tx, _rx) = crate::queue::channel(8);
     let mut runtime = Runtime::new(tx);
     runtime.load(&config);
+    // Provider failure must not prevent opening or dismissing a cached view.
+    runtime.entries[0].error = Some("Synthetic refresh failure".into());
     runtime
         .toggle(
             &config,
