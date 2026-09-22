@@ -4,6 +4,7 @@ mod audio;
 mod browser;
 mod demo;
 mod dictate;
+mod dispatch;
 mod dpi;
 mod icons;
 use winarchy_ipc::identity;
@@ -1404,6 +1405,26 @@ pub fn run(replace: bool) -> Result<(), String> {
         dirty: false,
     };
     let manager = Rc::new(RefCell::new(manager));
+    let consumer = manager.clone();
+    let drain: Rc<dyn Fn()> = Rc::new(move || {
+        let Ok(mut m) = consumer.try_borrow_mut() else {
+            dispatch::wake();
+            return;
+        };
+        let started = std::time::Instant::now();
+        for (index, event) in rx.try_iter().take(128).enumerate() {
+            m.event(event);
+            if index == 127 || started.elapsed() >= std::time::Duration::from_millis(4) {
+                dispatch::wake();
+                break;
+            }
+        }
+        tracing::trace!(elapsed_us = started.elapsed().as_micros(), "event drain");
+    });
+    let notified = drain.clone();
+    dispatch::install(move || notified());
+    tx.set_waker(dispatch::wake);
+    dispatch::wake(); // Also consume events published before notifier installation.
     let startup_error = Rc::new(RefCell::new(None));
     let recovery = Rc::new(RefCell::new(None));
     let m = manager.clone();
@@ -1472,10 +1493,8 @@ pub fn run(replace: bool) -> Result<(), String> {
         slint::TimerMode::Repeated,
         std::time::Duration::from_millis(10),
         move || {
+            drain(); // Safety net; normal input is handled by the immediate callback.
             let mut m = m.borrow_mut();
-            for event in rx.try_iter().take(128) {
-                m.event(event);
-            }
             m.poll_demo();
             let Manager {
                 shell,
@@ -1579,7 +1598,9 @@ pub fn run(replace: bool) -> Result<(), String> {
             m.borders();
         },
     );
-    slint::run_event_loop_until_quit().map_err(|e| e.to_string())?;
+    let result = slint::run_event_loop_until_quit().map_err(|e| e.to_string());
+    dispatch::clear(); // Break the UI callback's ownership of the manager on shutdown.
+    result?;
     if let Some(e) = startup_error.borrow_mut().take() {
         return Err(e);
     }
