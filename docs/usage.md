@@ -33,6 +33,20 @@ winarchyctl workspace recent
 
 The bar lists the occupied workspaces plus the active one and highlights the active one; empty workspaces are not shown. Workspaces have a monitor association; focusing a client on a monitor updates that association. Switching workspaces is global, not independently per monitor.
 
+## Exposé
+
+**Alt+Tab** (or `winarchyctl expose toggle`) shows every managed window of every workspace as a card over the dimmed desktop of the active monitor, grouped by workspace in tiling order, with a workspace badge, the application's icon and the window title. The cards appear at once; a thumbnail of each window fills in as soon as it is captured (a few milliseconds per window, off the UI thread). Minimized windows and windows that refuse to paint keep their icon. The focused window is selected on opening and outlined in the accent color.
+
+Typing filters by title or application name with the launcher's subsequence matching; Backspace edits, Ctrl+U clears. **Left/Right** (or Alt+Tab / Alt+Shift+Tab while the exposé is open), **Up/Down** and hovering move the selection. **Enter** or a click switches to the window's workspace if needed and focuses it. A middle click or the configured `window close` chord (Alt+Q by default) closes the selected window and removes its card; a window closed by other means disappears too. **Escape** clears the filter first, then closes the exposé and restores the previous focus. Any other Winarchy command (a workspace switch, the launcher) closes it as well.
+
+Thumbnails are static snapshots taken when the exposé opens. Windows on inactive workspaces can only be captured while `conceal = "park"` (the default) keeps them painting off screen; with `conceal = "hide"` their cards show icon and title only.
+
+Existing keybinding files are not overwritten on upgrade. Add this line under `[keybindings]`, then reload with Alt+Shift+R:
+
+```toml
+"Alt+Tab" = "expose toggle"
+```
+
 ## Status bar applets
 
 **Ctrl+Alt+B** (or `winarchyctl bar hints`) toggles keyboard hints on the active

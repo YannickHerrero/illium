@@ -58,6 +58,7 @@ This does **not** stop Explorer. Defaults are installed without overwriting exis
 | Alt+Space | Launcher |
 | Alt+Shift+Space | Menu: Apps, System (hibernate, lock, restart, shut down, stop or start Explorer, quit), Keybindings, Theme and Wallpaper |
 | Alt+Shift+? | Keybindings viewer and editor |
+| Alt+Tab | [Exposé](docs/usage.md#exposé): every window of every workspace as a card; type to filter, Enter to focus |
 | Ctrl+Alt+B | [Keyboard hints for bar applets](docs/usage.md#status-bar-applets) |
 | Ctrl+Alt+Shift+Space | Visual theme picker (requires previews or wallpapers; see [Themes](docs/themes.md)) |
 | Ctrl+Alt+Shift+W | Visual wallpaper picker for the active theme |

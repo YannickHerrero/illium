@@ -2,6 +2,7 @@
 "Alt+Space" = "launcher toggle"
 "Alt+Shift+Space" = "meta toggle"
 "Alt+Shift+?" = "keybindings toggle"
+"Alt+Tab" = "expose toggle"
 "Ctrl+Alt+B" = "bar hints"
 "Ctrl+Alt+Shift+Space" = "theme picker"
 "Ctrl+Alt+Shift+W" = "wallpaper picker"
