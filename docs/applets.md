@@ -162,7 +162,7 @@ with `no-frame: true`. Winarchy sets these properties when they exist:
   `month-name`). Keys the struct does not declare are ignored; type mismatches
   are reported in the popup.
 - `popup-width`, `popup-height`: bind `width`/`height` to them.
-- `bg`, `surface`, `overlay`, `fg`, `muted`, `accent`: theme colors.
+- `bg`, `surface`, `overlay`, `fg`, `muted`, `accent`, `green`, `yellow`, `red`: theme colors.
 
 Declaring `callback action(string)` and calling it re-runs the provider with
 the argument, then updates `data`. A callback with multiple string arguments sends

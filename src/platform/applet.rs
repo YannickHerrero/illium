@@ -25,6 +25,9 @@ fn set_colors(instance: &ComponentInstance, theme: &crate::config::Theme) {
         ("fg", &theme.text),
         ("muted", &theme.subtext),
         ("accent", &theme.accent),
+        ("green", &theme.green),
+        ("yellow", &theme.yellow),
+        ("red", &theme.red),
     ] {
         let _ = instance.set_property(
             prop,
