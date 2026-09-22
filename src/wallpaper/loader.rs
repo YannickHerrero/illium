@@ -379,9 +379,13 @@ mod tests {
     #[test]
     fn tiny_images_prepare_once_for_identical_monitor_sizes() {
         let mut key = key("unused");
-        key.path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/wallpaper.png");
+        key.path = std::env::temp_dir().join(format!("winarchy-wallpaper-fixture-{}.png", std::process::id()));
+        // Cross-compiled tests cannot access the build host's manifest path.
+        std::fs::write(&key.path, include_bytes!("../../tests/fixtures/wallpaper.png")).unwrap();
         key.screens = vec![(640, 360), (640, 360), (360, 640)];
-        let result = prepare(&key, &|| false).unwrap();
+        let result = prepare(&key, &|| false);
+        std::fs::remove_file(&key.path).unwrap();
+        let result = result.unwrap();
         assert!(Arc::ptr_eq(&result.frames[0], &result.frames[1]));
         assert_eq!(result.bytes, 640 * 360 * 4 * 2);
         assert_eq!(result.frames[2].pixels.len(), 640 * 360 * 4);
