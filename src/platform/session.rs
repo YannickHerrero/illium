@@ -230,7 +230,7 @@ pub fn watchdog(pid: u32, identity: &str, started: u64) -> Result<(), String> {
         if let Some(key) = PROPERTY.get() {
             for id in native::enumerate() {
                 if !GetPropW(native::hwnd(id), PCWSTR(key.as_ptr())).is_invalid() {
-                    native::show(id, true);
+                    native::reveal(id, None);
                     native::corners(id, false);
                     native::dwm_border(id, None);
                     untag(id);

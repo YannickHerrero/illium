@@ -144,10 +144,11 @@ impl Manager {
         if self.prune() {
             self.layout();
         }
+        let park = self.config.wm.park();
         if let Some(c) = self.model.clients.iter_mut().find(|c| c.id == id) {
-            if c.workspace != self.model.active {
+            if c.workspace != self.model.active && !native::concealed(id) {
                 c.hidden = true;
-                native::show(id, false);
+                Self::conceal(c, park);
             }
             return false;
         }
@@ -200,6 +201,7 @@ impl Manager {
             floating,
             fullscreen,
             hidden: false,
+            parked: None,
             restore,
         });
         tracing::info!(id, workspace, "window added");
@@ -280,10 +282,18 @@ impl Manager {
     fn layout(&mut self) {
         self.dirty = true;
         self.prune();
+        let park = self.config.wm.park();
+        // Hiding a window makes Windows activate another one; parking leaves
+        // the foreground on the now invisible window, so move it ourselves.
+        let foreground = unsafe { GetForegroundWindow().0 as isize };
+        let mut concealed_foreground = false;
         for c in &mut self.model.clients {
             let visible = c.workspace == self.model.active;
-            if visible != native::visible(c.id) {
-                native::show(c.id, visible);
+            if visible && (native::parked(c.id) || !native::visible(c.id)) {
+                native::reveal(c.id, c.parked.take());
+            } else if !visible && !native::concealed(c.id) {
+                Self::conceal(c, park);
+                concealed_foreground |= c.id == foreground;
             }
             c.hidden = !visible;
         }
@@ -318,6 +328,15 @@ impl Manager {
         }
         self.shell.refresh(&self.model, &self.config, &self.applets);
         self.borders();
+        if concealed_foreground {
+            self.focus_visible();
+        }
+    }
+    fn conceal(c: &mut Client, park: bool) {
+        if park {
+            c.parked = Some(native::rect(c.id));
+        }
+        native::conceal(c.id, park);
     }
     fn borders(&mut self) {
         let width = self.config.wm.border_width.clamp(0, 32);
@@ -329,6 +348,7 @@ impl Manager {
             .retain(|id, _| self.model.clients.iter().any(|c| c.id == *id));
         for c in &self.model.clients {
             let shown = c.workspace == self.model.active
+                && !c.hidden
                 && !c.fullscreen
                 && !native::minimized(c.id)
                 && native::visible(c.id);
@@ -762,7 +782,9 @@ impl Manager {
         }
     }
     fn restore_focus(&mut self, restore: Option<isize>) {
-        if let Some(id) = restore.filter(|id| native::visible(*id) && !native::minimized(*id)) {
+        if let Some(id) =
+            restore.filter(|id| !native::concealed(*id) && !native::minimized(*id))
+        {
             native::focus(id, false);
         } else {
             self.focus_visible();
@@ -1150,7 +1172,7 @@ impl Drop for Manager {
             if !session::owns(c.id, c.generation) {
                 continue;
             }
-            native::show(c.id, true);
+            native::reveal(c.id, c.parked);
             native::corners(c.id, false);
             native::dwm_border(c.id, None);
             session::untag(c.id);

@@ -436,6 +436,53 @@ pub fn show(id: isize, visible: bool) {
         let _ = ShowWindow(hwnd(id), if visible { SW_SHOWNA } else { SW_HIDE });
     }
 }
+/// Left edge of a parked window, beside the -32000 Windows uses for minimized
+/// ones. Windows clamps positions at -32768, so the width cannot be added.
+const PARK_X: i32 = -32000;
+/// Parked off screen by Winarchy while its workspace is inactive. Minimized
+/// windows sit at the same coordinates on their own and are left alone.
+pub fn parked(id: isize) -> bool {
+    rect(id).x <= PARK_X + 1000 && !minimized(id)
+}
+/// Off screen either way for the user: hidden, minimized or parked.
+pub fn concealed(id: isize) -> bool {
+    !visible(id) || minimized(id) || parked(id)
+}
+/// Takes a client off the desktop while its workspace is inactive. Parking
+/// moves it past the left edge of any monitor (DWM cloaking is refused to
+/// other processes): the window stays visible for Win32 and keeps painting,
+/// so revealing it needs no repaint and the exposé can still capture it.
+/// Hiding is the plain ShowWindow fallback for applications that misbehave
+/// off screen.
+pub fn conceal(id: isize, park: bool) {
+    if park {
+        let r = rect(id);
+        position(id, Rect { x: PARK_X, ..r }, None);
+    } else {
+        show(id, false);
+    }
+}
+/// Undoes both forms of concealment, whichever mode hid the window. `home` is
+/// where a parked window goes back; without it, it lands near the origin of
+/// the primary monitor at its current size.
+pub fn reveal(id: isize, home: Option<Rect>) {
+    if parked(id) {
+        let r = rect(id);
+        position(
+            id,
+            home.unwrap_or(Rect {
+                x: 64,
+                y: 64,
+                w: r.w,
+                h: r.h,
+            }),
+            None,
+        );
+    }
+    if !visible(id) {
+        show(id, true);
+    }
+}
 const SINK_CLASS: &str = "WinarchyFocusSink";
 /// Creates the zero-size activatable window that takes the foreground when no
 /// client can, so keystrokes never land in a window Winarchy just hid. It must

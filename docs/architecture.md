@@ -9,7 +9,7 @@
 - `config.rs`: subsystem TOML types, first-run defaults, validation, rules, themes.
 - `layout.rs`: pure Fibonacci rectangles and deterministic geometric neighbor scoring.
 - `model.rs`: ordered client list, nine workspaces, monitor associations and recent history.
-- `platform/native.rs`: HWND filtering, enumeration, title/process lookup, batching, focus and process launch.
+- `platform/native.rs`: HWND filtering, enumeration, title/process lookup, batching, focus, off-screen parking and process launch.
 - `platform/input.rs`: keyboard/mouse hooks and WinEvent hooks on a dedicated Win32 message thread; hidden broadcast window receives display changes.
 - `platform/mod.rs`: serialized manager state, command execution and event dispatch.
 - `platform/shell.rs`, `ui/shell.slint`: same-process Slint surfaces and fuzzy launcher.
@@ -32,7 +32,7 @@ Slint defers native window creation. Surface positioning waits until valid HWNDs
 
 Each HWND has one workspace and one position in the global ordered vector. Layout filters that order by active workspace and excludes floating/fullscreen/minimized clients. Each client has a per-window generation property scoped to the current session; numeric handle reuse invalidates the old record. The managed list is capped at 512 windows. Fibonacci alternates horizontal/vertical bisection; once a split is physically impossible, remaining clients stack. Directions use window centers with squared forward distance plus four times squared perpendicular distance, with HWND tie-breaking.
 
-Workspace switches show/hide managed clients. A client carries its floating state and saved fullscreen geometry. Monitor associations are workspace-local; only one global workspace is active. This deliberately is not an independent-workspace-per-monitor system.
+Workspace switches park managed clients off screen (left edge at x = -32000, where Windows puts minimized windows; DWM cloaking is refused to other processes), or show/hide them with `conceal = "hide"`: a parked window stays visible for Win32 and keeps painting, so revealing it needs no repaint. The client remembers its rectangle from before parking. A client carries its floating state and saved fullscreen geometry. Monitor associations are workspace-local; only one global workspace is active. This deliberately is not an independent-workspace-per-monitor system.
 
 ## IPC and recovery
 

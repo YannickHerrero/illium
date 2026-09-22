@@ -21,7 +21,7 @@ winarchyctl spawn browser
 
 ## Workspaces
 
-Alt+1…9 switches between nine global Winarchy workspaces. These are unrelated to Windows Virtual Desktops. Inactive clients are hidden rather than minimized. Alt+Shift+number moves the focused client and follows it. Alt+S visits the next occupied workspace; Alt+D toggles the two most recently selected workspaces. Selecting the current workspace does not overwrite history.
+Alt+1…9 switches between nine global Winarchy workspaces. These are unrelated to Windows Virtual Desktops. Inactive clients are parked off screen (or hidden, see `conceal` in [configuration](configuration.md#wmtoml)) rather than minimized. Alt+Shift+number moves the focused client and follows it. Alt+S visits the next occupied workspace; Alt+D toggles the two most recently selected workspaces. Selecting the current workspace does not overwrite history.
 
 ```powershell
 winarchyctl workspace 4

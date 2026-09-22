@@ -8,6 +8,8 @@ pub struct Client {
     pub fullscreen: bool,
     /// Hidden by Winarchy because its workspace is inactive.
     pub hidden: bool,
+    /// Rectangle before the client was parked off screen.
+    pub parked: Option<Rect>,
     pub restore: Rect,
 }
 #[derive(Default)]
@@ -82,6 +84,7 @@ mod tests {
                 floating: false,
                 fullscreen: false,
                 hidden: false,
+                parked: None,
                 restore: Rect::default(),
             });
         }

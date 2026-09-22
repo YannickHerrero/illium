@@ -22,9 +22,21 @@ pub struct Wm {
     /// overlay otherwise. 0 disables it.
     #[serde(default = "default_border")]
     pub border_width: i32,
+    /// How clients of inactive workspaces leave the screen: `park` (moved
+    /// off screen, the default) or `hide` (ShowWindow).
+    #[serde(default = "default_conceal")]
+    pub conceal: String,
+}
+impl Wm {
+    pub fn park(&self) -> bool {
+        self.conceal == "park"
+    }
 }
 fn enabled() -> bool {
     true
+}
+fn default_conceal() -> String {
+    "park".into()
 }
 fn default_border() -> i32 {
     2
@@ -373,6 +385,9 @@ impl Config {
             || !(0..=100).contains(&c.wm.outer_gap)
         {
             return Err("wm: require 9 workspaces, fibonacci, gaps 0..100".into());
+        }
+        if !["park", "hide"].contains(&c.wm.conceal.as_str()) {
+            return Err("wm: conceal must be park or hide".into());
         }
         if !(16..=100).contains(&c.bar.height)
             || !["top", "bottom"].contains(&c.bar.position.as_str())
