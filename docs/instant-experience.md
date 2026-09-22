@@ -155,3 +155,21 @@ feels instantaneous.
   still run the old code. The terminal resident needs a graceful quit after all
   its windows close before its new renderer can be tested.
 - This is a deployment smoke check, not completed desktop/perceived-latency acceptance.
+
+### Companion restart and multi-tab launch follow-up
+
+At the user's request, the old terminal session was closed gracefully and a new
+terminal resident/window started. The browser's three original URLs were saved
+outside the repository. Keyboard-based restoration was unreliable, so the user
+requested proper multi-target launching instead.
+
+`76c9907` / `0cbced3` add ordered CLI targets and backward-compatible resident IPC.
+Validation: 21 browser tests passed on Linux and Windows, Windows Clippy passed,
+and a hidden WebView2 test verified three controllers/tabs with the first selected
+across two host openings. The release workspace build passed.
+
+The updated browser was deployed with backup at
+`%LOCALAPPDATA%\Winarchy\backups\browser-multi-20260922-143130`.
+A fresh resident accepted all three saved URLs in one CLI invocation. The resulting
+tab list was checked: **all three original URLs restored in their original order**.
+Both browser and terminal now run updated binaries. No master/main merge occurred.
