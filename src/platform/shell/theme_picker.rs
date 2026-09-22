@@ -194,7 +194,7 @@ impl Picker {
             error: None,
         })
     }
-    pub fn prewarm(&self) { if !self.opened { super::prewarm(self.ui.window()); } }
+    pub fn prewarm(&self) { if !self.opened { super::prewarm(&self.ui); } }
     pub fn open(
         &mut self,
         c: &Config,

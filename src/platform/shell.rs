@@ -9,6 +9,8 @@ slint::include_modules!();
 mod bar_tests;
 #[cfg(test)]
 mod bar_hints_tests;
+#[cfg(test)]
+mod native_surface_tests;
 pub(super) fn color(s: &str) -> slint::Color {
     let c = u32::from_str_radix(&s[1..], 16).unwrap_or_default();
     slint::Color::from_rgb_u8((c >> 16) as u8, (c >> 8) as u8, c as u8)
@@ -181,14 +183,31 @@ pub(super) fn prepare(window: &slint::Window, r: Rect, passive: bool) {
     window.set_size(slint::PhysicalSize::new(r.w.max(1) as u32, r.h.max(1) as u32));
     if id(window) != 0 { tool(window, passive); }
 }
-pub(super) fn prewarm(window: &slint::Window) {
+pub(super) fn prewarm<T: ComponentHandle + 'static>(component: &T) {
+    let window = component.window();
+    if id(window) != 0 { return; } // Already prepared/opened once.
     prepare(window, Rect { x: -32000, y: -32000, w: 1, h: 1 }, true);
-    if let Err(error) = window.show() {
+    if let Err(error) = component.show() {
         tracing::warn!(%error, "surface prewarm failed");
         return;
     }
-    tool(window, true);
-    let _ = window.hide();
+    finish_prewarm(component.as_weak(), 0);
+}
+fn finish_prewarm<T: ComponentHandle + 'static>(weak: slint::Weak<T>, attempts: u8) {
+    // Winit creates the HWND on a later loop turn. Hiding synchronously would
+    // cancel creation entirely. A real open supersedes this offscreen request.
+    slint::Timer::single_shot(std::time::Duration::from_millis(1), move || {
+        let Some(component) = weak.upgrade() else { return; };
+        let window = component.window();
+        let position = window.position();
+        if id(window) != 0 && (position.x != -32000 || position.y != -32000) { return; }
+        if id(window) == 0 && attempts < 50 {
+            finish_prewarm(weak, attempts + 1);
+            return;
+        }
+        if id(window) != 0 { tool(window, true); }
+        let _ = component.hide();
+    });
 }
 pub struct Shell {
     prewarm_stage: usize,
@@ -589,8 +608,8 @@ impl Shell {
     /// At most one native surface per idle turn, without activating it.
     pub fn prewarm_step(&mut self) -> bool {
         match self.prewarm_stage {
-            0 => prewarm(self.launcher.window()),
-            1 => prewarm(self.popup.window()),
+            0 => prewarm(&self.launcher),
+            1 => prewarm(&self.popup),
             2 => self.picker.prewarm(),
             3 => self.editor.prewarm(),
             4 => self.expose.prewarm(),

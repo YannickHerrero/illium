@@ -197,7 +197,7 @@ impl Editor {
         self.ui.set_accent(color(&c.theme.accent));
         self.ui.set_warning(color(&c.theme.yellow));
     }
-    pub fn prewarm(&self) { if !self.opened { super::prewarm(self.ui.window()); } }
+    pub fn prewarm(&self) { if !self.opened { super::prewarm(&self.ui); } }
     pub fn open(&mut self, c: &Config, monitor: Rect, restore: Option<isize>) {
         if self.opened {
             return;

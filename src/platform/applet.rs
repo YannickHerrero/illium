@@ -158,7 +158,7 @@ impl Runtime {
                 Ok(instance) => {
                     set_colors(&instance, &c.theme);
                     let _ = instance.set_property("open", Value::Bool(false));
-                    shell::prewarm(instance.window());
+                    shell::prewarm(&instance);
                 }
                 Err(error) => tracing::warn!(applet = e.applet.name, %error, "view preparation failed"),
             }

@@ -1390,6 +1390,13 @@ fn watch(home: std::path::PathBuf, tx: EventSender) {
         let _ = FindCloseChangeNotification(h);
     });
 }
+fn backend() -> slint::BackendSelector {
+    use slint::winit_030::winit::platform::windows::WindowAttributesExtWindows;
+    slint::BackendSelector::new()
+        .backend_name("winit".into())
+        .renderer_name("software".into())
+        .with_winit_window_attributes_hook(|attributes| attributes.with_active(false).with_skip_taskbar(true))
+}
 pub fn run(replace: bool) -> Result<(), String> {
     security::require_standard_user()?;
     let _instance = instance::Instance::acquire()?;
@@ -1409,12 +1416,7 @@ pub fn run(replace: bool) -> Result<(), String> {
     let bindings = input::parse(&config.keys)?;
     // Shell surfaces never activate implicitly during native creation/prewarm.
     // Explicit focus remains owned by the manager after final placement.
-    use slint::winit_030::winit::platform::windows::WindowAttributesExtWindows;
-    slint::BackendSelector::new()
-        .backend_name("winit".into())
-        .renderer_name("software".into())
-        .with_winit_window_attributes_hook(|attributes| attributes.with_active(false).with_skip_taskbar(true))
-        .select().map_err(|e| e.to_string())?;
+    backend().select().map_err(|e| e.to_string())?;
     let (tx, rx) = crate::queue::channel(1024);
     let maintenance = tx.clone();
     ipc::start(tx.clone())?;
