@@ -44,7 +44,7 @@ use Windows Settings for WPA3-only, enterprise or specially named managed profil
 applets/weather/
   applet.toml    manifest
   icon.svg       monochrome bar icon, tinted with the theme's subtext color
-  view.slint     popup content, compiled when the popup first opens
+  view.slint     popup content, prepared before desktop readiness
   weather.ps1    data provider: prints one JSON object on stdout
 ```
 
@@ -154,7 +154,10 @@ include all traffic on that adapter, not just Internet/application payload.
 `view.slint` exports a component, `View` by preference, that inherits `Window`
 with `no-frame: true`. Winarchy sets these properties when they exist:
 
-- `busy`: boolean, true while the external provider is running.
+- `busy`: boolean, true while an external or audio provider is running.
+- `has-data`: optional boolean, true after a snapshot has been applied. Use it
+  for an initial skeleton rather than presenting default values as real data.
+  Cached data stays available when a later refresh fails.
 - `open`: boolean, true while the popup is shown; the volume view runs a
   200 ms `Timer` on it to poll its built-in provider for the input meter.
 - `provider-error`: string, the latest provider/JSON error (empty after success).
@@ -179,7 +182,9 @@ monochrome icons with a theme color.
 
 Optional view callbacks let the applet clean up transient UI state:
 
-- `completed()`: invoked after a provider result, including failures.
+- `completed()`: invoked after applying a provider result, including failures.
+  The builtin volume provider waits until queued user actions finish before
+  invoking it, so optimistic controls reconcile with the latest intent.
 - `dismissed()`: invoked before hiding the popup (clear password input here).
 
 Global Escape always closes the entire popup, including any inner dialog. The
@@ -209,7 +214,8 @@ the daemon log.
    in `view.slint` and lay it out.
 3. Add `<name>` to a section of `bar.toml`. The daemon reloads when a file
    under the configuration home or an applet folder changes; the view is
-   compiled when you first open it, so markup errors show in the popup.
+   prepared during startup and retained across unchanged reloads. New or changed
+   views are compiled on their next opening; compilation errors are logged.
 
 The first provider run happens right after loading; the bar shows the icon
 alone until data arrives.

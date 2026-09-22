@@ -66,6 +66,7 @@ export component View inherits Window {
     in property <color> accent: #cba6f7;
     in property <Data> data;
     in property <bool> busy: false;
+    in property <bool> has-data: root.data.outputs.length > 0;
     in property <bool> open: false;
     in property <string> provider-error;
     callback action(string);
@@ -110,6 +111,7 @@ export component View inherits Window {
     }
     keys := FocusScope {
         key-pressed(event) => {
+            if !root.has-data { return accept; }
             if (event.text == Key.LeftArrow || event.text == "h" || event.text == "j" || event.text == Key.DownArrow) { root.set-output(root.output-volume - 5); return accept; }
             if (event.text == Key.RightArrow || event.text == "l" || event.text == "k" || event.text == Key.UpArrow) { root.set-output(root.output-volume + 5); return accept; }
             if (event.text == "m") { root.toggle-mute(); return accept; }
@@ -200,5 +202,19 @@ export component View inherits Window {
                 Text { text: "← → volume   m mute   0 silence"; color: root.muted; font-size: 10px; height: 14px; overflow: elide; }
             }
         }
+    }
+    if !root.has-data: Rectangle {
+        x: 1px; y: 1px; width: root.width - 2px; height: root.height - 2px;
+        background: root.bg;
+        VerticalLayout {
+            padding: 18px; spacing: 20px; alignment: start;
+            Text { text: "Audio"; color: root.fg; font-size: 21px; font-weight: 600; }
+            Text { text: root.provider-error != "" ? root.provider-error : "Loading audio…"; color: root.muted; font-size: 12px; wrap: word-wrap; }
+            for ratio in [0.8, 0.6, 0.9]: Rectangle {
+                height: 16px;
+                Rectangle { width: parent.width * ratio; height: 100%; background: root.overlay; border-radius: 3px; }
+            }
+        }
+        TouchArea { }
     }
 }

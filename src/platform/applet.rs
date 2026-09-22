@@ -339,13 +339,15 @@ impl Runtime {
                 Value::String(e.error.clone().unwrap_or_default().into()),
             );
         }
-        if let Some(action) = e.pending_actions.pop_front() {
-            self.refresh(index, Some(action));
-        } else if let Some(instance) = &e.instance {
-            // Reconcile optimistic controls only after all user intent has
-            // completed and the authoritative data/error has been published.
+        let next = e.pending_actions.pop_front();
+        if (next.is_none() || e.applet.manifest.provider.as_deref() != Some("builtin:volume"))
+            && let Some(instance) = &e.instance
+        {
+            // Audio reconciles after the latest intent; external providers
+            // retain their existing per-result completion callback contract.
             let _ = instance.invoke("completed", &[]);
         }
+        if let Some(action) = next { self.refresh(index, Some(action)); }
     }
     pub fn apply_traffic(
         &mut self,
@@ -394,6 +396,7 @@ impl Runtime {
         let def = e.definition.as_ref().expect("compiled above");
         set_colors(&instance, &c.theme);
         let _ = instance.set_property("busy", Value::Bool(e.running));
+        let _ = instance.set_property("has-data", Value::Bool(e.data != serde_json::Value::Null));
         let _ = instance.set_property("provider-error", Value::String(e.error.clone().unwrap_or_default().into()));
         if e.data != serde_json::Value::Null {
             set_data(&instance, def, &e.data)?;
@@ -554,7 +557,9 @@ fn set_data(
         .map_err(|e| format!("data does not match the view's `data` property: {e}"))?;
     instance
         .set_property("data", value)
-        .map_err(|e| format!("cannot set data: {e:?}"))
+        .map_err(|e| format!("cannot set data: {e:?}"))?;
+    let _ = instance.set_property("has-data", Value::Bool(true));
+    Ok(())
 }
 /// Drops JSON fields the view does not declare, so providers may print more
 /// than a view consumes; the converter rejects unknown fields otherwise.
