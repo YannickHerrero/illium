@@ -74,7 +74,7 @@ fn headless_picker_renders_filters_and_never_applies_while_browsing() {
     let _ = fs::remove_dir_all(&temp.0);
     Config::install(&temp.0).unwrap();
     // Test legacy palette-only themes alongside our deterministic fixtures.
-    for id in ["catppuccin-mocha", "catppuccin-latte"] {
+    for id in ["catppuccin-mocha", "catppuccin-latte", "dynamic-dark", "dynamic-light"] {
         fs::remove_dir_all(temp.0.join("themes").join(id)).unwrap();
     }
     for (id, color) in [

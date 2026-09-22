@@ -67,7 +67,7 @@ mod tests {
     #[test]
     fn only_palette_and_runtime_changes_are_relevant() {
         let home = Path::new("config");
-        for p in ["winarchy.toml", opacity::FILE, "themes", "themes/mine.toml"] {
+        for p in ["winarchy.toml", opacity::FILE, crate::dynamic::FILE, "themes", "themes/mine.toml"] {
             assert!(relevant(home, &home.join(p)));
         }
         for p in [
@@ -78,6 +78,31 @@ mod tests {
         ] {
             assert!(!relevant(home, &home.join(p)));
         }
+    }
+    #[cfg(feature = "assets")]
+    #[test]
+    fn running_consumers_follow_dynamic_palettes_and_ignore_invalid_state() {
+        let home = crate::tests::home();
+        std::fs::write(home.join("winarchy.toml"), "theme = 'dynamic-dark'").unwrap();
+        std::fs::write(home.join("themes/dynamic-dark.toml"), include_str!("../../../config/themes/dynamic-dark.toml")).unwrap();
+        let (tx, rx) = mpsc::channel();
+        let watcher = watch(home.clone(), move |theme| { let _ = tx.send(theme); }).unwrap();
+        let receive = || rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        let fallback = receive();
+        let snapshot = crate::dynamic::prepare(&home, "a.png", &image::RgbaImage::from_pixel(4, 4, image::Rgba([200, 50, 10, 255])));
+        crate::dynamic::publish(&home, Some(&snapshot)).unwrap();
+        assert_eq!(receive(), snapshot.palettes.dark);
+        opacity::set(&home, "dynamic-dark", 0.65).unwrap();
+        assert_eq!(receive().background_opacity, 0.65);
+        std::fs::write(home.join(crate::dynamic::FILE), "broken").unwrap();
+        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+        assert!(Theme::effective(&home).is_err());
+        crate::dynamic::publish(&home, None).unwrap();
+        let mut expected = fallback;
+        expected.background_opacity = 0.65;
+        assert_eq!(receive(), expected);
+        drop(watcher);
+        std::fs::remove_dir_all(home).unwrap();
     }
     #[test]
     fn running_consumers_follow_override_and_reset() {

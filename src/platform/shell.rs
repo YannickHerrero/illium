@@ -176,6 +176,8 @@ pub(super) mod expose;
 pub(super) mod keybindings;
 pub(super) mod theme_picker;
 mod wallpaper;
+#[cfg(test)]
+mod wallpaper_tests;
 /// Public Slint positioning also updates winit's attributes before a HWND
 /// exists, avoiding a first frame at the backend's default position.
 pub(super) fn prepare(window: &slint::Window, r: Rect, passive: bool) {
