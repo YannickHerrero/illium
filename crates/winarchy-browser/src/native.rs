@@ -1113,9 +1113,12 @@ impl Drop for Apartment {
 
 /// Resident resources outlive individual controllers/pages. COM is initialized
 /// once on this UI thread and uninitialized after all cached interfaces drop.
+type FilterStamp = Vec<Option<(u64, std::time::SystemTime)>>;
+type BrowserLibraries = (Rc<RefCell<Blocker>>, Rc<RefCell<Library>>);
+struct CachedBlocker { dir: PathBuf, stamp: FilterStamp, value: Rc<RefCell<Blocker>> }
 pub struct Resources {
     env: Option<ICoreWebView2Environment>,
-    blocker: Option<(PathBuf, Vec<Option<(u64, std::time::SystemTime)>>, Rc<RefCell<Blocker>>)>,
+    blocker: Option<CachedBlocker>,
     library: Option<(PathBuf, Rc<RefCell<Library>>)>,
     _apartment: Apartment,
 }
@@ -1124,7 +1127,7 @@ impl Resources {
         unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?; }
         Ok(Self { env: None, blocker: None, library: None, _apartment: Apartment })
     }
-    fn libraries(&mut self, dir: &std::path::Path) -> AppResult<(Rc<RefCell<Blocker>>, Rc<RefCell<Library>>)> {
+    fn libraries(&mut self, dir: &std::path::Path) -> AppResult<BrowserLibraries> {
         let mut stamp = Vec::new();
         for name in ["easylist.txt", "easyprivacy.txt", "custom.txt", "exceptions.json"] {
             stamp.push(match std::fs::metadata(dir.join(name)) {
@@ -1133,13 +1136,13 @@ impl Resources {
                 Err(error) => return Err(error.into()),
             });
         }
-        if self.blocker.as_ref().is_none_or(|(path, previous, _)| path != dir || *previous != stamp) {
-            self.blocker = Some((dir.to_owned(), stamp, Rc::new(RefCell::new(Blocker::load(dir)?))));
+        if self.blocker.as_ref().is_none_or(|cached| cached.dir != dir || cached.stamp != stamp) {
+            self.blocker = Some(CachedBlocker { dir: dir.to_owned(), stamp, value: Rc::new(RefCell::new(Blocker::load(dir)?)) });
         }
         if self.library.as_ref().is_none_or(|(path, _)| path != dir) {
             self.library = Some((dir.to_owned(), Rc::new(RefCell::new(Library::load(dir)?))));
         }
-        let blocker = self.blocker.as_ref().unwrap().2.clone();
+        let blocker = self.blocker.as_ref().unwrap().value.clone();
         blocker.borrow_mut().blocked = 0;
         let library = self.library.as_ref().unwrap().1.clone();
         library.borrow_mut().reload()?;
