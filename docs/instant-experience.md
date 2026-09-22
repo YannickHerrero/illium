@@ -5,9 +5,9 @@ Baselines: `048f56d` / `75a3641`. Commits retain
 YannickHerrero <yannick.herrero@proton.me> as author.
 
 **Status:** implementation and automated validation below are complete; active
-Windows desktop acceptance and key-to-pixel benchmarks are not. Neither Winarchy's
-`master`, the collection's `main`, nor the installed daemon has been changed. Do not fast-forward/deploy until the
-remaining desktop gate passes.
+Windows desktop acceptance and key-to-pixel benchmarks are not. Winarchy's
+`master` and the collection's `main` remain unchanged. A user-authorized test
+deployment is recorded below; do not fast-forward until the desktop gate passes.
 
 ## Contract
 
@@ -117,7 +117,7 @@ preview was corrupt. Wallpaper test assets are embedded for copied Windows tests
 
 ## Remaining acceptance gate
 
-Run on the target desktop with explicit permission to replace/start the daemon:
+Complete these checks on the target desktop with the deployed test build:
 
 1. Cold/warm opening of applets, launcher, terminal, browser, Files and Tasks;
    record first useful pixels, not only IPC replies. Collect median/p95 over
@@ -136,6 +136,22 @@ applications still need real-desktop traces. Calendar visibility filters are not
 optimistically rewritten locally. Persistent launcher caches and speculative
 folder prefetch were not added without workload evidence.
 
-No active-desktop end-to-end suite, daemon restart, installation, deployment or
-master fast-forward was performed. Automated correctness checks alone do not
-establish that the full desktop now feels instantaneous.
+No active-desktop end-to-end suite or master fast-forward was performed.
+Automated correctness checks alone do not establish that the full desktop now
+feels instantaneous.
+
+## User-authorized test deployment — 2026-09-22
+
+- Deployed the six release executables from `b8988f0`, volume's view and the three
+  changed calendar runtime files from collection `c0b157e`. Installed binaries
+  were verified against the release artifacts using SHA-256.
+- Backed up replaced binaries and applet files outside the watched configuration:
+  `%LOCALAPPDATA%\Winarchy\backups\instant-20260922-141129`.
+  `deployment.json` records the affected paths. User settings were not replaced.
+- Gracefully restarted the daemon and checked IPC readiness: one bar, six clients,
+  workspace 4 retained, no wallpaper error. New Apps/browser residents started.
+- Preserved the existing terminal session and standalone browser window by renaming
+  their loaded executable images rather than terminating them. Those processes
+  still run the old code. The terminal resident needs a graceful quit after all
+  its windows close before its new renderer can be tested.
+- This is a deployment smoke check, not completed desktop/perceived-latency acceptance.
