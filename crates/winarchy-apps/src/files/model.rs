@@ -1032,8 +1032,10 @@ mod tests {
             }
         );
         assert!(f.clipboard.is_some());
-        f.key(Key::Char('l'), false, 10);
-        f.key(Key::Char('l'), false, 10);
+        // The parent is the shared temp directory, whose first entry is not
+        // necessarily this fixture (and may be empty). Navigate explicitly.
+        f.go(t.0.clone());
+        f.seek("file2.txt");
         f.key(Key::Char('x'), false, 10);
         f.key(Key::Char('h'), false, 10);
         assert!(matches!(
