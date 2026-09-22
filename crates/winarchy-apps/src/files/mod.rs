@@ -39,6 +39,30 @@ mod app {
             });
         }
     }
+    struct Operation {
+        action: Action,
+        directory: Option<PathBuf>,
+        result: Result<(), String>,
+    }
+    fn perform(action: &Action, home: &std::path::Path) -> Result<(), String> {
+        use windows::Win32::System::Com::*;
+        unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().map_err(|e| e.to_string())?; }
+        struct Apartment;
+        impl Drop for Apartment { fn drop(&mut self) { unsafe { CoUninitialize(); } } }
+        let _apartment = Apartment;
+        match action {
+            Action::Open(path) => win::open(path),
+            Action::Terminal(dir) => win::terminal(home, dir),
+            Action::Copy { sources, into } => win::copy(sources, into, false),
+            Action::Move { sources, into } => win::copy(sources, into, true),
+            Action::Trash(paths) => win::delete(paths, true),
+            Action::Delete(paths) => win::delete(paths, false),
+            Action::Rename { from, to } => std::fs::rename(from, to).map_err(|e| e.to_string()),
+            Action::CreateDir(path) => std::fs::create_dir(path).map_err(|e| e.to_string()),
+            Action::CreateFile(path) => std::fs::File::create_new(path).map(|_| ()).map_err(|e| e.to_string()),
+            Action::None | Action::Quit => Ok(()),
+        }
+    }
     /// The window and its state; `resident` makes `q` hide instead of quit.
     pub struct App {
         window: FilesWindow,
@@ -121,7 +145,8 @@ mod app {
         sync(&models.lines, lines.into_iter().map(slint::SharedString::from));
         let (left, right) = f.status();
         window.set_loading(f.loading);
-        window.set_status_left(if f.loading { "Reading…".into() } else { left.into() });
+        window.set_status_left(if f.working { "Working… — navigation remains available".into() }
+            else if f.loading && f.notice.is_empty() { "Reading…".into() } else { left.into() });
         window.set_status_right(right.into());
         window.set_help(f.mode == Mode::Help);
     }
@@ -158,6 +183,32 @@ mod app {
                     }
                 });
             }
+            let (operations, completed) = mpsc::sync_channel::<Operation>(1);
+            {
+                let reader = reader.clone();
+                let render = render.clone();
+                window.on_operation_ready(move || {
+                    if let Ok(done) = completed.try_recv() {
+                        let mut f = reader.files.borrow_mut();
+                        f.finish_operation(&done.action, done.directory.as_deref(), done.result);
+                        render(&f);
+                        drop(f);
+                        reader.schedule();
+                    }
+                });
+            }
+            {
+                let files = files.clone();
+                let render = render.clone();
+                window.window().on_close_requested(move || {
+                    let mut f = files.borrow_mut();
+                    if f.working {
+                        f.notice = "Wait for the file operation before closing".into();
+                        render(&f);
+                        slint::CloseRequestResponse::KeepWindowShown
+                    } else { slint::CloseRequestResponse::HideWindow }
+                });
+            }
             {
                 let files = files.clone();
                 let reader = reader.clone();
@@ -170,48 +221,29 @@ mod app {
                     let Some(window) = weak.upgrade() else { return };
                     let mut f = files.borrow_mut();
                     let action = f.key(key, ctrl, window.get_page().max(1) as usize);
-                    let outcome = match &action {
-                        Action::None => Ok(()),
+                    match action {
+                        Action::None => {},
+                        Action::Quit if f.working && !resident => {
+                            f.notice = "Wait for the file operation before closing".into();
+                        }
                         Action::Quit => {
-                            if resident {
-                                let _ = window.hide();
-                            } else {
-                                let _ = slint::quit_event_loop();
-                            }
-                            Ok(())
+                            if resident { let _ = window.hide(); }
+                            else { let _ = slint::quit_event_loop(); }
                         }
-                        Action::Open(path) => win::open(path),
-                        Action::Terminal(dir) => win::terminal(&home, dir),
-                        Action::Copy { sources, into } => win::copy(sources, into, false),
-                        Action::Move { sources, into } => win::copy(sources, into, true),
-                        Action::Trash(paths) => win::delete(paths, true),
-                        Action::Delete(paths) => win::delete(paths, false),
-                        Action::Rename { from, to } => {
-                            std::fs::rename(from, to).map_err(|e| e.to_string())
+                        _ if f.working => { f.notice = "A file operation is still in progress".into(); }
+                        action => {
+                            f.working = true;
+                            let directory = f.cwd.clone();
+                            let home = home.clone();
+                            let tx = operations.clone();
+                            let weak = window.as_weak();
+                            std::thread::spawn(move || {
+                                let result = perform(&action, &home);
+                                if tx.send(Operation { action, directory, result }).is_ok() {
+                                    let _ = weak.upgrade_in_event_loop(|window| window.invoke_operation_ready());
+                                }
+                            });
                         }
-                        Action::CreateDir(path) => {
-                            std::fs::create_dir(path).map_err(|e| e.to_string())
-                        }
-                        Action::CreateFile(path) => std::fs::File::create_new(path)
-                            .map(|_| ())
-                            .map_err(|e| e.to_string()),
-                    };
-                    let changes_disk = !matches!(
-                        action,
-                        Action::None | Action::Quit | Action::Open(_) | Action::Terminal(_)
-                    );
-                    if changes_disk {
-                        f.reload();
-                        if let Action::Rename { to, .. }
-                        | Action::CreateDir(to)
-                        | Action::CreateFile(to) = &action
-                            && let Some(name) = to.file_name()
-                        {
-                            f.seek(&name.to_string_lossy());
-                        }
-                    }
-                    if let Err(e) = outcome {
-                        f.notice = e;
                     }
                     render(&f);
                     drop(f);
@@ -227,8 +259,7 @@ mod app {
                 reader,
             })
         }
-        /// Shows the window, in `dir` when given, with the theme read again so
-        /// a long-lived process follows theme changes.
+        /// Show the retained snapshot first; theme and directory updates are asynchronous.
         pub fn show(&self, dir: Option<PathBuf>) -> Result<(), String> {
             // Theme subscription keeps the resident current; no disk read on show.
             {
@@ -255,8 +286,7 @@ pub fn run() -> Result<(), String> {
     let app = App::new(false)?;
     let start = std::env::args()
         .nth(2)
-        .map(std::path::PathBuf::from)
-        .filter(|p| p.is_dir());
+        .map(std::path::PathBuf::from);
     app.show(start)?;
     slint::run_event_loop().map_err(|e| e.to_string())
 }

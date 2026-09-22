@@ -184,6 +184,9 @@ pub struct Files {
     directory_pending: bool,
     preview_pending: bool,
     pub loading: bool,
+    pub working: bool,
+    operation_notice: Option<String>,
+    next_cursor: Option<String>,
 }
 fn arrange_entries(entries: &mut Vec<Entry>, filter: &str, hidden: bool, sort: Sort) {
     entries.retain(|e| (hidden || !e.hidden) && matches(filter, &e.name));
@@ -317,7 +320,7 @@ fn root_entries() -> Vec<Entry> {
         .collect()
 }
 impl Files {
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub fn open(start: PathBuf, home: PathBuf) -> Self {
         Self::new(start, home, false)
     }
@@ -350,6 +353,9 @@ impl Files {
             directory_pending: false,
             preview_pending: false,
             loading: false,
+            working: false,
+            operation_notice: None,
+            next_cursor: None,
         };
         f.enter(Some(start));
         f
@@ -367,6 +373,7 @@ impl Files {
             self.parent_cursor = None;
             self.preview = Preview::Empty;
             self.cursor = 0;
+            self.next_cursor = None;
         }
         self.cwd = dir;
         self.filter.clear();
@@ -459,14 +466,14 @@ impl Files {
         match result {
             ReadResult::Directory { revision, entries, mut parent, notice } => {
                 if revision != self.directory_revision { return false; }
-                let name = self.current().map(|e| e.name.clone()).or_else(|| {
+                let name = self.next_cursor.take().or_else(|| self.current().map(|e| e.name.clone())).or_else(|| {
                     self.cwd.as_ref().and_then(|cwd| self.memory.get(cwd).cloned())
                 });
                 self.all = entries;
                 self.arrange(&mut parent, "");
                 self.parent_cursor = self.cwd.as_ref().and_then(|cwd| parent.iter().position(|e| &e.path == cwd));
                 self.parent = parent;
-                self.notice = notice;
+                self.notice = self.operation_notice.clone().unwrap_or(notice);
                 self.loading = false;
                 self.apply_view();
                 self.cursor = name.and_then(|name| self.entries.iter().position(|e| e.name == name))
@@ -481,6 +488,24 @@ impl Files {
             }
         }
         true
+    }
+    /// Complete only the operation, not the UI state from when it started.
+    pub fn finish_operation(&mut self, action: &Action, directory: Option<&Path>, result: Result<(), String>) {
+        self.working = false;
+        let changes_disk = !matches!(action, Action::None | Action::Quit | Action::Open(_) | Action::Terminal(_));
+        if self.cwd.as_deref() == directory && changes_disk {
+            self.reload();
+            if result.is_ok() && let Action::Rename { to, .. } | Action::CreateDir(to) | Action::CreateFile(to) = action {
+                self.next_cursor = to.file_name().map(|name| name.to_string_lossy().into_owned());
+            }
+        }
+        if let Err(error) = result {
+            if self.clipboard.is_none() && let Action::Move { sources, .. } = action {
+                self.clipboard = Some((sources.clone(), true));
+            }
+            self.notice = error.clone();
+            self.operation_notice = Some(error);
+        }
     }
     fn apply_view(&mut self) {
         let mut entries = self.all.clone();
@@ -532,6 +557,14 @@ impl Files {
     }
     pub fn key(&mut self, key: Key, ctrl: bool, page: usize) -> Action {
         self.notice.clear();
+        self.operation_notice = None;
+        self.next_cursor = None;
+        // Keep navigation/filtering/selection responsive, but don't begin a
+        // second destructive operation while the first one is still executing.
+        if self.working && !ctrl && matches!(key, Key::Char('p' | 'd' | 'D' | 'r' | 'a')) {
+            self.notice = "A file operation is still in progress".into();
+            return Action::None;
+        }
         match self.mode.clone() {
             Mode::Filter => {
                 match key {
@@ -785,6 +818,7 @@ impl Files {
         }
     }
     /// Moves the cursor to the entry named `name` if it exists.
+    #[cfg(test)]
     pub fn seek(&mut self, name: &str) {
         if let Some(i) = self.entries.iter().position(|e| e.name == name) {
             self.place(i);
@@ -953,6 +987,37 @@ mod tests {
         assert_eq!(f.current().unwrap().name, "file2.txt");
         assert!(f.selected.contains(&t.0.join("file2.txt")));
         assert!(f.clipboard.is_some());
+    }
+    #[test]
+    fn operation_completion_preserves_navigation_and_failed_cut_clipboard() {
+        let t = tree();
+        let mut f = Files::deferred(t.0.clone(), t.0.clone());
+        finish_reads(&mut f);
+        f.working = true;
+        let source = t.0.join("file2.txt");
+        let action = Action::Move { sources: vec![source.clone()], into: t.0.join("docs") };
+        f.go(t.0.join("src"));
+        f.finish_operation(&action, Some(&t.0), Err("Synthetic failure".into()));
+        finish_reads(&mut f);
+        assert_eq!(f.cwd, Some(t.0.join("src")));
+        assert_eq!(f.clipboard, Some((vec![source], true)));
+        assert_eq!(f.notice, "Synthetic failure");
+        assert!(!f.working);
+    }
+    #[test]
+    fn completed_create_seeks_after_async_reload_but_new_input_wins() {
+        let t = tree();
+        let mut f = Files::deferred(t.0.clone(), t.0.clone());
+        finish_reads(&mut f);
+        let path = t.0.join("new.txt");
+        std::fs::write(&path, "new").unwrap();
+        f.finish_operation(&Action::CreateFile(path.clone()), Some(&t.0), Ok(()));
+        finish_reads(&mut f);
+        assert_eq!(f.current().unwrap().path, path);
+        f.finish_operation(&Action::CreateFile(path), Some(&t.0), Ok(()));
+        f.key(Key::Char('g'), false, 10); f.key(Key::Char('g'), false, 10);
+        finish_reads(&mut f);
+        assert_eq!(f.current().unwrap().name, "docs");
     }
     #[test]
     fn stale_preview_cannot_replace_current_cursor() {

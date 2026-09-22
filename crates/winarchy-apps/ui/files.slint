@@ -49,6 +49,7 @@ export component FilesWindow inherits Window {
     callback key(string, bool, bool);
     // Internal worker completion, dispatched on the UI thread.
     callback read-ready();
+    callback operation-ready();
     in property <bool> loading;
     out property <int> page: current.page;
     background: Palette.bg.with-alpha(Palette.background-opacity);
