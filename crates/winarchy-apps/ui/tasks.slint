@@ -13,6 +13,7 @@ export component TasksWindow inherits Window {
     in property <[string]> help-lines;
     /// Key text as Slint reports it, with the control and shift state.
     callback key(string, bool, bool);
+    callback sample-ready();
     out property <int> page: column.page;
     background: Palette.bg.with-alpha(Palette.background-opacity);
     forward-focus: keys;

@@ -18,17 +18,16 @@ mod app {
     use std::{
         cell::RefCell,
         rc::Rc,
-        sync::{
-            Arc,
-            atomic::{AtomicBool, Ordering},
-        },
+        sync::{Arc, Mutex, Condvar},
+        time::Duration,
     };
+    #[derive(Default)]
+    struct Sampling { visible: bool, generation: u64, stopped: bool }
     pub struct App {
         window: TasksWindow,
         _theme: winarchy_theme::live::Subscription,
         /// The sampler only works while the window is shown.
-        visible: Arc<AtomicBool>,
-        _timer: slint::Timer,
+        sampling: Arc<(Mutex<Sampling>, Condvar)>,
     }
     fn render(window: &TasksWindow, rows: &VecModel<TaskRow>, t: &Tasks) {
         let fresh: Vec<TaskRow> = t
@@ -65,12 +64,13 @@ mod app {
             let rows = Rc::new(VecModel::<TaskRow>::default());
             window.set_rows(ModelRc::from(rows.clone()));
             let tasks = Rc::new(RefCell::new(Tasks::default()));
-            let visible = Arc::new(AtomicBool::new(false));
+            window.set_status_left("Reading processes…".into());
+            let sampling = Arc::new((Mutex::new(Sampling::default()), Condvar::new()));
             {
                 let tasks = tasks.clone();
                 let rows = rows.clone();
                 let weak = window.as_weak();
-                let visible = visible.clone();
+                let sampling = sampling.clone();
                 window.on_key(move |text, _ctrl, _shift| {
                     let Some(key) = Key::from_slint(&text) else {
                         return;
@@ -80,7 +80,8 @@ mod app {
                     match t.key(key, window.get_page().max(1) as usize) {
                         Action::Quit => {
                             if resident {
-                                visible.store(false, Ordering::Relaxed);
+                                sampling.0.lock().unwrap().visible = false;
+                                sampling.1.notify_one();
                                 let _ = window.hide();
                             } else {
                                 let _ = slint::quit_event_loop();
@@ -96,64 +97,68 @@ mod app {
                     render(&window, &rows, &t);
                 });
             }
-            // Sampling opens every process handle; it stays off the UI thread and
-            // hands each snapshot over a channel the UI polls.
-            let (tx, rx) = std::sync::mpsc::channel();
+            // One bounded result and a real UI wakeup, with no 250ms polling.
+            let (tx, rx) = std::sync::mpsc::sync_channel(1);
             {
-                let visible = visible.clone();
-                std::thread::spawn(move || {
-                    let mut sampler = win::Sampler::default();
-                    loop {
-                        if visible.load(Ordering::Relaxed) && tx.send(sampler.sample()).is_err() {
-                            return;
-                        }
-                        std::thread::sleep(std::time::Duration::from_millis(
-                            if visible.load(Ordering::Relaxed) {
-                                2000
-                            } else {
-                                250
-                            },
-                        ));
+                let weak = window.as_weak();
+                window.on_sample_ready(move || {
+                    if let Ok(processes) = rx.try_recv() && let Some(window) = weak.upgrade() {
+                        let mut t = tasks.borrow_mut();
+                        t.update(processes);
+                        render(&window, &rows, &t);
                     }
                 });
             }
-            let timer = slint::Timer::default();
             {
+                let sampling = sampling.clone();
                 let weak = window.as_weak();
-                timer.start(
-                    slint::TimerMode::Repeated,
-                    std::time::Duration::from_millis(250),
-                    move || {
-                        if let Some(processes) = rx.try_iter().last()
-                            && let Some(window) = weak.upgrade()
-                        {
-                            let mut t = tasks.borrow_mut();
-                            t.update(processes);
-                            render(&window, &rows, &t);
-                        }
-                    },
-                );
+                std::thread::spawn(move || {
+                    let mut sampler = win::Sampler::default();
+                    let mut last_generation = None;
+                    loop {
+                        let state = sampling.0.lock().unwrap();
+                        let state = sampling.1.wait_while(state, |s| !s.visible && !s.stopped).unwrap();
+                        if state.stopped { return; }
+                        let generation = state.generation;
+                        let first = last_generation != Some(generation);
+                        last_generation = Some(generation);
+                        drop(state);
+                        if tx.send(sampler.sample()).is_err() { return; }
+                        if weak.upgrade_in_event_loop(|window| window.invoke_sample_ready()).is_err() { return; }
+                        let state = sampling.0.lock().unwrap();
+                        let delay = if first { Duration::from_millis(300) } else { Duration::from_secs(2) };
+                        let _ = sampling.1.wait_timeout_while(state, delay, |s| {
+                            s.visible && !s.stopped && s.generation == generation
+                        }).unwrap();
+                    }
+                });
             }
             let theme = ui::watch_theme(&window)?;
             Ok(Self {
                 window,
                 _theme: theme,
-                visible,
-                _timer: timer,
+                sampling,
             })
         }
         pub fn show(&self) -> Result<(), String> {
-            ui::apply(
-                self.window.global::<ui::Palette>(),
-                &winarchy_theme::Theme::current(&ui::config_home()),
-            );
-            self.visible.store(true, Ordering::Relaxed);
+            {
+                let mut state = self.sampling.0.lock().unwrap();
+                state.visible = true;
+                state.generation = state.generation.wrapping_add(1);
+            }
+            self.sampling.1.notify_one();
             self.window.show().map_err(|e| e.to_string())?;
             // A window shown again after hide() keeps its last frame; ask for a
             // fresh one so a stale or empty surface never stays on screen.
             self.window.window().request_redraw();
             ui::raise(&self.window);
             Ok(())
+        }
+    }
+    impl Drop for App {
+        fn drop(&mut self) {
+            self.sampling.0.lock().unwrap().stopped = true;
+            self.sampling.1.notify_one();
         }
     }
 }
