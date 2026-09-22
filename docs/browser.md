@@ -33,7 +33,17 @@ winarchy-browser.exe --serve       # prepare without showing/focusing a window
 winarchy-browser.exe --status      # JSON: pid, ready, opened, last warm_open_ms
 winarchy-browser.exe --quit        # stop idle; never close a user's open page
 winarchy-browser.exe --standalone  # no residency; process exits with its window
+winarchy-browser.exe https://example.com https://www.rust-lang.org
+winarchy-browser.exe --standalone "search with spaces" https://example.com
 ```
+
+Each positional argument opens one tab in the new window, in argument order;
+first tab stays selected. Quote a multiword search as one argument. With no
+arguments, the browser opens one home tab. Up to 32 tabs can be requested per
+launch, subject to the resident IPC's 8191-byte command limit. If the resident
+already has an open window, the entire batch opens in a separate window: existing
+tabs are not replaced. Single-URL IPC clients remain compatible. This is URL
+opening, not restoration of form contents or page navigation histories.
 
 To opt out of prewarming, set `browser = "winarchy-browser.exe --standalone"` in `apps.toml` and reload Winarchy. Other browser aliases are unaffected. After updating filter lists, close browser windows and stop/restart the resident to load the new lists. Background initialization failures are written to `browser.log` without showing a startup dialog; a normal launch still reports failures visibly.
 

@@ -1,6 +1,7 @@
 //! One prepared window per Windows user/session. Extra simultaneous windows are
 //! standalone; we do not keep an unbounded pool of Chromium instances alive.
 use crate::native;
+use winarchy_browser::launch;
 use std::{sync::mpsc, time::Duration};
 use winarchy_ipc::{client, identity, server};
 use windows::Win32::{
@@ -48,7 +49,7 @@ pub fn run() -> Result<(), String> {
             .map_err(|e| e.to_string());
     }
     if args.first().is_some_and(|a| a == "--standalone") {
-        return native::run(&args[1..].join(" "), false, None, |_| {})
+        return native::run(&launch::targets(args[1..].to_vec())?, false, None, |_| {})
             .map(|_| ())
             .map_err(|e| e.to_string());
     }
@@ -56,7 +57,7 @@ pub fn run() -> Result<(), String> {
     let control = args.as_slice() == ["--status"] || args.as_slice() == ["--quit"];
     if args.first().is_some_and(|a| a.starts_with("--")) && !serve && !control {
         return Err(
-            "Usage: winarchy-browser [URL | --serve | --standalone [URL] | --demo | --status | --quit]"
+            "Usage: winarchy-browser [URL ... | --serve | --standalone [URL ...] | --demo | --status | --quit]"
                 .into(),
         );
     }
@@ -66,6 +67,8 @@ pub fn run() -> Result<(), String> {
         println!("{answer}");
         return Ok(());
     }
+    let targets = launch::targets(if serve { vec![] } else { args })?;
+    let open = launch::open_command(&targets)?;
     let file = match server::create_pipe(&pipe) {
         Ok(file) => file,
         Err(_) => {
@@ -79,20 +82,14 @@ pub fn run() -> Result<(), String> {
                 let _ = AllowSetForegroundWindow(pid);
             }
             // An ambiguous reply must never cause another open/fallback launch.
-            request(
-                &pipe,
-                &format!(
-                    "open {}",
-                    serde_json::to_string(&args.join(" ")).map_err(|e| e.to_string())?
-                ),
-            )?;
+            request(&pipe, &open)?;
             return Ok(());
         }
     };
     let (tx, rx) = mpsc::sync_channel(4);
     let mut server = Some((file, tx));
     let mut hidden = serve;
-    let mut target = if serve { String::new() } else { args.join(" ") };
+    let mut target = targets;
     let mut resources = native::Resources::new().map_err(|e| e.to_string())?;
     loop {
         let result = native::run_prepared(&target, hidden, Some(&rx), |thread| {

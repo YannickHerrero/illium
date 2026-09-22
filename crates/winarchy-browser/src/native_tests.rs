@@ -43,12 +43,15 @@ fn demo_home_never_loads_the_normal_library() {
     let mut cached = None;
     for _ in 0..2 {
     let result = run_inner(
-        "",
+        &vec!["about:blank".into(); 3],
         true,
         None,
         |_| {
             let app = snapshot().unwrap();
             assert!(app.home);
+            assert_eq!(app.tabs.borrow().entries().len(), 3);
+            assert_eq!(app.views.borrow().len(), 3);
+            assert_eq!(app.tabs.borrow().active(), Some(app.tabs.borrow().entries()[0].id));
             let picker = app.picker.borrow();
             let rows = picker.library.borrow().suggestions("");
             assert_eq!(rows.len(), 5);
@@ -179,7 +182,7 @@ fn tab_palette_open_filter_close_and_reopen_on_windows() {
         std::env::set_var("WINARCHY_CONFIG_HOME", &config);
         std::env::set_var("LOCALAPPDATA", root.join("local"));
         PROBE.with(|probe| *probe.borrow_mut() = Probe::default());
-        let result = run("", false, None, |_| {
+        let result = run(&[], false, None, |_| {
             let hwnd = snapshot().unwrap().hwnd;
             queue_action(Action::NewTab);
             queue_action(Action::SelectTab);

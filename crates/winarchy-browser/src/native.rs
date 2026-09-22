@@ -1164,11 +1164,19 @@ impl Resources {
         Ok((blocker, library))
     }
 }
+unsafe fn additional_launch_tabs(inputs: &[String]) -> AppResult<()> {
+    let first = snapshot().and_then(|app| app.tabs.borrow().active()).ok_or("No initial tab")?;
+    for input in inputs.iter().skip(1) {
+        unsafe { create_tab(&address(input), false)?; }
+    }
+    if inputs.len() > 1 { unsafe { activate_tab(first, false)?; } }
+    Ok(())
+}
 pub fn run_demo(data: &std::path::Path) -> AppResult<Exit> {
-    run_inner("", false, None, |_| {}, Some(data), &mut Resources::new()?)
+    run_inner(&[], false, None, |_| {}, Some(data), &mut Resources::new()?)
 }
 pub fn run(
-    input: &str,
+    input: &[String],
     hidden: bool,
     requests: Option<&std::sync::mpsc::Receiver<Request>>,
     ready: impl FnOnce(u32),
@@ -1176,7 +1184,7 @@ pub fn run(
     run_prepared(input, hidden, requests, ready, &mut Resources::new()?)
 }
 pub fn run_prepared(
-    input: &str,
+    input: &[String],
     hidden: bool,
     requests: Option<&std::sync::mpsc::Receiver<Request>>,
     ready: impl FnOnce(u32),
@@ -1185,7 +1193,7 @@ pub fn run_prepared(
     run_inner(input, hidden, requests, ready, None, resources)
 }
 fn run_inner(
-    input: &str,
+    input: &[String],
     hidden: bool,
     requests: Option<&std::sync::mpsc::Receiver<Request>>,
     ready: impl FnOnce(u32),
@@ -1194,7 +1202,7 @@ fn run_inner(
 ) -> AppResult<Exit> {
     unsafe {
         let started = Instant::now();
-        let target = address(input);
+        let target = address(input.first().map(String::as_str).unwrap_or(""));
         let start_home = target == "about:blank";
         let home = winarchy_theme::config_home();
         let filters = demo.unwrap_or(&home).join("browser");
@@ -1330,6 +1338,7 @@ fn run_inner(
         };
         APP.with(|a| a.borrow_mut().as_mut().unwrap().view_context = Some(context));
         create_tab(&target, false)?;
+        additional_launch_tabs(input)?;
         eprintln!("metric webview_ready_ms={}", started.elapsed().as_millis());
         let mut opened = !hidden;
         let mut quit = false;
@@ -1444,15 +1453,15 @@ fn run_inner(
                             }
                             .into())
                         } else if let Some(input) = request.command.strip_prefix("open ") {
-                            serde_json::from_str::<String>(input).map_err(|e| e.to_string()).and_then(|input| {
+                            winarchy_browser::launch::parse_open(input).and_then(|inputs| {
                                 if opened {
                                     // Only the first window is kept warm. Do not hijack an
                                     // existing window (possibly hidden on another workspace).
-                                    std::env::current_exe().and_then(|exe| std::process::Command::new(exe).arg("--standalone").arg(&input).spawn())
+                                    std::env::current_exe().and_then(|exe| std::process::Command::new(exe).arg("--standalone").args(&inputs).spawn())
                                         .map(|child| serde_json::json!({"pid": child.id(), "warm": false}).to_string()).map_err(|e| e.to_string())
                                 } else {
                                     let show_started = Instant::now();
-                                    let target = address(&input);
+                                    let target = address(&inputs[0]);
                                     home_mode(target == "about:blank");
                                     opened = true;
                                     let _ = ShowWindow(hwnd, SW_SHOW);
@@ -1463,6 +1472,7 @@ fn run_inner(
                                     if target != "about:blank" {
                                         web.Navigate(PCWSTR(wide(&target).as_ptr())).map_err(|e| e.to_string())?;
                                     }
+                                    additional_launch_tabs(&inputs).map_err(|e| e.to_string())?;
                                     warm_open_ms = Some(show_started.elapsed().as_millis());
                                     resident::log(&format!("warm_open pid={} show_ms={}", std::process::id(), warm_open_ms.unwrap()));
                                     Ok(serde_json::json!({"pid": std::process::id(), "warm": true, "show_ms": warm_open_ms}).to_string())
