@@ -454,6 +454,7 @@ pub fn show(id: isize, visible: bool) {
 /// Left edge of a parked window, beside the -32000 Windows uses for minimized
 /// ones. Windows clamps positions at -32768, so the width cannot be added.
 const PARK_X: i32 = -32000;
+pub fn parking_rect(rect: Rect) -> Rect { Rect { x: PARK_X, ..rect } }
 /// Parked off screen by Winarchy while its workspace is inactive. Minimized
 /// windows sit at the same coordinates on their own and are left alone.
 pub fn parked(id: isize) -> bool {
@@ -472,7 +473,7 @@ pub fn concealed(id: isize) -> bool {
 pub fn conceal(id: isize, park: bool) {
     if park {
         let r = rect(id);
-        position(id, Rect { x: PARK_X, ..r }, None);
+        position(id, parking_rect(r), None);
     } else {
         show(id, false);
     }
@@ -629,8 +630,11 @@ pub fn position(id: isize, r: Rect, layer: Option<HWND>) {
     }
 }
 pub fn batch(items: &[(isize, Rect)]) {
+    if items.is_empty() { return; }
+    let fallback = || { for (id, rect) in items { position(*id, *rect, None); } };
     unsafe {
         let Ok(mut d) = BeginDeferWindowPos(items.len() as i32) else {
+            fallback();
             return;
         };
         for (id, r) in items {
@@ -646,12 +650,16 @@ pub fn batch(items: &[(isize, Rect)]) {
             ) {
                 Ok(next) => d = next,
                 Err(e) => {
-                    tracing::debug!(%e,"defer failed");
+                    tracing::debug!(%e,"defer failed; applying placements individually");
+                    fallback();
                     return;
                 }
             }
         }
-        let _ = EndDeferWindowPos(d);
+        if let Err(error) = EndDeferWindowPos(d) {
+            tracing::debug!(%error, "batch failed; applying placements individually");
+            fallback();
+        }
     }
 }
 pub fn spawn(command: &str) -> Result<(), String> {

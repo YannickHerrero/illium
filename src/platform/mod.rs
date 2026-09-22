@@ -292,17 +292,6 @@ impl Manager {
         // Hiding a window makes Windows activate another one; parking leaves
         // the foreground on the now invisible window, so move it ourselves.
         let foreground = unsafe { GetForegroundWindow().0 as isize };
-        let mut concealed_foreground = false;
-        for c in &mut self.model.clients {
-            let visible = c.workspace == self.model.active;
-            if visible && (native::parked(c.id) || !native::visible(c.id)) {
-                native::reveal(c.id, c.parked.take());
-            } else if !visible && !native::concealed(c.id) {
-                Self::conceal(c, park);
-                concealed_foreground |= c.id == foreground;
-            }
-            c.hidden = !visible;
-        }
         let area = self.area();
         let ids = self.sync_splits();
         let rs = self.model.splits[usize::from(self.model.active - 1)].layout(
@@ -311,12 +300,38 @@ impl Manager {
             dpi::scale(area, self.config.wm.gap),
             dpi::scale(area, self.config.wm.outer_gap),
         );
-        native::batch(
-            &ids.into_iter()
-                .zip(rs)
-                .map(|(id, r)| (id, native::framed(id, r)))
-                .collect::<Vec<_>>(),
-        );
+        let mut placements: Vec<_> = ids.into_iter().zip(rs)
+            .map(|(id, r)| (id, native::framed(id, r))).collect();
+        let mut show = Vec::new();
+        let mut concealed_foreground = false;
+        for c in &mut self.model.clients {
+            let active = c.workspace == self.model.active;
+            if active && !native::minimized(c.id) {
+                let parked = native::parked(c.id);
+                if c.fullscreen {
+                    placements.push((c.id, native::framed(c.id, area)));
+                } else if c.floating && parked {
+                    let current = native::rect(c.id);
+                    placements.push((c.id, c.parked.unwrap_or(Rect { x: 64, y: 64, ..current })));
+                }
+                if parked || !native::visible(c.id) { c.parked = None; }
+                if !native::visible(c.id) { show.push(c.id); }
+            } else if !active && !native::concealed(c.id) {
+                if park {
+                    let current = native::rect(c.id);
+                    c.parked = Some(current);
+                    placements.push((c.id, native::parking_rect(current)));
+                } else {
+                    native::conceal(c.id, false);
+                }
+                concealed_foreground |= c.id == foreground;
+            }
+            c.hidden = !active;
+        }
+        // Park the outgoing workspace and reveal tiled clients directly at
+        // their final rectangles. Hidden clients are mapped only afterwards.
+        native::batch(&placements);
+        for id in show { native::show(id, true); }
         for c in &self.model.clients {
             if c.workspace == self.model.active && c.fullscreen && !native::minimized(c.id) {
                 native::position(c.id, native::framed(c.id, area), Some(HWND_TOP));
