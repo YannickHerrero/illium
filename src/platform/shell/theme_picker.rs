@@ -722,8 +722,12 @@ impl Picker {
             Ok(Output::Unreadable(entry, error)) => {
                 tracing::warn!(item=%entry.id,%error,"image preview unavailable");
                 self.error = Some(error);
-                // Never confirm the replacement of an unreadable selected image.
-                self.confirm_target = None;
+                // Never confirm a replacement of the unreadable target, but
+                // an unrelated broken neighbor must not swallow confirmation
+                // of a valid cached selection during catalog revalidation.
+                if self.confirm_target.as_deref() == Some(entry.id.as_str()) {
+                    self.confirm_target = None;
+                }
                 self.entries.retain(|e| *e != entry);
                 self.model
                     .replace(self.entries.iter().map(|e| e.id.clone()).collect());
