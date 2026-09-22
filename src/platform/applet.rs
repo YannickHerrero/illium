@@ -352,6 +352,7 @@ impl Runtime {
             Value::Number(super::dpi::logical(monitor, rect.h) as f64),
         );
         self.pending = Some(rect);
+        shell::prepare(instance.window(), rect, !e.applet.manifest.focusable);
         instance.show().map_err(|err| err.to_string())?;
         self.open = Some(name.to_owned());
         Ok(())

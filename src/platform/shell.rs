@@ -174,7 +174,24 @@ pub(super) mod expose;
 pub(super) mod keybindings;
 pub(super) mod theme_picker;
 mod wallpaper;
+/// Public Slint positioning also updates winit's attributes before a HWND
+/// exists, avoiding a first frame at the backend's default position.
+pub(super) fn prepare(window: &slint::Window, r: Rect, passive: bool) {
+    window.set_position(slint::PhysicalPosition::new(r.x, r.y));
+    window.set_size(slint::PhysicalSize::new(r.w.max(1) as u32, r.h.max(1) as u32));
+    if id(window) != 0 { tool(window, passive); }
+}
+fn prewarm(window: &slint::Window) {
+    prepare(window, Rect { x: -32000, y: -32000, w: 1, h: 1 }, true);
+    if let Err(error) = window.show() {
+        tracing::warn!(%error, "surface prewarm failed");
+        return;
+    }
+    tool(window, true);
+    let _ = window.hide();
+}
 pub struct Shell {
+    prewarm_stage: usize,
     pub hints: bar_hints::Hints,
     pub picker: theme_picker::Picker,
     pub editor: keybindings::Editor,
@@ -275,6 +292,7 @@ impl Shell {
         });
         let popup = Popup::new().map_err(|e| e.to_string())?;
         Ok(Self {
+            prewarm_stage: 0,
             hints: bar_hints::Hints::new()?,
             picker: theme_picker::Picker::new(tx.clone())?,
             editor: keybindings::Editor::new(tx.clone())?,
@@ -558,6 +576,20 @@ impl Shell {
         self.rebuild_apps(max);
         if std::mem::take(&mut self.index_again) { self.reindex(); }
     }
+    /// At most one native surface per idle turn, without activating it.
+    pub fn prewarm_step(&mut self) -> bool {
+        match self.prewarm_stage {
+            0 => prewarm(self.launcher.window()),
+            1 => prewarm(self.popup.window()),
+            2 => self.picker.prewarm(),
+            3 => self.editor.prewarm(),
+            4 => self.expose.prewarm(),
+            5 => self.hints.prewarm(),
+            _ => return false,
+        }
+        self.prewarm_stage += 1;
+        true
+    }
     pub fn arrange(&mut self, c: &Config, monitors: &[Rect]) -> bool {
         if self.pending {
             if self.backgrounds.iter().any(|b| id(b.window()) == 0)
@@ -677,6 +709,7 @@ impl Shell {
             .set_surface_width(super::dpi::logical(monitor, width));
         self.popup
             .set_surface_height(super::dpi::logical(monitor, height));
+        prepare(self.popup.window(), r, !self.popup_keyboard);
         if self.popup.show().is_err() {
             return;
         }
@@ -894,6 +927,7 @@ impl Shell {
         let h = super::dpi::scale(r, c.launcher.max_results as i32 * 38 + 65).min(r.h);
         self.launcher.set_surface_width(super::dpi::logical(r, w));
         self.launcher.set_surface_height(super::dpi::logical(r, h));
+        prepare(self.launcher.window(), Rect { x: r.x + (r.w - w) / 2, y: r.y + (r.h - h) / 2, w, h }, false);
         self.launcher.show().map_err(|e| e.to_string())?;
         self.launcher_pending = Some(r);
         self.visible = true;

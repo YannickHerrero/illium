@@ -174,6 +174,7 @@ impl Expose {
             close_chords: vec![],
         })
     }
+    pub fn prewarm(&self) { if !self.opened { super::prewarm(self.ui.window()); } }
     pub fn apply_theme(&mut self, c: &Config) {
         self.ui.set_bg(color(&c.theme.background));
         self.ui.set_surface(color(&c.theme.surface));
@@ -223,6 +224,7 @@ impl Expose {
         self.exes = exes;
         self.sources = sources;
         self.render();
+        super::prepare(self.ui.window(), monitor, false);
         if self.ui.show().is_err() {
             return;
         }

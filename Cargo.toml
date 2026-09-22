@@ -27,7 +27,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [target.'cfg(windows)'.dependencies]
-slint = { version = "=1.12.1", default-features = false, features = ["std", "backend-winit", "renderer-software", "compat-1-2", "raw-window-handle-06"] }
+slint = { version = "=1.12.1", default-features = false, features = ["std", "backend-winit", "renderer-software", "compat-1-2", "raw-window-handle-06", "unstable-winit-030"] }
 raw-window-handle = "0.6"
 # Applet views are compiled at run time; `internal`/`internal-json` expose the
 # typed JSON conversion. i-slint-core's `svg` feature enables run-time SVG

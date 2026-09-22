@@ -194,6 +194,7 @@ impl Picker {
             error: None,
         })
     }
+    pub fn prewarm(&self) { if !self.opened { super::prewarm(self.ui.window()); } }
     pub fn open(
         &mut self,
         c: &Config,
@@ -250,6 +251,7 @@ impl Picker {
             );
             self.views.push_back(view);
         }
+        super::prepare(self.ui.window(), self.monitor, false);
         self.ui.show().map_err(|e| e.to_string())?;
         self.opened = true;
         self.pending_window = true;

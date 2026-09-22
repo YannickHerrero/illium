@@ -1390,6 +1390,14 @@ pub fn run(replace: bool) -> Result<(), String> {
     let config_files = crate::files::snapshot(&home)?;
     let config = Config::load(&home)?;
     let bindings = input::parse(&config.keys)?;
+    // Shell surfaces never activate implicitly during native creation/prewarm.
+    // Explicit focus remains owned by the manager after final placement.
+    use slint::winit_030::winit::platform::windows::WindowAttributesExtWindows;
+    slint::BackendSelector::new()
+        .backend_name("winit".into())
+        .renderer_name("software".into())
+        .with_winit_window_attributes_hook(|attributes| attributes.with_active(false).with_skip_taskbar(true))
+        .select().map_err(|e| e.to_string())?;
     let (tx, rx) = crate::queue::channel(1024);
     let maintenance = tx.clone();
     ipc::start(tx.clone())?;
@@ -1422,6 +1430,14 @@ pub fn run(replace: bool) -> Result<(), String> {
                 dispatch::wake();
                 break;
             }
+        }
+        // Finish interactive placement before returning to Slint's next frame,
+        // not at the next maintenance tick.
+        if m.shell.interactive() || m.applets.open.is_some() {
+            let Manager { shell, config, monitors, applets, bar_restore, .. } = &mut *m;
+            shell.arrange(config, monitors);
+            applets.arrange();
+            shell.hints.arrange(*bar_restore);
         }
         tracing::trace!(elapsed_us = started.elapsed().as_micros(), "event drain");
     });
@@ -1520,7 +1536,9 @@ pub fn run(replace: bool) -> Result<(), String> {
                     let monitor = m.full_area();
                     let Manager { shell, config, .. } = &mut *m;
                     let selected = shell.wallpaper.clone();
-                    shell.picker.preload(config, monitor, selected.as_deref());
+                    if !shell.prewarm_step() {
+                        shell.picker.preload(config, monitor, selected.as_deref());
+                    }
                 }
             }
             if ready && pending && !m.shell.interactive() {
