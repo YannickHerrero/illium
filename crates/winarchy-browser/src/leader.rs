@@ -97,7 +97,7 @@ impl Menu {
             Self::Page => "p",
             Self::Zoom => "z",
             Self::Blocking => "b",
-            Self::Tabs => "o",
+            Self::Tabs => "m",
         }
     }
     pub fn entries(self) -> &'static [Entry] {
@@ -112,7 +112,8 @@ impl Menu {
                 'w', "Close tab", Action(CloseTab);
                 'j', "Previous tab", Action(PreviousTab);
                 'k', "Next tab", Action(NextTab);
-                'o', "Tabs", Menu(Tabs);
+                'o', "Open tabs", Action(SelectTab);
+                'm', "Tabs", Menu(Tabs);
                 'n', "Navigation", Menu(Navigation);
                 'p', "Page", Menu(Page);
                 'z', "Zoom", Menu(Zoom);
@@ -136,7 +137,6 @@ impl Menu {
             },
             Self::Blocking => entries! { 'b', "Toggle blocking for this site", Action(Blocking); },
             Self::Tabs => entries! {
-                'o', "Open tabs", Action(SelectTab);
                 'r', "Reopen closed tab", Action(ReopenTab);
                 'd', "Duplicate tab", Action(DuplicateTab);
                 'e', "Pin / unpin tab", Action(PinTab);

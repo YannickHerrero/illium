@@ -106,7 +106,8 @@ leader is open. Resizing and DPI changes keep the leader anchored bottom-right.
 | `d` | Add bookmark |
 | `t` / `w` | New tab / close tab |
 | `j` / `k` | Previous / next tab |
-| `o` | Tabs: `o` select, `r` reopen closed, `d` duplicate, `e` pin/unpin, `m` mute/unmute |
+| `o` | Fuzzy tab palette |
+| `m` | Tabs: `r` reopen closed, `d` duplicate, `e` pin/unpin, `m` mute/unmute |
 | `n` | Navigation: `p` previous, `s` next, `a` home |
 | `p` | Page: `u` copy URL, `r` reload ignoring cache, `s` stop, `i` DevTools |
 | `z` | Zoom: `+` or `=` in, `-` out, `0` reset |
@@ -154,7 +155,7 @@ are intentionally not part of this version.
 
 ## Background tabs and tab palette
 
-There is **no permanent tab strip**. `Ctrl+B`, `o`, `o` (or `Ctrl+Shift+A`)
+There is **no permanent tab strip**. `Ctrl+B`, `o` (or `Ctrl+Shift+A`)
 opens a centered native tab palette using the same compact font, spacing and
 live theme as the URL palette. It shows a search field, matched/total count,
 page titles above URLs, relative last-activation times, and active (`↵`), pinned
