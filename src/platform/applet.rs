@@ -52,6 +52,19 @@ pub struct Entry {
     definition: Option<ComponentDefinition>,
     instance: Option<ComponentInstance>,
 }
+fn instantiate(e: &mut Entry, tx: &EventSender) -> Result<ComponentInstance, String> {
+    if e.definition.is_none() { e.definition = Some(compile(&e.applet)?); }
+    if let Some(instance) = &e.instance { return Ok(instance.clone_strong()); }
+    let instance = e.definition.as_ref().unwrap().create().map_err(|error| error.to_string())?;
+    let tx = tx.clone();
+    let name = e.applet.name.clone();
+    let _ = instance.set_callback("action", move |args| {
+        let _ = tx.send(Event::AppletAction(name.clone(), action_argument(args)));
+        Value::Void
+    });
+    e.instance = Some(instance.clone_strong());
+    Ok(instance)
+}
 /// Loads the icon the manifest names for the entry's current data, when it changed.
 fn refresh_icon(e: &mut Entry) {
     let file = applets::icon_file(&e.applet.manifest.icon, &e.data);
@@ -132,6 +145,23 @@ impl Runtime {
             refresh_icon(&mut entry);
             self.entries.push(entry);
         }
+    }
+    /// Prepare before announcing desktop readiness, not in an allegedly idle
+    /// interactive tick: interpreter compilation cannot be preempted on this UI.
+    /// Failures are isolated and will be reported/retried by an explicit opening.
+    pub fn prepare_views(&mut self, c: &Config) {
+        let started = Instant::now();
+        for e in &mut self.entries {
+            match instantiate(e, &self.tx) {
+                Ok(instance) => {
+                    set_colors(&instance, &c.theme);
+                    let _ = instance.set_property("open", Value::Bool(false));
+                    shell::prewarm(instance.window());
+                }
+                Err(error) => tracing::warn!(applet = e.applet.name, %error, "view preparation failed"),
+            }
+        }
+        tracing::info!(elapsed_ms = started.elapsed().as_millis(), count = self.entries.len(), "applet views prepared before desktop readiness");
     }
     /// Recolor existing views without resetting providers, data, intervals or compiled definitions.
     pub fn apply_theme(&self, c: &Config) {
@@ -342,9 +372,7 @@ impl Runtime {
         if let Some(err) = &e.error {
             return Err(err.clone());
         }
-        if e.definition.is_none() {
-            e.definition = Some(compile(&e.applet)?);
-        }
+        let instance = instantiate(e, &self.tx)?;
         if let Some(traffic) = &mut e.traffic {
             traffic.due = Instant::now();
             if let Some(data) = e.data.as_object_mut() {
@@ -353,21 +381,6 @@ impl Runtime {
             }
         }
         let def = e.definition.as_ref().expect("compiled above");
-        let instance = match &e.instance {
-            Some(i) => i.clone_strong(),
-            None => {
-                let instance = def.create().map_err(|err| err.to_string())?;
-                let tx = self.tx.clone();
-                let applet = name.to_owned();
-                let _ = instance.set_callback("action", move |args| {
-                    let arg = action_argument(args);
-                    let _ = tx.send(Event::AppletAction(applet.clone(), arg));
-                    Value::Void
-                });
-                e.instance = Some(instance.clone_strong());
-                instance
-            }
-        };
         set_colors(&instance, &c.theme);
         let _ = instance.set_property("busy", Value::Bool(e.running));
         let _ = instance.set_property("open", Value::Bool(true));

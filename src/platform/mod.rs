@@ -1479,6 +1479,8 @@ pub fn run(replace: bool) -> Result<(), String> {
             let foreground = unsafe { GetForegroundWindow().0 as isize };
             m.shell.configure(&config, &monitors)?;
             m.applets.load(&config);
+            m.applets.tick();
+            m.applets.prepare_views(&config);
             if let Some(mode) = &config.theme.mode {
                 native::color_mode(mode == "light");
             }

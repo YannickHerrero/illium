@@ -181,7 +181,7 @@ pub(super) fn prepare(window: &slint::Window, r: Rect, passive: bool) {
     window.set_size(slint::PhysicalSize::new(r.w.max(1) as u32, r.h.max(1) as u32));
     if id(window) != 0 { tool(window, passive); }
 }
-fn prewarm(window: &slint::Window) {
+pub(super) fn prewarm(window: &slint::Window) {
     prepare(window, Rect { x: -32000, y: -32000, w: 1, h: 1 }, true);
     if let Err(error) = window.show() {
         tracing::warn!(%error, "surface prewarm failed");
