@@ -14,7 +14,7 @@ mod app {
         key::Key,
         ui::{self, FileRow, FilesWindow},
     };
-    use slint::{ComponentHandle, ModelRc, VecModel};
+    use slint::{ComponentHandle, Model, ModelRc, VecModel};
     use std::{cell::{Cell, RefCell}, path::PathBuf, rc::Rc, sync::mpsc};
     /// At most one read is in flight. Further input only replaces the model's
     /// pending intention, so rapid cursor movement cannot spawn a thread storm.
@@ -47,7 +47,49 @@ mod app {
         render: Rc<dyn Fn(&Files)>,
         reader: Rc<Reader>,
     }
-    fn render(window: &FilesWindow, f: &Files) {
+    struct Rows {
+        parent: Rc<VecModel<FileRow>>,
+        current: Rc<VecModel<FileRow>>,
+        preview: Rc<VecModel<FileRow>>,
+        lines: Rc<VecModel<slint::SharedString>>,
+    }
+    impl Rows {
+        fn new(window: &FilesWindow) -> Self {
+            let rows = Self {
+                parent: Rc::new(VecModel::default()), current: Rc::new(VecModel::default()),
+                preview: Rc::new(VecModel::default()), lines: Rc::new(VecModel::default()),
+            };
+            window.set_parent_rows(ModelRc::from(rows.parent.clone()));
+            window.set_rows(ModelRc::from(rows.current.clone()));
+            window.set_preview_rows(ModelRc::from(rows.preview.clone()));
+            window.set_preview_lines(ModelRc::from(rows.lines.clone()));
+            rows
+        }
+    }
+    fn sync<T: Clone + PartialEq + 'static>(model: &VecModel<T>, rows: impl IntoIterator<Item = T>) {
+        let mut len = 0;
+        for (i, row) in rows.into_iter().enumerate() {
+            match model.row_data(i) {
+                Some(current) if current == row => {},
+                Some(_) => model.set_row_data(i, row),
+                None => model.push(row),
+            }
+            len += 1;
+        }
+        while model.row_count() > len { model.remove(model.row_count() - 1); }
+    }
+    #[test]
+    fn differential_models_grow_change_and_shrink() {
+        let model = VecModel::from(vec![1, 2]);
+        sync(&model, [1, 3, 4]);
+        assert_eq!(model.iter().collect::<Vec<_>>(), vec![1, 3, 4]);
+        sync(&model, [1, 3, 4]);
+        sync(&model, [5]);
+        assert_eq!(model.iter().collect::<Vec<_>>(), vec![5]);
+        sync(&model, []);
+        assert_eq!(model.row_count(), 0);
+    }
+    fn render(window: &FilesWindow, models: &Rows, f: &Files) {
         let row = |e: &model::Entry| FileRow {
             name: e.name.as_str().into(),
             dir: e.dir,
@@ -63,13 +105,10 @@ mod app {
                 model::size(e.size).into()
             },
         };
-        let rows = |entries: &[model::Entry]| {
-            ModelRc::new(VecModel::from(entries.iter().map(row).collect::<Vec<_>>()))
-        };
         window.set_path(f.title().into());
-        window.set_parent_rows(rows(&f.parent));
+        sync(&models.parent, f.parent.iter().map(row));
         window.set_parent_cursor(f.parent_cursor.map_or(-1, |c| c as i32));
-        window.set_rows(rows(&f.entries));
+        sync(&models.current, f.entries.iter().map(row));
         window.set_cursor(f.cursor as i32);
         let (preview_rows, lines): (&[model::Entry], Vec<&str>) = match &f.preview {
             Preview::Dir(entries) => (entries, vec![]),
@@ -78,8 +117,8 @@ mod app {
             }
             Preview::Empty => (&[], vec![]),
         };
-        window.set_preview_rows(rows(preview_rows));
-        window.set_preview_lines(ui::strings(&lines));
+        sync(&models.preview, preview_rows.iter().map(row));
+        sync(&models.lines, lines.into_iter().map(slint::SharedString::from));
         let (left, right) = f.status();
         window.set_loading(f.loading);
         window.set_status_left(if f.loading { "Reading…".into() } else { left.into() });
@@ -94,10 +133,11 @@ mod app {
             window.set_help_lines(ui::strings(&model::HELP));
             let files = Rc::new(RefCell::new(Files::deferred(user.clone(), user)));
             let render: Rc<dyn Fn(&Files)> = {
+                let models = Rows::new(&window);
                 let window = window.as_weak();
                 Rc::new(move |f: &Files| {
                     if let Some(window) = window.upgrade() {
-                        render(&window, f);
+                        render(&window, &models, f);
                     }
                 })
             };
