@@ -177,6 +177,7 @@ pub struct Files {
     /// Name under the cursor per directory, so coming back lands on it.
     memory: HashMap<PathBuf, String>,
     all: Vec<Entry>,
+    parent_all: Vec<Entry>,
     home: PathBuf,
     deferred: bool,
     directory_revision: u64,
@@ -346,6 +347,7 @@ impl Files {
             pending_g: false,
             memory: HashMap::new(),
             all: vec![],
+            parent_all: vec![],
             home,
             deferred,
             directory_revision: 0,
@@ -370,6 +372,7 @@ impl Files {
             self.entries.clear();
             self.all.clear();
             self.parent.clear();
+            self.parent_all.clear();
             self.parent_cursor = None;
             self.preview = Preview::Empty;
             self.cursor = 0;
@@ -408,6 +411,7 @@ impl Files {
             None => {
                 self.all = root_entries();
                 self.parent = vec![];
+                self.parent_all.clear();
                 self.parent_cursor = None;
             }
             Some(dir) => {
@@ -423,21 +427,11 @@ impl Files {
                         self.notice = e;
                     }
                 }
-                let (parent, cursor) = match dir.parent() {
-                    Some(p) => {
-                        let mut entries = read_dir(p).map(|(e, _)| e).unwrap_or_default();
-                        self.arrange(&mut entries, "");
-                        let cursor = entries.iter().position(|e| e.path == *dir);
-                        (entries, cursor)
-                    }
-                    None => {
-                        let entries = root_entries();
-                        let cursor = entries.iter().position(|e| e.path == *dir);
-                        (entries, cursor)
-                    }
+                self.parent_all = match dir.parent() {
+                    Some(p) => read_dir(p).map(|(e, _)| e).unwrap_or_default(),
+                    None => root_entries(),
                 };
-                self.parent = parent;
-                self.parent_cursor = cursor;
+                self.apply_parent();
             }
         }
         self.apply_view();
@@ -464,15 +458,14 @@ impl Files {
     /// Apply only data, never a worker's copy of selection, filter or clipboard.
     pub fn apply_read(&mut self, result: ReadResult) -> bool {
         match result {
-            ReadResult::Directory { revision, entries, mut parent, notice } => {
+            ReadResult::Directory { revision, entries, parent, notice } => {
                 if revision != self.directory_revision { return false; }
                 let name = self.next_cursor.take().or_else(|| self.current().map(|e| e.name.clone())).or_else(|| {
                     self.cwd.as_ref().and_then(|cwd| self.memory.get(cwd).cloned())
                 });
                 self.all = entries;
-                self.arrange(&mut parent, "");
-                self.parent_cursor = self.cwd.as_ref().and_then(|cwd| parent.iter().position(|e| &e.path == cwd));
-                self.parent = parent;
+                self.parent_all = parent;
+                self.apply_parent();
                 self.notice = self.operation_notice.clone().unwrap_or(notice);
                 self.loading = false;
                 self.apply_view();
@@ -506,6 +499,20 @@ impl Files {
             self.notice = error.clone();
             self.operation_notice = Some(error);
         }
+    }
+    fn apply_parent(&mut self) {
+        let mut parent = self.parent_all.clone();
+        self.arrange(&mut parent, "");
+        self.parent_cursor = self.cwd.as_ref().and_then(|cwd| parent.iter().position(|e| &e.path == cwd));
+        self.parent = parent;
+    }
+    fn rearrange(&mut self) {
+        let path = self.current().map(|entry| entry.path.clone());
+        self.apply_view();
+        self.apply_parent();
+        self.cursor = path.and_then(|path| self.entries.iter().position(|entry| entry.path == path))
+            .unwrap_or(self.cursor.min(self.entries.len().saturating_sub(1)));
+        self.refresh_preview();
     }
     fn apply_view(&mut self) {
         let mut entries = self.all.clone();
@@ -742,7 +749,7 @@ impl Files {
             }
             Key::Char('.') => {
                 self.show_hidden = !self.show_hidden;
-                self.reload();
+                self.rearrange();
                 Action::None
             }
             Key::Char('/') => {
@@ -751,7 +758,7 @@ impl Files {
             }
             Key::Char('s') => {
                 self.sort = self.sort.next();
-                self.reload();
+                self.rearrange();
                 Action::None
             }
             Key::Char('o') => self.cwd.clone().map_or(Action::None, Action::Terminal),
@@ -987,6 +994,23 @@ mod tests {
         assert_eq!(f.current().unwrap().name, "file2.txt");
         assert!(f.selected.contains(&t.0.join("file2.txt")));
         assert!(f.clipboard.is_some());
+    }
+    #[test]
+    fn sorting_and_hidden_toggle_reuse_the_listing_without_disk_reads() {
+        let t = tree();
+        let mut f = Files::deferred(t.0.clone(), t.0.clone());
+        finish_reads(&mut f);
+        f.seek("file2.txt");
+        finish_reads(&mut f);
+        f.key(Key::Char('s'), false, 10);
+        assert_eq!(f.sort, Sort::Size);
+        assert_eq!(f.current().unwrap().name, "file2.txt");
+        assert!(!f.loading && !f.directory_pending);
+        f.key(Key::Char('.'), false, 10);
+        assert!(names(&f).contains(&".hidden"));
+        assert_eq!(f.current().unwrap().name, "file2.txt");
+        assert!(!f.loading && !f.directory_pending);
+        assert!(matches!(f.take_read(), Some(ReadRequest::Preview { .. })));
     }
     #[test]
     fn operation_completion_preserves_navigation_and_failed_cut_clipboard() {
