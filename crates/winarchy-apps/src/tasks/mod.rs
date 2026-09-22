@@ -88,8 +88,15 @@ mod app {
                             }
                         }
                         Action::Kill(pid) => {
-                            if let Err(e) = win::terminate(pid) {
-                                t.notice = format!("cannot end {pid}: {e}");
+                            match win::terminate(pid) {
+                                Err(e) => t.notice = format!("cannot end {pid}: {e}"),
+                                Ok(()) => {
+                                    // Acknowledge the request, not an unconfirmed exit.
+                                    t.notice = format!("Ending process {pid}…");
+                                    let mut state = sampling.0.lock().unwrap();
+                                    state.generation = state.generation.wrapping_add(1);
+                                    sampling.1.notify_one();
+                                }
                             }
                         }
                         Action::None => {}
