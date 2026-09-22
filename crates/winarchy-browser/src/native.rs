@@ -789,11 +789,6 @@ unsafe fn palette(show: bool) {
         let _ = InvalidateRect(Some(app.hwnd), None, true);
     }
 }
-unsafe fn refresh_theme() -> AppResult<()> {
-    apply_theme(&winarchy_theme::Theme::current(
-        &winarchy_theme::config_home(),
-    ))
-}
 unsafe fn apply_theme(theme: &winarchy_theme::Theme) -> AppResult<()> {
     let new_brush = CreateSolidBrush(color(&theme.background));
     let new_surface = CreateSolidBrush(color(&theme.surface));
@@ -1116,8 +1111,43 @@ impl Drop for Apartment {
     }
 }
 
+/// Resident resources outlive individual controllers/pages. COM is initialized
+/// once on this UI thread and uninitialized after all cached interfaces drop.
+pub struct Resources {
+    env: Option<ICoreWebView2Environment>,
+    blocker: Option<(PathBuf, Vec<Option<(u64, std::time::SystemTime)>>, Rc<RefCell<Blocker>>)>,
+    library: Option<(PathBuf, Rc<RefCell<Library>>)>,
+    _apartment: Apartment,
+}
+impl Resources {
+    pub fn new() -> AppResult<Self> {
+        unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?; }
+        Ok(Self { env: None, blocker: None, library: None, _apartment: Apartment })
+    }
+    fn libraries(&mut self, dir: &std::path::Path) -> AppResult<(Rc<RefCell<Blocker>>, Rc<RefCell<Library>>)> {
+        let mut stamp = Vec::new();
+        for name in ["easylist.txt", "easyprivacy.txt", "custom.txt", "exceptions.json"] {
+            stamp.push(match std::fs::metadata(dir.join(name)) {
+                Ok(meta) => Some((meta.len(), meta.modified()?)),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                Err(error) => return Err(error.into()),
+            });
+        }
+        if self.blocker.as_ref().is_none_or(|(path, previous, _)| path != dir || *previous != stamp) {
+            self.blocker = Some((dir.to_owned(), stamp, Rc::new(RefCell::new(Blocker::load(dir)?))));
+        }
+        if self.library.as_ref().is_none_or(|(path, _)| path != dir) {
+            self.library = Some((dir.to_owned(), Rc::new(RefCell::new(Library::load(dir)?))));
+        }
+        let blocker = self.blocker.as_ref().unwrap().2.clone();
+        blocker.borrow_mut().blocked = 0;
+        let library = self.library.as_ref().unwrap().1.clone();
+        library.borrow_mut().reload()?;
+        Ok((blocker, library))
+    }
+}
 pub fn run_demo(data: &std::path::Path) -> AppResult<Exit> {
-    run_inner("", false, None, |_| {}, Some(data))
+    run_inner("", false, None, |_| {}, Some(data), &mut Resources::new()?)
 }
 pub fn run(
     input: &str,
@@ -1125,7 +1155,16 @@ pub fn run(
     requests: Option<&std::sync::mpsc::Receiver<Request>>,
     ready: impl FnOnce(u32),
 ) -> AppResult<Exit> {
-    run_inner(input, hidden, requests, ready, None)
+    run_prepared(input, hidden, requests, ready, &mut Resources::new()?)
+}
+pub fn run_prepared(
+    input: &str,
+    hidden: bool,
+    requests: Option<&std::sync::mpsc::Receiver<Request>>,
+    ready: impl FnOnce(u32),
+    resources: &mut Resources,
+) -> AppResult<Exit> {
+    run_inner(input, hidden, requests, ready, None, resources)
 }
 fn run_inner(
     input: &str,
@@ -1133,6 +1172,7 @@ fn run_inner(
     requests: Option<&std::sync::mpsc::Receiver<Request>>,
     ready: impl FnOnce(u32),
     demo: Option<&std::path::Path>,
+    resources: &mut Resources,
 ) -> AppResult<Exit> {
     unsafe {
         let started = Instant::now();
@@ -1141,8 +1181,7 @@ fn run_inner(
         let home = winarchy_theme::config_home();
         let filters = demo.unwrap_or(&home).join("browser");
         std::fs::create_dir_all(&filters)?;
-        let blocker = Rc::new(RefCell::new(Blocker::load(&filters)?));
-        let library = Rc::new(RefCell::new(Library::load(&filters)?));
+        let (blocker, library) = resources.libraries(&filters)?;
         eprintln!("metric filters_ready_ms={}", started.elapsed().as_millis());
         let theme = winarchy_theme::Theme::current(&home);
         let profile = if let Some(data) = demo {
@@ -1154,8 +1193,6 @@ fn run_inner(
                 .join("Winarchy/browser/profile")
         };
         std::fs::create_dir_all(&profile)?;
-        CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
-        let _apartment = Apartment;
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         let instance = HINSTANCE(GetModuleHandleW(None)?.0);
         let class = w!("WinarchyBrowser");
@@ -1230,6 +1267,9 @@ fn run_inner(
             }
             eprintln!("metric window_visible_ms={}", started.elapsed().as_millis());
         }
+        let env = if let Some(env) = &resources.env {
+            env.clone()
+        } else {
         let (tx, rx) = std::sync::mpsc::channel();
         let profile = wide(&profile.to_string_lossy());
         // Keep WebView-owned UI (find, context menus, dialogs) in English too.
@@ -1259,6 +1299,9 @@ fn run_inner(
             }),
         )?;
         let env = rx.recv()??;
+        resources.env = Some(env.clone());
+        env
+        };
         let context = ViewContext {
             hwnd,
             env: env.clone(),
@@ -1391,14 +1434,17 @@ fn run_inner(
                                         .map(|child| serde_json::json!({"pid": child.id(), "warm": false}).to_string()).map_err(|e| e.to_string())
                                 } else {
                                     let show_started = Instant::now();
-                                    refresh_theme().map_err(|e| e.to_string())?;
                                     let target = address(&input);
                                     home_mode(target == "about:blank");
                                     opened = true;
                                     let _ = ShowWindow(hwnd, SW_SHOW);
                                     let _ = SetForegroundWindow(hwnd);
                                     if target == "about:blank" { let _ = SetFocus(Some(edit)); }
-                                    web.Navigate(PCWSTR(wide(&target).as_ptr())).map_err(|e| e.to_string())?;
+                                    // The prepared page is already blank. Avoid a
+                                    // second navigation (and its callbacks) for home.
+                                    if target != "about:blank" {
+                                        web.Navigate(PCWSTR(wide(&target).as_ptr())).map_err(|e| e.to_string())?;
+                                    }
                                     warm_open_ms = Some(show_started.elapsed().as_millis());
                                     resident::log(&format!("warm_open pid={} show_ms={}", std::process::id(), warm_open_ms.unwrap()));
                                     Ok(serde_json::json!({"pid": std::process::id(), "warm": true, "show_ms": warm_open_ms}).to_string())

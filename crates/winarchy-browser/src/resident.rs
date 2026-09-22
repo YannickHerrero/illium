@@ -93,8 +93,9 @@ pub fn run() -> Result<(), String> {
     let mut server = Some((file, tx));
     let mut hidden = serve;
     let mut target = if serve { String::new() } else { args.join(" ") };
+    let mut resources = native::Resources::new().map_err(|e| e.to_string())?;
     loop {
-        let result = native::run(&target, hidden, Some(&rx), |thread| {
+        let result = native::run_prepared(&target, hidden, Some(&rx), |thread| {
             // Retain one owner-only pipe and one server thread across window rebuilds.
             if let Some((file, tx)) = server.take() {
                 std::thread::spawn(move || {
@@ -117,7 +118,7 @@ pub fn run() -> Result<(), String> {
                     )
                 });
             }
-        })
+        }, &mut resources)
         .map_err(|e| e.to_string())?;
         if result == Exit::Quit {
             return Ok(());
