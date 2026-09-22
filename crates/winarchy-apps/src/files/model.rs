@@ -521,6 +521,7 @@ impl Files {
     fn place(&mut self, cursor: usize) {
         self.cursor = cursor.min(self.entries.len().saturating_sub(1));
         if let Mode::Visual(anchor) = self.mode {
+            if self.entries.is_empty() { self.selected.clear(); return; }
             let (lo, hi) = (anchor.min(self.cursor), anchor.max(self.cursor));
             self.selected = self.entries[lo..=hi.min(self.entries.len().saturating_sub(1))]
                 .iter()
@@ -911,6 +912,16 @@ mod tests {
     }
     fn finish_reads(f: &mut Files) {
         while let Some(job) = f.take_read() { assert!(f.apply_read(job.run())); }
+    }
+    #[test]
+    fn visual_selection_is_safe_while_initial_listing_is_loading() {
+        let t = tree();
+        let mut f = Files::deferred(t.0.clone(), t.0.clone());
+        f.key(Key::Char('v'), false, 10);
+        f.key(Key::Char('j'), false, 10);
+        assert!(f.selected.is_empty());
+        finish_reads(&mut f);
+        assert!(!f.entries.is_empty());
     }
     #[test]
     fn deferred_open_and_latest_directory_win() {
