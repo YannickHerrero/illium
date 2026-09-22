@@ -29,10 +29,10 @@ fn runtime() -> Runtime {
 fn volume_polls_coalesce_and_user_slider_intent_takes_priority() {
     let mut runtime = runtime();
     runtime.entries[0].applet.manifest.provider = Some("builtin:volume".into());
-    for _ in 0..20 { runtime.action("wifi", Some("refresh".into())); }
+    for _ in 0..20 { runtime.action("wifi", 2, Some("refresh".into())); }
     assert_eq!(runtime.entries[0].pending_actions.len(), 1);
     for action in ["levels", "refresh", "set 10", "set 20", "toggle-mute", "set 30"] {
-        runtime.action("wifi", Some(action.into()));
+        runtime.action("wifi", 2, Some(action.into()));
     }
     assert_eq!(runtime.entries[0].pending_actions.iter().map(String::as_str).collect::<Vec<_>>(),
         vec!["set 20", "toggle-mute", "set 30"]);
@@ -106,10 +106,12 @@ fn structured_actions_preserve_delimiters_and_unicode() {
 #[test]
 fn busy_actions_are_bounded_and_ordered() {
     let mut runtime = runtime();
-    runtime.action("wifi", None);
+    runtime.action("wifi", 1, Some("stale view action".into()));
+    assert!(runtime.entries[0].pending_actions.is_empty());
+    runtime.action("wifi", 2, None);
     assert!(runtime.entries[0].pending_actions.is_empty());
     for i in 0..12 {
-        runtime.action("wifi", Some(i.to_string()));
+        runtime.action("wifi", 2, Some(i.to_string()));
     }
     assert_eq!(runtime.entries[0].pending_actions.len(), 8);
     assert_eq!(runtime.entries[0].pending_actions.front().unwrap(), "0");

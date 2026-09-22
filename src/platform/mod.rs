@@ -68,7 +68,7 @@ pub enum Event {
         result: Result<crate::traffic::Sample, String>,
     },
     /// An applet view asked for an action to be run by its provider.
-    AppletAction(String, Option<String>),
+    AppletAction(String, u64, Option<String>),
     /// Escape pressed while a bar popup was open.
     Escape,
     /// Opt-in diagnostic delivered off the low-level hook thread.
@@ -1253,7 +1253,7 @@ impl Manager {
                 self.applets
                     .apply_traffic(&name, generation, &interface, result);
             }
-            Event::AppletAction(name, action) => self.applets.action(&name, action),
+            Event::AppletAction(name, generation, action) => self.applets.action(&name, generation, action),
             Event::Mouse(id) => {
                 let hovered = self.shell.is_bar(id);
                 if hovered != self.shell.drawer_hovered {

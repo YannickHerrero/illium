@@ -58,8 +58,9 @@ fn instantiate(e: &mut Entry, tx: &EventSender) -> Result<ComponentInstance, Str
     let instance = e.definition.as_ref().unwrap().create().map_err(|error| error.to_string())?;
     let tx = tx.clone();
     let name = e.applet.name.clone();
+    let generation = e.generation;
     let _ = instance.set_callback("action", move |args| {
-        let _ = tx.send(Event::AppletAction(name.clone(), action_argument(args)));
+        let _ = tx.send(Event::AppletAction(name.clone(), generation, action_argument(args)));
         Value::Void
     });
     e.instance = Some(instance.clone_strong());
@@ -214,8 +215,8 @@ impl Runtime {
             }
         }
     }
-    pub fn action(&mut self, name: &str, action: Option<String>) {
-        if let Some(i) = self.entries.iter().position(|e| e.applet.name == name) {
+    pub fn action(&mut self, name: &str, generation: u64, action: Option<String>) {
+        if let Some(i) = self.entries.iter().position(|e| e.applet.name == name && e.generation == generation) {
             self.refresh(i, action);
         }
     }
