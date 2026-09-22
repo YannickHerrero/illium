@@ -47,3 +47,5 @@ winresource = "0.1"
 
 [profile.release]
 strip = true
+lto = "thin"
+codegen-units = 1
