@@ -93,7 +93,12 @@ fn palette(h: f64, chroma: f64, dark: bool) -> Theme {
     );
     let l = if dark { 0.78 } else { 0.43 };
     t.accent = readable(l, chroma.clamp(0.10, 0.18), h, dark, &backgrounds);
-    let semantic = |h| readable(l, 0.14, h, dark, &backgrounds);
+    // Gently harmonize ANSI hues with the image without turning errors green
+    // or losing the blue/cyan/magenta distinctions applications depend on.
+    let harmonize =
+        |base: f64| base + ((h - base + 180.0).rem_euclid(360.0) - 180.0).clamp(-12.0, 12.0);
+    let terminal_chroma = chroma.clamp(0.10, 0.16);
+    let semantic = |h| readable(l, terminal_chroma, harmonize(h), dark, &backgrounds);
     t.red = semantic(25.0);
     t.green = semantic(145.0);
     t.yellow = semantic(85.0);
@@ -112,7 +117,15 @@ fn palette(h: f64, chroma: f64, dark: bool) -> Theme {
     ]);
     // Bright colors keep ANSI meanings in light mode too; "bright" need not mean
     // less readable on a light background.
-    let bright = |h| readable(if dark { 0.87 } else { 0.36 }, 0.16, h, dark, &backgrounds);
+    let bright = |h| {
+        readable(
+            if dark { 0.87 } else { 0.36 },
+            terminal_chroma + 0.02,
+            harmonize(h),
+            dark,
+            &backgrounds,
+        )
+    };
     t.brights = Some(vec![
         t.subtext.clone(),
         bright(25.0),
@@ -197,6 +210,8 @@ mod tests {
         let red = image::RgbaImage::from_pixel(32, 32, image::Rgba([255, 40, 0, 255]));
         let blue = image::RgbaImage::from_pixel(32, 32, image::Rgba([0, 40, 255, 255]));
         assert_ne!(generate(&red).dark.accent, generate(&blue).dark.accent);
+        assert_ne!(generate(&red).dark.red, generate(&blue).dark.red);
+        assert_ne!(generate(&red).light.brights, generate(&blue).light.brights);
         let invisible = image::RgbaImage::from_pixel(32, 32, image::Rgba([255, 40, 0, 0]));
         assert_eq!(
             generate(&invisible),
