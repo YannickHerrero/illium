@@ -1,5 +1,6 @@
 pub mod demo;
 pub mod leader;
+pub mod launch;
 pub mod library;
 pub mod tabs;
 
