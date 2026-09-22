@@ -39,6 +39,7 @@ pub enum Event {
     Command(Command, Option<crate::request::ReplyTo>),
     Window(u32, isize),
     Search(String),
+    AppsIndexed(u64, Vec<shell::App>),
     Launch(i32),
     Dismiss,
     Reload,
@@ -1080,6 +1081,9 @@ impl Manager {
                 self.finish_editor(outcome);
             }
             Event::Search(q) => self.shell.search(&q, self.config.launcher.max_results),
+            Event::AppsIndexed(generation, apps) => {
+                self.shell.indexed(generation, apps, self.config.launcher.max_results);
+            },
             Event::Launch(n) if self.shell.meta => {
                 let max = self.config.launcher.max_results;
                 if let Some(command) = self.shell.meta_activate(n.max(0) as usize, max) {

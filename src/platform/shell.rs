@@ -191,6 +191,11 @@ pub struct Shell {
     popup_pending: Option<Rect>,
     popup_keyboard: bool,
     pub apps: Vec<App>,
+    indexed_apps: Vec<App>,
+    index_generation: u64,
+    index_running: bool,
+    index_again: bool,
+    aliases: Vec<App>,
     pub results: Vec<App>,
     pub visible: bool,
     tx: EventSender,
@@ -284,6 +289,11 @@ impl Shell {
             popup_pending: None,
             popup_keyboard: false,
             apps: vec![],
+            indexed_apps: vec![],
+            index_generation: 0,
+            index_running: false,
+            index_again: false,
+            aliases: vec![],
             results: vec![],
             visible: false,
             pending: false,
@@ -475,7 +485,7 @@ impl Shell {
         self.launcher.set_fg(color(&c.theme.text));
         self.launcher.set_accent(color(&c.theme.accent));
         self.launcher.set_overlay(color(&c.theme.overlay));
-        self.apps = c
+        self.aliases = c
             .apps
             .apps
             .iter()
@@ -487,34 +497,66 @@ impl Shell {
             })
             .collect();
         for (label, name) in Self::APPS {
-            self.apps.push(App {
+            self.aliases.push(App {
                 name: label.into(),
                 target: String::new(),
                 shortcut: false,
                 app: Some(name.into()),
             });
         }
-        for env in ["APPDATA", "PROGRAMDATA"] {
-            if let Some(root) = std::env::var_os(env) {
-                scan(
-                    &std::path::PathBuf::from(root).join("Microsoft/Windows/Start Menu/Programs"),
-                    &mut self.apps,
-                );
-            }
-        }
-        for (name, target) in native::packaged_apps() {
-            self.apps.push(App {
-                name,
-                target,
-                shortcut: true,
-                app: None,
-            });
-        }
+        self.rebuild_apps(c.launcher.max_results);
+        self.reindex(); // Explicit reload also discovers installed/removed applications.
+        Ok(())
+    }
+    fn rebuild_apps(&mut self, max: usize) {
+        self.apps = self.aliases.iter().chain(&self.indexed_apps).cloned().collect();
         self.apps.sort_by_key(|a| a.name.to_lowercase());
         self.apps.dedup_by(|a, b| a.name == b.name);
-        tracing::info!(count = self.apps.len(), "applications indexed");
-        self.search("", c.launcher.max_results);
-        Ok(())
+        let query = self.launcher.get_query();
+        self.search(&query, max);
+    }
+    fn reindex(&mut self) {
+        if self.index_running {
+            self.index_again = true;
+            return;
+        }
+        self.index_running = true;
+        self.index_generation = self.index_generation.wrapping_add(1);
+        let generation = self.index_generation;
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let started = std::time::Instant::now();
+            let mut apps = Vec::new();
+            for env in ["APPDATA", "PROGRAMDATA"] {
+                if let Some(root) = std::env::var_os(env) {
+                    scan(&std::path::PathBuf::from(root).join("Microsoft/Windows/Start Menu/Programs"), &mut apps);
+                }
+            }
+            apps.extend(native::packaged_apps().into_iter().map(|(name, target)| App {
+                name, target, shortcut: true, app: None,
+            }));
+            tracing::debug!(elapsed_ms = started.elapsed().as_millis(), count = apps.len(), "applications indexed off UI thread");
+            // This is a worker, not a hook: retry a full bounded queue so the
+            // single-flight completion cannot be lost during an event burst.
+            let mut event = Event::AppsIndexed(generation, apps);
+            loop {
+                match tx.send(event) {
+                    Ok(()) => break,
+                    Err(std::sync::mpsc::TrySendError::Full(e)) => {
+                        event = e;
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    Err(std::sync::mpsc::TrySendError::Disconnected(_)) => break,
+                }
+            }
+        });
+    }
+    pub fn indexed(&mut self, generation: u64, apps: Vec<App>, max: usize) {
+        if generation != self.index_generation { return; }
+        self.index_running = false;
+        self.indexed_apps = apps;
+        self.rebuild_apps(max);
+        if std::mem::take(&mut self.index_again) { self.reindex(); }
     }
     pub fn arrange(&mut self, c: &Config, monitors: &[Rect]) -> bool {
         if self.pending {

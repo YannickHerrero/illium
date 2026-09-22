@@ -678,8 +678,14 @@ pub fn packaged_apps() -> Vec<(String, String)> {
     use windows::Win32::{System::Com::*, UI::Shell::*};
     let mut out = Vec::new();
     unsafe {
-        // The UI toolkit may already have initialized COM on this thread.
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        // This enumeration runs on a dedicated worker. Balance even S_FALSE;
+        // the guard is declared before interfaces so they are released first.
+        if CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_err() { return out; }
+        struct Apartment;
+        impl Drop for Apartment {
+            fn drop(&mut self) { unsafe { CoUninitialize(); } }
+        }
+        let _apartment = Apartment;
         let Ok(folder) =
             SHGetKnownFolderItem::<IShellItem>(&FOLDERID_AppsFolder, KF_FLAG_DEFAULT, None)
         else {
