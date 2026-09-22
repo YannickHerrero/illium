@@ -22,7 +22,7 @@ export component View inherits Window {
     changed open => { if root.open { root.action("refresh"); } }
     background: bg;
     Rectangle {
-        border-width: 1px; border-color: root.overlay;
+        border-width: 1px; border-color: root.accent;
         if root.provider-error != "" || root.data.rows.length == 0: Text {
             x: 20px; y: 20px; width: parent.width - 40px;
             text: root.provider-error != "" ? root.provider-error : "Loading time zones…";
