@@ -178,10 +178,27 @@ impl Fonts {
         }
     }
 }
+/// Most terminal cells contain one Unicode scalar. Only combining sequences
+/// need owned text; ordinary cells no longer allocate while building a frame.
+enum Glyph {
+    Empty,
+    Scalar(char),
+    Combined(String),
+}
+impl Glyph {
+    fn with_str<T>(&self, use_text: impl FnOnce(&str) -> T) -> T {
+        let mut utf8 = [0; 4];
+        use_text(match self {
+            Self::Empty => "",
+            Self::Scalar(ch) => ch.encode_utf8(&mut utf8),
+            Self::Combined(text) => text,
+        })
+    }
+}
 struct Cell {
     col: usize,
     row: usize,
-    text: String,
+    text: Glyph,
     fg: Rgb,
     bg: Rgb,
     background: bool,
@@ -237,15 +254,17 @@ impl Frame {
                     b: fg.b / 2,
                 };
             }
-            let mut text = String::new();
-            if !c.flags.intersects(
+            let text = if c.flags.intersects(
                 Flags::HIDDEN | Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER,
             ) {
-                text.push(c.c);
-                if let Some(extra) = c.zerowidth() {
-                    text.extend(extra);
-                }
-            }
+                Glyph::Empty
+            } else if let Some(extra) = c.zerowidth().filter(|extra| !extra.is_empty()) {
+                let mut text = c.c.to_string();
+                text.extend(extra);
+                Glyph::Combined(text)
+            } else {
+                Glyph::Scalar(c.c)
+            };
             frame.cells.push(Cell {
                 col: indexed.point.column.0,
                 row: row as usize,
@@ -274,7 +293,7 @@ impl Frame {
                 frame.cells.push(Cell {
                     col,
                     row,
-                    text: c.to_string(),
+                    text: Glyph::Scalar(c),
                     fg: p.colors[NamedColor::Foreground as usize],
                     bg: p.selection,
                     background: true,
@@ -430,19 +449,19 @@ impl Surface {
             let layouts: Vec<_> = frame
                 .cells
                 .iter()
-                .map(|c| {
-                    if c.text.trim().is_empty() {
+                .map(|c| c.text.with_str(|text| {
+                    if text.trim().is_empty() {
                         Ok(None)
                     } else {
                         self.fonts
                             .layout(
-                                &c.text,
+                                text,
                                 u8::from(c.flags.contains(Flags::BOLD))
                                     | (2 * u8::from(c.flags.contains(Flags::ITALIC))),
                             )
                             .map(Some)
                     }
-                })
+                }))
                 .collect::<Result<_>>()?;
             self.context.BeginDraw();
             self.context

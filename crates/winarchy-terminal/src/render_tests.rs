@@ -6,6 +6,22 @@ unsafe extern "system" fn procedure(hwnd: HWND, message: u32, w: WPARAM, l: LPAR
     unsafe { DefWindowProcW(hwnd, message, w, l) }
 }
 #[test]
+fn frame_preserves_combining_wide_and_hidden_cells_without_scalar_allocations() {
+    let mut model = Model::new(Size::new(20, 2), 20);
+    model.feed("é界 e\u{301} \x1b[8mX\x1b[0m".as_bytes());
+    let palette = Palette::new(&winarchy_theme::Theme::default_theme());
+    let frame = Frame::new(Some(&model), &palette);
+    let cell = |col| frame.cells.iter().find(|cell| cell.row == 0 && cell.col == col).unwrap();
+    assert!(matches!(cell(0).text, Glyph::Scalar('é')));
+    assert!(matches!(cell(1).text, Glyph::Scalar('界')));
+    assert!(cell(1).flags.contains(Flags::WIDE_CHAR));
+    assert!(matches!(cell(2).text, Glyph::Empty));
+    assert!(matches!(cell(4).text, Glyph::Combined(_)));
+    assert_eq!(cell(4).text.with_str(str::to_owned), "e\u{301}");
+    assert!(matches!(cell(6).text, Glyph::Empty));
+    assert_eq!(Glyph::Scalar('🦀').with_str(str::to_owned), "🦀");
+}
+#[test]
 #[ignore = "requires a desktop compositor; creates hidden windows only"]
 fn hidden_gpu_surface_survives_resize_and_font_changes() {
     unsafe {
@@ -34,6 +50,13 @@ fn hidden_gpu_surface_survives_resize_and_font_changes() {
         .unwrap();
         let config = Config::default();
         let g = Graphics::new(&config).unwrap();
+        for style in 0..4 {
+            let first = g.fonts.layout("e\u{301}", style).unwrap();
+            let count = g.fonts.cache.borrow().iter().map(HashMap::len).sum::<usize>();
+            let second = g.fonts.layout("e\u{301}", style).unwrap();
+            assert_eq!(first.as_raw(), second.as_raw());
+            assert_eq!(g.fonts.cache.borrow().iter().map(HashMap::len).sum::<usize>(), count);
+        }
         let mut surface = Surface::new(g.clone(), hwnd, 320, 160, 96, 4).unwrap();
         let mut theme = winarchy_theme::Theme::default_theme();
         theme.background_opacity = 0.85;
