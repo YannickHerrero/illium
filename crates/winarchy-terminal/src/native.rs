@@ -53,6 +53,7 @@ struct Window {
     session: Option<Session>,
     pending: Arc<AtomicBool>,
     timer: bool,
+    last_paint: Option<Instant>,
     selecting: bool,
     mouse_button: Option<u8>,
     last_mouse: Option<(usize, usize)>,
@@ -229,7 +230,13 @@ fn run_inner(
             if result == WAIT_OBJECT_0 {
                 for window in app.windows.values_mut() {
                     if window.pending.load(Ordering::Acquire) {
-                        window.schedule();
+                        // Isolated output/input paints on the leading edge. A
+                        // sustained stream keeps the bounded coalescing timer.
+                        if !window.timer && window.last_paint.is_none_or(|at| at.elapsed() >= std::time::Duration::from_millis(8)) {
+                            window.paint(&app.palette);
+                        } else {
+                            window.schedule();
+                        }
                     }
                 }
             }
@@ -421,6 +428,7 @@ impl App {
                 session: None,
                 pending: Arc::new(AtomicBool::new(false)),
                 timer: false,
+                last_paint: None,
                 selecting: false,
                 mouse_button: None,
                 last_mouse: None,
@@ -601,6 +609,7 @@ impl Window {
                 sync_pending,
             ));
         }
+        self.last_paint = Some(Instant::now());
         if let Err(e) = self.surface.draw(&frame) {
             crate::log(&format!("render: {e}"));
             title(
