@@ -49,6 +49,7 @@ impl Suggestion {
 pub struct Library {
     dir: PathBuf,
     data: Data,
+    stamp: Option<(u64, SystemTime)>,
 }
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 fn site(url: &str, title: &str) -> Option<Site> {
@@ -69,8 +70,18 @@ fn site(url: &str, title: &str) -> Option<Site> {
             .collect(),
     })
 }
+fn stamp(dir: &Path) -> Result<Option<(u64, SystemTime)>> {
+    match fs::metadata(dir.join("library.json")) {
+        Ok(meta) => Ok(Some((meta.len(), meta.modified()?))),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
 impl Library {
     pub fn load(dir: &Path) -> Result<Self> {
+        // Observe before reading: a concurrent atomic replacement can at worst
+        // cause an extra reload, never mark an older snapshot as the new file.
+        let stamp = stamp(dir)?;
         let data = match fs::read(dir.join("library.json")) {
             Ok(bytes) => serde_json::from_slice(&bytes)?,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Data::default(),
@@ -79,6 +90,7 @@ impl Library {
         Ok(Self {
             dir: dir.into(),
             data,
+            stamp,
         })
     }
     /// A small file lock and reload avoid losing another browser window's edits.
@@ -96,10 +108,13 @@ impl Library {
         fs::write(&temp, serde_json::to_vec(&latest)?)?;
         fs::rename(temp, self.dir.join("library.json"))?;
         self.data = latest;
+        self.stamp = stamp(&self.dir)?;
         Ok(result)
     }
     pub fn reload(&mut self) -> Result<()> {
-        self.data = Self::load(&self.dir)?.data;
+        if stamp(&self.dir)? != self.stamp {
+            *self = Self::load(&self.dir)?;
+        }
         Ok(())
     }
     pub fn visit(&mut self, url: &str, title: &str) -> Result<()> {
@@ -225,6 +240,27 @@ mod tests {
         let roundtrip: Site =
             serde_json::from_str(&serde_json::to_string(&suggestion.site).unwrap()).unwrap();
         assert_eq!(roundtrip.visited_at, Some(100));
+    }
+    #[test]
+    fn reload_tracks_external_changes_and_deletion_without_losing_good_data() {
+        let dir = std::env::temp_dir().join(format!("browser-library-reload-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let mut reader = Library::load(&dir).unwrap();
+        let mut writer = Library::load(&dir).unwrap();
+        writer.visit("https://example.com", "External visit").unwrap();
+        reader.reload().unwrap();
+        assert_eq!(reader.suggestions("").len(), 1);
+        let pointer = reader.data.history.as_ptr();
+        reader.reload().unwrap();
+        assert_eq!(reader.data.history.as_ptr(), pointer);
+        fs::write(dir.join("library.json"), "invalid").unwrap();
+        assert!(reader.reload().is_err());
+        assert_eq!(reader.suggestions("").len(), 1);
+        fs::remove_file(dir.join("library.json")).unwrap();
+        reader.reload().unwrap();
+        assert!(reader.suggestions("").is_empty());
+        fs::remove_dir_all(dir).unwrap();
     }
     #[test]
     fn persist_merge_deduplicate_and_bound() {
