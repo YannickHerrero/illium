@@ -864,7 +864,11 @@ impl Manager {
             Command::Theme(name) => {
                 let path = self.config.home.join("winarchy.toml");
                 let old = crate::files::read_config(&path)?;
-                std::fs::write(&path, format!("theme = {name:?}\n")).map_err(|e| e.to_string())?;
+                let mut doc = String::from_utf8_lossy(&old)
+                    .parse::<toml_edit::DocumentMut>()
+                    .map_err(|e| format!("winarchy.toml: {e}"))?;
+                doc["theme"] = toml_edit::value(name.as_str());
+                std::fs::write(&path, doc.to_string()).map_err(|e| e.to_string())?;
                 if let Err(e) = self.reload_config(false) {
                     let _ = std::fs::write(path, old);
                     return Err(e);

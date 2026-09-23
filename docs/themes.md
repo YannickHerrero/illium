@@ -8,7 +8,7 @@ winarchyctl theme set catppuccin-latte
 winarchyctl theme set catppuccin-mocha
 ```
 
-The command validates the new configuration, refreshes the shell, and writes the selected name to `winarchy.toml`. Failure restores the previous global file.
+The command validates the new configuration, refreshes the shell, and writes the selected name to `winarchy.toml`, keeping its other settings. Failure restores the previous global file.
 
 To add a theme, copy an existing TOML file to `themes/my-theme.toml` and edit its colors:
 
