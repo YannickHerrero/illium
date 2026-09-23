@@ -1,6 +1,7 @@
 mod applet;
 mod apps;
 mod audio;
+mod battery;
 mod browser;
 mod demo;
 mod dictate;

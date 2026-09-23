@@ -1,0 +1,270 @@
+struct Stat { label: string, value: string }
+struct Data {
+    present: bool, percent: int, plugged: bool, state: string, time: string,
+    stats: [Stat], mode: string, saver-active: bool, saver-threshold: int,
+    saver-forced: bool, brightness: int, travel: bool, travel-summary: string,
+    error: string,
+}
+component Slider inherits Rectangle {
+    in property <int> value;
+    in property <color> fill;
+    in property <color> track;
+    in property <color> knob;
+    callback changed(int);
+    callback grabbed(bool);
+    property <float> ratio: touch.pressed ? max(0, min(1, touch.mouse-x / self.width)) : value / 100;
+    height: 16px;
+    Rectangle {
+        y: 5px; height: 6px; width: parent.width; background: track; border-radius: 3px;
+        Rectangle { x: 0; width: parent.width * root.ratio; height: parent.height; background: fill; border-radius: 3px; }
+    }
+    Rectangle { x: (parent.width - 14px) * root.ratio; y: 1px; width: 14px; height: 14px; border-radius: 7px; background: knob; }
+    touch := TouchArea {
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) { root.grabbed(true); }
+            if (e.kind == PointerEventKind.up) { root.grabbed(false); root.changed(round(max(0, min(1, self.mouse-x / self.width)) * 100)); }
+            if (e.kind == PointerEventKind.cancel) { root.grabbed(false); }
+        }
+    }
+}
+component SectionHeader inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value;
+    in property <color> fg;
+    in property <color> muted;
+    height: 20px;
+    Text { text: label; color: muted; font-size: 12px; font-weight: 600; letter-spacing: 1px; vertical-alignment: center; horizontal-stretch: 1; }
+    Text { text: value; color: fg; font-size: 12px; vertical-alignment: center; horizontal-alignment: right; }
+}
+component ModeButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    in property <color> fg;
+    in property <color> muted;
+    in property <color> surface;
+    in property <color> overlay;
+    callback chosen();
+    height: 36px;
+    border-radius: 3px;
+    border-width: 1px;
+    border-color: active ? muted : overlay;
+    background: active ? surface : (touch.has-hover ? surface.with-alpha(0.5) : transparent);
+    Text { width: 100%; height: 100%; text: label; color: active ? fg : muted; font-size: 13px; horizontal-alignment: center; vertical-alignment: center; }
+    touch := TouchArea { clicked => { root.chosen(); } }
+}
+component Switch inherits Rectangle {
+    in property <string> title;
+    in property <string> detail;
+    in property <bool> on;
+    in property <color> fg;
+    in property <color> muted;
+    in property <color> surface;
+    in property <color> overlay;
+    callback toggled();
+    height: 64px;
+    border-radius: 3px;
+    border-width: 1px;
+    border-color: overlay;
+    background: touch.has-hover ? surface.with-alpha(0.5) : transparent;
+    HorizontalLayout {
+        padding-left: 14px; padding-right: 14px; spacing: 14px;
+        VerticalLayout {
+            alignment: center; spacing: 4px; horizontal-stretch: 1;
+            Text { text: root.title; color: root.fg; font-size: 14px; font-weight: 600; overflow: elide; }
+            Text { text: root.detail; color: root.muted; font-size: 11px; wrap: word-wrap; }
+        }
+        Rectangle {
+            width: 48px;
+            Rectangle {
+                y: (parent.height - self.height) / 2; width: 48px; height: 26px;
+                background: root.on ? root.overlay : root.surface;
+                border-radius: 3px;
+                Rectangle {
+                    x: root.on ? parent.width - self.width - 3px : 3px;
+                    y: 3px; width: 20px; height: 20px; border-radius: 2px;
+                    background: root.on ? root.fg : root.muted;
+                    animate x { duration: 120ms; }
+                }
+            }
+        }
+    }
+    touch := TouchArea { clicked => { root.toggled(); } }
+}
+export component View inherits Window {
+    no-frame: true;
+    in property <length> popup-width: 400px;
+    in property <length> popup-height: 560px;
+    width: popup-width; height: popup-height;
+    in property <color> bg: #1e1e2e;
+    in property <color> surface: #313244;
+    in property <color> overlay: #45475a;
+    in property <color> fg: #cdd6f4;
+    in property <color> muted: #a6adc8;
+    in property <color> accent: #cba6f7;
+    in property <color> red: #f38ba8;
+    in property <Data> data;
+    in property <bool> busy: false;
+    in property <bool> has-data: false;
+    in property <bool> open: false;
+    in property <string> provider-error;
+    callback action(string);
+    callback completed();
+    // Optimistic values until the provider confirms the change.
+    private property <string> pending-mode: "";
+    private property <int> pending-brightness: -1;
+    private property <int> pending-saver: -1;
+    private property <int> pending-travel: -1;
+    private property <string> mode: pending-mode == "" ? data.mode : pending-mode;
+    private property <int> brightness: pending-brightness < 0 ? data.brightness : pending-brightness;
+    private property <bool> saver: pending-saver < 0 ? data.saver-forced : pending-saver == 1;
+    private property <bool> travel: pending-travel < 0 ? data.travel : pending-travel == 1;
+    private property <bool> dragging: false;
+    private property <string> error: data.error != "" ? data.error : provider-error;
+    completed => { pending-mode = ""; pending-brightness = -1; pending-saver = -1; pending-travel = -1; }
+    function set-mode(mode: string) {
+        if mode != root.mode { pending-mode = mode; root.action("mode " + mode); }
+    }
+    changed open => { if root.open { root.action("refresh"); } }
+    background: bg;
+    Timer {
+        interval: 5s;
+        running: root.open;
+        triggered => { if !root.dragging && !root.busy { root.action("refresh"); } }
+    }
+    Rectangle {
+        border-width: 1px; border-color: root.accent;
+        VerticalLayout {
+            padding: 18px; spacing: 14px;
+            HorizontalLayout {
+                height: 44px; spacing: 14px;
+                Rectangle {
+                    width: 30px;
+                    Rectangle {
+                        x: 0; y: (parent.height - 16px) / 2; width: 27px; height: 16px;
+                        border-width: 2px; border-color: root.fg; border-radius: 3px;
+                        Rectangle {
+                            x: 3px; y: 3px; height: 10px; border-radius: 1px;
+                            width: (parent.width - 6px) * max(0, min(100, root.data.percent)) / 100;
+                            background: root.data.percent <= 15 && !root.data.plugged ? root.red : root.fg;
+                        }
+                    }
+                    Rectangle { x: 27px; y: (parent.height - 6px) / 2; width: 3px; height: 6px; background: root.fg; border-radius: 1px; }
+                }
+                VerticalLayout {
+                    spacing: 3px; horizontal-stretch: 1;
+                    Text { text: "Battery"; color: root.fg; font-size: 21px; font-weight: 600; }
+                    Text {
+                        text: root.data.time == "" ? root.data.state : root.data.state + " · " + root.data.time;
+                        color: root.muted; font-size: 11px; letter-spacing: 1.5px; overflow: elide;
+                    }
+                }
+                Text { text: "\{root.data.percent}%"; color: root.fg; font-size: 34px; font-weight: 600; vertical-alignment: center; }
+            }
+            Rectangle {
+                height: 6px; background: root.overlay; border-radius: 3px;
+                Rectangle {
+                    x: 0; height: parent.height; border-radius: 3px;
+                    width: parent.width * max(0, min(100, root.data.percent)) / 100;
+                    background: root.data.percent <= 15 && !root.data.plugged ? root.red : root.fg;
+                }
+            }
+            if root.data.stats.length > 0: Rectangle {
+                height: Math.ceil(root.data.stats.length / 2) * 22px;
+                for stat[i] in root.data.stats: HorizontalLayout {
+                    width: (parent.width - 24px) / 2;
+                    height: 22px;
+                    x: Math.mod(i, 2) * (self.width + 24px);
+                    y: Math.floor(i / 2) * 22px;
+                    Text { text: stat.label; color: root.muted; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+                    Text { text: stat.value; color: root.fg; font-size: 12px; vertical-alignment: center; horizontal-alignment: right; }
+                }
+            }
+            Rectangle { height: 1px; background: root.overlay; }
+            Flickable {
+                vertical-stretch: 1;
+                viewport-height: max(self.height, body.preferred-height);
+                body := VerticalLayout {
+                    alignment: start; spacing: 12px;
+                    if root.mode != "": VerticalLayout {
+                        spacing: 10px;
+                        SectionHeader { label: "POWER MODE"; value: root.data.plugged ? "Plugged in" : "On battery"; fg: root.muted; muted: root.muted; }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            ModeButton {
+                                label: "Power saver"; active: root.mode == "saver";
+                                fg: root.fg; muted: root.muted; surface: root.surface; overlay: root.overlay;
+                                chosen => { root.set-mode("saver"); }
+                            }
+                            ModeButton {
+                                label: "Balanced"; active: root.mode == "balanced";
+                                fg: root.fg; muted: root.muted; surface: root.surface; overlay: root.overlay;
+                                chosen => { root.set-mode("balanced"); }
+                            }
+                            ModeButton {
+                                label: "Performance"; active: root.mode == "performance";
+                                fg: root.fg; muted: root.muted; surface: root.surface; overlay: root.overlay;
+                                chosen => { root.set-mode("performance"); }
+                            }
+                        }
+                    }
+                    if root.brightness >= 0: VerticalLayout {
+                        spacing: 10px;
+                        SectionHeader { label: "BRIGHTNESS"; value: "\{root.brightness}%"; fg: root.fg; muted: root.muted; }
+                        Slider {
+                            value: root.brightness; fill: root.fg; track: root.overlay; knob: root.fg;
+                            grabbed(held) => { root.dragging = held; }
+                            changed(level) => { root.pending-brightness = level; root.action("brightness \{level}"); }
+                        }
+                    }
+                    if root.data.saver-threshold >= 0 || root.data.travel-summary != "": VerticalLayout {
+                        spacing: 10px;
+                        SectionHeader { label: "ENERGY"; value: root.data.saver-active ? "Battery saver on" : ""; fg: root.fg; muted: root.muted; }
+                        if root.data.saver-threshold >= 0: Switch {
+                            title: "Battery saver";
+                            detail: root.saver ? "Always on while running on battery"
+                                : root.data.saver-threshold == 0 ? "Never turns on by itself"
+                                : "Turns on below \{root.data.saver-threshold}% on battery";
+                            on: root.saver;
+                            fg: root.fg; muted: root.muted; surface: root.surface; overlay: root.overlay;
+                            toggled => {
+                                root.action(root.saver ? "saver off" : "saver on");
+                                root.pending-saver = root.saver ? 0 : 1;
+                            }
+                        }
+                        if root.data.travel-summary != "": Switch {
+                            title: "Travel mode";
+                            detail: root.data.travel-summary;
+                            on: root.travel;
+                            fg: root.fg; muted: root.muted; surface: root.surface; overlay: root.overlay;
+                            toggled => {
+                                root.action(root.travel ? "travel off" : "travel on");
+                                root.pending-travel = root.travel ? 0 : 1;
+                            }
+                        }
+                    }
+                }
+            }
+            if root.error != "": Text { text: root.error; color: root.fg; font-size: 11px; wrap: word-wrap; max-height: 44px; overflow: elide; }
+        }
+    }
+    if !root.has-data || !root.data.present: Rectangle {
+        x: 1px; y: 1px; width: root.width - 2px; height: root.height - 2px;
+        background: root.bg;
+        VerticalLayout {
+            padding: 18px; spacing: 20px; alignment: start;
+            Text { text: "Battery"; color: root.fg; font-size: 21px; font-weight: 600; }
+            Text {
+                text: root.provider-error != "" ? root.provider-error : root.has-data ? "No battery" : "Loading battery…";
+                color: root.muted; font-size: 12px; wrap: word-wrap;
+            }
+            if !root.has-data: VerticalLayout {
+                spacing: 20px;
+                for ratio in [0.8, 0.6, 0.9]: Rectangle {
+                    height: 16px;
+                    Rectangle { width: parent.width * ratio; height: 100%; background: root.overlay; border-radius: 3px; }
+                }
+            }
+        }
+        TouchArea { }
+    }
+}

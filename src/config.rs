@@ -275,6 +275,14 @@ const DEFAULTS: &[(&str, &str)] = &[
         include_str!("../config/applets/volume/source.svg"),
     ),
     (
+        "applets/battery/applet.toml",
+        include_str!("../config/applets/battery/applet.toml"),
+    ),
+    (
+        "applets/battery/view.slint",
+        include_str!("../config/applets/battery/view.slint"),
+    ),
+    (
         "applets/_template/applet.toml",
         include_str!("../config/applets/_template/applet.toml"),
     ),

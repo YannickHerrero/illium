@@ -17,7 +17,7 @@ folder holding an `applet.toml`, or the configuration is rejected. Applets may
 also be listed in the `drawer` list, folded behind a chevron until the bar is
 hovered or the chevron clicked (see [drawer](configuration.md#drawer)).
 
-Winarchy ships `weather`, `wifi`, `calendar`, `timezones`, `volume` and `_template`; they
+Winarchy ships `weather`, `wifi`, `calendar`, `timezones`, `volume`, `battery` and `_template`; they
 are installed with the other defaults and never overwritten. `calendar` uses
 `attach = "clock"`: it has no icon and opens when the date is clicked;
 `timezones` uses `attach = "time"` and opens from the separate time target. Both
@@ -60,7 +60,7 @@ applets/weather/
 | `script` | `<name>.ps1` | PowerShell script run hidden with `-NoProfile -ExecutionPolicy Bypass` |
 | `command` | none | Full command line instead of `script` |
 | `wifi_traffic` | `false` | Merge native Wi-Fi traffic counters using the script's `connected` and `interface_guid` fields; independent of script cadence |
-| `provider` | none | `builtin:clock`, `builtin:system` or `builtin:volume` instead of a process |
+| `provider` | none | `builtin:clock`, `builtin:system`, `builtin:volume` or `builtin:battery` instead of a process |
 | `focusable` | `false` | Let the popup take keyboard focus |
 | `attach` | none | Built-in module (`clock`, `time`, `battery`, `cpu`, `memory`, `volume`, `window-title`) whose click opens this applet; it then has no icon and is loaded whenever that module is in a section |
 | `[settings]` | empty | Passed to the provider as `WINARCHY_APPLET_<KEY>` variables |
@@ -127,13 +127,52 @@ Built-in providers avoid a process for fast cadences:
   the active devices, `input_volume`, `input_muted`, `input_level` (peak of the
   default input at call time, in percent) and `sessions`, up to 16
   `{ id, name, volume, muted }` entries for the applications using the default
-  output. It is the only built-in provider that acts on the view's action:
+  output. It acts on the view's action:
   `set <percent>`, `up`, `down` (5% steps), `toggle-mute`, `input-set <percent>`,
   `input-toggle-mute`, `output <id>`, `input <id>` (default device for every
   role, through the same undocumented COM interface the third-party switchers
   use) and `session <percent> <id>`. Setting a level above zero also unmutes;
   `refresh` only reads. The bar reads the same endpoint for its speaker icon,
   crossed out while muted.
+- `builtin:battery`: `present` (false without a battery), `percent`, `plugged`,
+  `state` (`Charging`, `Full`, `Not charging`, `On battery`), `time` (to full or
+  left, empty when unknown), `stats`, a `{ label, value }` list of the figures
+  the battery reports (design capacity, full charge, health, cycles, power),
+  `mode` (`saver`, `balanced`, `performance`, empty when unavailable),
+  `saver_active`, `saver_threshold` (-1 when unavailable), `saver_forced`,
+  `brightness` (-1 without an adjustable built-in display), `travel`,
+  `travel_summary` (empty when travel mode can change nothing) and `error`, the
+  failure of the last action. Actions: `mode <saver|balanced|performance>`,
+  `brightness <percent>`, `saver <on|off>`, `travel <on|off>` and `refresh`.
+  It runs on a worker thread, like `builtin:volume`.
+
+### Battery panel
+
+`battery` attaches to the battery module and uses only generic Windows
+interfaces, so it works on any laptop; a control the machine lacks is hidden.
+
+- Charge, state and remaining time come from `GetSystemPowerStatus`; capacities,
+  cycles and power from the battery class driver (the source of
+  `powercfg /batteryreport`). Batteries reporting relative capacities show no
+  Wh figures, and several batteries are summed. "Not charging" while plugged in
+  is how firmware charge limits appear; Winarchy does not set such limits,
+  which are vendor specific.
+- The power mode is the Windows setting of the same name (the power mode
+  functions of `powrprof.dll`, undocumented but used by the Settings app). It
+  applies to the current power source, and like Windows it is only offered
+  while the Balanced plan is active.
+- Brightness uses the WMI brightness classes of built-in displays; external
+  monitors are not adjusted.
+- The battery saver switch keeps it on whenever the machine runs on battery,
+  by setting its threshold to 100% in the active plan; switching it off
+  restores the previous threshold (20%, the Windows default, if unknown).
+- Travel mode turns on Power saver mode and the battery saver and lowers the
+  brightness to 40% at most, then restores the previous values when switched
+  off. The values to restore are kept in `battery.json` in the configuration
+  home, so they survive a daemon restart.
+
+No setting needs administrator rights. The panel refreshes every 5 seconds
+while open.
 
 ### Timezone viewer
 
