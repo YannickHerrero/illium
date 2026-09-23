@@ -384,8 +384,12 @@ impl Config {
         Ok(())
     }
     pub fn load(home: &Path) -> Result<Self, String> {
+        crate::plugins::ensure_ready(home)?;
+        Self::load_for_plugin_transaction(home)
+    }
+    pub(crate) fn load_for_plugin_transaction(home: &Path) -> Result<Self, String> {
         // Apply the same bounds at startup/reload as in the directory watcher.
-        crate::files::snapshot(home)?;
+        crate::files::snapshot_for_plugin_transaction(home)?;
         crate::applets::disabled(home)?;
         let global: Global = parse(home, "winarchy.toml")?;
         if !winarchy_theme::valid_name(&global.theme) {

@@ -75,6 +75,14 @@ pub fn same_subsystems(
         .eq(after.iter().filter(subsystem))
 }
 pub fn snapshot(home: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, String> {
+    crate::plugins::ensure_ready(home)?;
+    snapshot_for_plugin_transaction(home)
+}
+/// The package manager validates its own tentative publication before releasing
+/// the transaction gate. Other callers must use `snapshot`.
+pub(crate) fn snapshot_for_plugin_transaction(
+    home: &Path,
+) -> Result<Vec<(PathBuf, Vec<u8>)>, String> {
     let mut result = Vec::new();
     let mut examined = 0;
     for dir in [home.to_path_buf(), home.join("themes")] {

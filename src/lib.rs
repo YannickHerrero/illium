@@ -12,6 +12,7 @@ pub mod model;
 pub mod modifiers;
 #[cfg(windows)]
 pub mod platform;
+pub mod plugins;
 pub mod queue;
 pub mod request;
 pub mod state;

@@ -151,7 +151,9 @@ pub fn referenced(home: &Path, sections: &[&Vec<String>]) -> Vec<Result<Applet, 
     let mut out = Vec::new();
     let mut push = |name: &str, out: &mut Vec<Result<Applet, String>>| {
         if disabled.iter().any(|s| s == name)
-            || seen.iter().any(|s| s == name) || out.len() >= MAX_APPLETS {
+            || seen.iter().any(|s| s == name)
+            || out.len() >= MAX_APPLETS
+        {
             return;
         }
         seen.push(name.to_owned());
