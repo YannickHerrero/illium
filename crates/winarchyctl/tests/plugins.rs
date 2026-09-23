@@ -7,7 +7,7 @@ use std::{
 fn cli_local_package_lifecycle_and_json_inventory() {
     let temp = tempfile::tempdir().unwrap();
     let home = temp.path().join("home");
-    winarchy::config::Config::install(&home).unwrap();
+    winarchy_config::config::Config::install(&home).unwrap();
     let source = temp.path().join("package");
     fs::create_dir_all(source.join("payload")).unwrap();
     let manifest = "schema=1\nid='sample'\nkind='theme'\nversion='1.0.0'\nname='Sample'\n";

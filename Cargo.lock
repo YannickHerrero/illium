@@ -6038,7 +6038,6 @@ dependencies = [
  "raw-window-handle",
  "serde",
  "serde_json",
- "sha2",
  "slint",
  "slint-build",
  "slint-interpreter",
@@ -6049,6 +6048,7 @@ dependencies = [
  "toml_edit 0.22.27",
  "tracing",
  "tracing-subscriber",
+ "winarchy-config",
  "winarchy-ipc",
  "winarchy-theme",
  "windows 0.61.3",
@@ -6083,6 +6083,22 @@ dependencies = [
  "winarchy-ipc",
  "winarchy-theme",
  "windows 0.62.2",
+]
+
+[[package]]
+name = "winarchy-config"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "toml 0.8.23",
+ "toml_edit 0.22.27",
+ "tracing",
+ "winarchy-ipc",
+ "winarchy-theme",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -6141,7 +6157,7 @@ dependencies = [
  "rpassword",
  "serde_json",
  "tempfile",
- "winarchy",
+ "winarchy-config",
  "winarchy-ipc",
  "winarchy-theme",
  "winresource",

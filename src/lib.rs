@@ -1,20 +1,15 @@
+pub use winarchy_config::{applets, clock, config, files, keyboard, plugins};
 pub use winarchy_ipc::{command, protocol};
-pub mod applets;
 pub mod bar_hints;
 pub mod battery;
-pub mod clock;
-pub mod config;
 pub mod expose;
-pub mod files;
 pub mod keybindings;
-pub mod keyboard;
 pub mod layout;
 pub mod lockscreen;
 pub mod model;
 pub mod modifiers;
 #[cfg(windows)]
 pub mod platform;
-pub mod plugins;
 pub mod queue;
 pub mod request;
 pub mod state;

@@ -1,5 +1,5 @@
 fn plugin(args: &[String]) -> Result<(), String> {
-    use winarchy::plugins::{self, Kind};
+    use winarchy_config::plugins::{self, Kind};
     let home = winarchy_theme::config_home();
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     let backup = match args.as_slice() {

@@ -1,4 +1,5 @@
-use crate::{command::Command, config::Keys};
+use crate::config::Keys;
+use winarchy_ipc::command::Command;
 #[derive(Clone, Debug)]
 pub struct Binding {
     pub key: u32,
@@ -175,7 +176,7 @@ mod tests {
     #[test]
     fn all_defaults() {
         let keys: Keys =
-            toml::from_str(include_str!("../config/defaults/keybindings.toml")).unwrap();
+            toml::from_str(include_str!("../../../config/defaults/keybindings.toml")).unwrap();
         let bs = parse(&keys).unwrap();
         assert_eq!(bs.len(), 60);
         assert!(bs.iter().any(|b| b.command == Command::BarHints
@@ -270,7 +271,7 @@ mod tests {
     #[test]
     fn format_roundtrips_every_default() {
         let keys: Keys =
-            toml::from_str(include_str!("../config/defaults/keybindings.toml")).unwrap();
+            toml::from_str(include_str!("../../../config/defaults/keybindings.toml")).unwrap();
         for key in keys.keybindings.keys() {
             let (vk, modifiers) = chord(key).unwrap();
             let spelled = format(vk, modifiers).unwrap();
