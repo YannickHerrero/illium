@@ -62,6 +62,12 @@ pub static BAR_HINTS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU3
 /// Set while the keybindings editor records a chord: every key is consumed
 /// and reported as `Event::Capture` instead of running its binding.
 pub static CAPTURE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Set while the lock screen is shown: no binding runs and navigation keys
+/// are swallowed (`lockscreen::blocked`).
+pub static LOCKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// The password surface is the foreground window. Until then every key is
+/// swallowed, so a password can never land in the application behind.
+pub static LOCK_FOCUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Consumed {
     No,
@@ -142,6 +148,17 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                         consumed[k.vkCode as usize] = Consumed::No;
                         return LRESULT(1);
                     }
+                }
+                if LOCKED.load(std::sync::atomic::Ordering::Relaxed) {
+                    if down
+                        && (!LOCK_FOCUSED.load(std::sync::atomic::Ordering::Relaxed)
+                            || crate::lockscreen::blocked(k.vkCode, modifiers))
+                    {
+                        CONSUMED.lock().unwrap_or_else(|e| e.into_inner())[k.vkCode as usize] =
+                            Consumed::Modal;
+                        return LRESULT(1);
+                    }
+                    return CallNextHookEx(None, code, w, l);
                 }
                 if down && let Some((tx, bindings)) = STATE.get() {
                     let bindings = bindings.read().unwrap_or_else(|e| e.into_inner());

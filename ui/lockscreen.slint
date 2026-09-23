@@ -1,0 +1,99 @@
+// Winarchy lock screen: one surface per monitor over the blurred wallpaper.
+// Only the surface on the active monitor (`primary`) takes the password; the
+// daemon checks it and decides when to fall back to the Windows lock.
+export component LockView inherits Window {
+    title: "Winarchy Lock";
+    no-frame: true;
+    default-font-family: "JetBrains Mono";
+    in property <length> surface-width;
+    in property <length> surface-height;
+    width: surface-width; height: surface-height;
+    in property <color> bg;
+    in property <color> fg;
+    in property <color> muted;
+    in property <color> accent;
+    in property <image> backdrop;
+    in property <bool> has-backdrop;
+    in property <bool> ready;
+    in property <bool> primary;
+    in property <string> time;
+    in property <string> date;
+    /// Wrong password feedback, empty when there is nothing to report.
+    in property <string> message;
+    /// Bumped by the daemon to repaint the whole surface.
+    in-out property <int> repaint-nonce;
+    callback submit(string);
+    background: root.repaint-nonce < 0 ? transparent : root.bg;
+    forward-focus: field;
+    if root.has-backdrop && root.ready: Image {
+        width: root.width; height: root.height;
+        source: root.backdrop;
+        image-fit: cover;
+        image-rendering: smooth;
+    }
+    Rectangle {
+        width: root.width; height: root.height;
+        background: root.bg.with-alpha(root.has-backdrop ? 0.3 : 0.0);
+    }
+    Text {
+        visible: root.ready;
+        y: root.height * 0.38 - self.height;
+        width: root.width;
+        horizontal-alignment: center;
+        text: root.time;
+        color: root.fg.with-alpha(0.9);
+        font-size: 44px; font-weight: 700;
+        letter-spacing: 2px;
+    }
+    Text {
+        visible: root.ready;
+        y: root.height * 0.38 + 6px;
+        width: root.width;
+        horizontal-alignment: center;
+        text: root.date;
+        color: root.fg.with-alpha(0.55);
+        font-size: 13px;
+    }
+    box := Rectangle {
+        visible: root.ready && root.primary;
+        width: 316px; height: 52px;
+        x: (root.width - self.width) / 2;
+        y: root.height * 0.48;
+        background: root.bg.with-alpha(0.82);
+        border-width: 1px;
+        border-radius: 3px;
+        border-color: root.message != "" ? #d08770 : root.accent.with-alpha(0.7);
+        if field.text == "": Text {
+            width: parent.width; height: parent.height;
+            horizontal-alignment: center; vertical-alignment: center;
+            text: "Enter Password";
+            color: root.muted;
+            font-size: 15px;
+        }
+        field := TextInput {
+            x: 16px; width: parent.width - 32px; height: parent.height;
+            horizontal-alignment: center; vertical-alignment: center;
+            input-type: password;
+            // The bullets touch each other at the font's own spacing.
+            letter-spacing: 4px;
+            single-line: true;
+            color: root.fg;
+            font-size: 15px;
+            enabled: root.primary;
+            accepted => {
+                root.submit(self.text);
+                self.text = "";
+            }
+        }
+    }
+    Text {
+        visible: root.ready && root.primary && root.message != "";
+        y: box.y + box.height + 14px;
+        width: root.width;
+        horizontal-alignment: center;
+        text: root.message;
+        color: #d08770;
+        font-size: 12px;
+    }
+    public function focus-field() { field.focus(); }
+}

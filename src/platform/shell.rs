@@ -175,6 +175,7 @@ pub enum MetaEntry {
 pub(super) mod bar_hints;
 pub(super) mod expose;
 pub(super) mod keybindings;
+pub(super) mod lockscreen;
 pub(super) mod theme_picker;
 mod wallpaper;
 #[cfg(test)]
@@ -240,6 +241,7 @@ pub struct Shell {
     pub picker: theme_picker::Picker,
     pub editor: keybindings::Editor,
     pub expose: expose::Expose,
+    pub lock: lockscreen::Lock,
     surface_key: Option<(Vec<Rect>, bool, String, i32)>,
     pub backgrounds: Vec<Background>,
     pub bars: Vec<Bar>,
@@ -353,6 +355,7 @@ impl Shell {
             picker: theme_picker::Picker::new(tx.clone())?,
             editor: keybindings::Editor::new(tx.clone())?,
             expose: expose::Expose::new(tx.clone())?,
+            lock: lockscreen::Lock::new(tx.clone()),
             surface_key: None,
             backgrounds: vec![],
             bars: vec![],
@@ -767,6 +770,7 @@ impl Shell {
         self.picker.arrange();
         self.editor.arrange();
         self.expose.arrange();
+        self.lock.arrange();
         true
     }
     pub fn toggle_bar_background(&mut self) {
@@ -889,6 +893,7 @@ impl Shell {
             || self.picker.opened
             || self.editor.opened
             || self.expose.opened
+            || self.lock.opened
     }
     pub fn dismiss(&mut self) {
         let _ = self.launcher.hide();

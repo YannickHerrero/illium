@@ -84,6 +84,8 @@ pub enum Event {
     Dictate(bool),
     /// Exposé input and worker results, tagged with its opening generation.
     Expose(u64, shell::expose::Input),
+    /// Lock screen input, tagged with its opening generation.
+    Lock(u64, shell::lockscreen::Input),
 }
 struct Manager {
     config: Config,
@@ -421,7 +423,7 @@ impl Manager {
         }
     }
     fn focus_visible(&mut self) {
-        if self.shell.picker.opened {
+        if self.shell.picker.opened || self.shell.lock.opened {
             return;
         }
         if self.prune() {
@@ -547,6 +549,9 @@ impl Manager {
         Ok(())
     }
     fn execute(&mut self, c: Command) -> Result<String, String> {
+        if self.shell.lock.opened && !matches!(c, Command::Lock | Command::Status) {
+            return Err("the screen is locked".into());
+        }
         if self.shell.hints.opened && !matches!(c, Command::BarHints | Command::Status) {
             self.shell.hints.close();
             let restore = self.bar_restore.take();
@@ -581,6 +586,7 @@ impl Manager {
                 "gap": self.config.wm.gap, "launcher": self.shell.visible,
                 "bar_hints": self.shell.hints.opened,
                 "expose": self.shell.expose.opened,
+                "locked": self.shell.lock.opened,
                 "bar_applet": self.applets.open.as_ref().or(self.shell.popup_open.as_ref()),
                 "bar_background_opacity": self.shell.bars.first().map(|bar| bar.get_background_opacity()),
                 "theme_picker": self.shell.picker.opened && self.shell.picker.wallpaper_theme.is_none(),
@@ -818,6 +824,11 @@ impl Manager {
                     self.shell.expose.open(&self.config, monitor, restore, scene);
                 }
             }
+            Command::Lock => {
+                if !self.shell.lock.opened {
+                    self.lock(foreground)?;
+                }
+            }
             Command::App(name) => apps::open(name),
             Command::Dictate => dictate::toggle(),
             Command::Reload => self.reload()?,
@@ -986,6 +997,74 @@ impl Manager {
             }
         }
     }
+    fn lock(&mut self, foreground: isize) -> Result<(), String> {
+        let restore = self.restore_target(foreground);
+        self.shell.hints.close();
+        self.bar_restore = None;
+        self.shell.dismiss();
+        self.shell.close_popup();
+        self.applets.close();
+        // Closed without restoring focus: a foreground change reported once
+        // the lock is up would hand over to the Windows lock.
+        self.shell.picker.close();
+        self.shell.editor.close();
+        self.shell.expose.close();
+        // Without a usable password the user still asked to lock: Windows does it.
+        let hash = match crate::lockscreen::load(&self.config.home) {
+            Ok(hash) => hash,
+            Err(error) => {
+                tracing::warn!(%error, "no lock password; run winarchyctl lock set-password");
+                return session::lock_workstation();
+            }
+        };
+        let (monitors, primary, backdrops) = self.lock_scene();
+        if let Err(error) =
+            self.shell
+                .lock
+                .open(&self.config, &monitors, primary, backdrops, hash, restore)
+        {
+            tracing::error!(%error, "lock screen unavailable; locking Windows instead");
+            self.shell.lock.close();
+            return session::lock_workstation();
+        }
+        session::set_locked(true);
+        tracing::info!("screen locked");
+        Ok(())
+    }
+    /// Every monitor, the active one and their blurred wallpapers.
+    fn lock_scene(&self) -> (Vec<Rect>, usize, Vec<slint::Image>) {
+        let primary = self.model.monitors[(self.model.active - 1) as usize]
+            .min(self.monitors.len().saturating_sub(1));
+        let backdrops = (0..self.monitors.len())
+            .map(|index| self.shell.backdrop(index))
+            .collect();
+        (self.monitors.clone(), primary, backdrops)
+    }
+    /// Winarchy's lock is only a surface over the session: whenever it may be
+    /// bypassed, the Windows lock takes over.
+    fn lock_windows(&mut self, reason: &str) {
+        if self.shell.lock.released {
+            return;
+        }
+        tracing::warn!(reason, "handing over to the Windows lock");
+        match session::lock_workstation() {
+            Ok(()) => self.shell.lock.release_later(),
+            Err(error) => tracing::error!(%error, "Windows lock failed"),
+        }
+    }
+    fn finish_lock(&mut self, outcome: shell::lockscreen::Outcome) {
+        use shell::lockscreen::Outcome;
+        match outcome {
+            Outcome::None => {}
+            Outcome::Unlock => {
+                let restore = self.shell.lock.close();
+                session::set_locked(false);
+                tracing::info!("screen unlocked");
+                self.restore_focus(restore);
+            }
+            Outcome::Fallback => self.lock_windows("too many wrong passwords"),
+        }
+    }
     fn finish_editor(&mut self, outcome: shell::keybindings::Outcome) {
         use shell::keybindings::Outcome;
         match outcome {
@@ -1040,6 +1119,12 @@ impl Manager {
             self.shell.editor.capturing(),
             std::sync::atomic::Ordering::Relaxed,
         );
+        input::LOCKED.store(self.shell.lock.opened, std::sync::atomic::Ordering::Relaxed);
+        input::LOCK_FOCUSED.store(
+            self.shell.lock.primary_hwnd() != 0
+                && unsafe { GetForegroundWindow().0 as isize } == self.shell.lock.primary_hwnd(),
+            std::sync::atomic::Ordering::Relaxed,
+        );
     }
     fn dispatch(&mut self, event: Event) {
         match event {
@@ -1079,6 +1164,15 @@ impl Manager {
                     }
                 }
                 EVENT_SYSTEM_FOREGROUND => {
+                    if self.shell.lock.opened && !self.shell.lock.owns(id) {
+                        let mut pid = 0;
+                        unsafe {
+                            GetWindowThreadProcessId(native::hwnd(id), Some(&mut pid));
+                        }
+                        if pid != std::process::id() && id != session::sink() {
+                            self.lock_windows("another window took the foreground");
+                        }
+                    }
                     if (self.shell.hints.opened || self.bar_restore.is_some())
                         && Some(id) != self.bar_restore
                     {
@@ -1139,6 +1233,10 @@ impl Manager {
             Event::Expose(epoch, input) => {
                 let outcome = self.shell.expose.input(epoch, input);
                 self.finish_expose(outcome);
+            }
+            Event::Lock(epoch, input) => {
+                let outcome = self.shell.lock.input(epoch, input);
+                self.finish_lock(outcome);
             }
             Event::Capture(vk, modifiers, down) => {
                 let outcome = self.shell.editor.capture(vk, modifiers, down);
@@ -1343,6 +1441,17 @@ impl Manager {
                 self.shell.picker.display_changed(monitor);
                 self.shell.editor.display_changed(monitor);
                 self.shell.expose.display_changed(monitor);
+                if self.shell.lock.opened {
+                    let (monitors, primary, backdrops) = self.lock_scene();
+                    if let Err(error) =
+                        self.shell
+                            .lock
+                            .place(&self.config, &monitors, primary, backdrops)
+                    {
+                        tracing::error!(%error, "lock screen lost on display change");
+                        self.lock_windows("the lock screen could not follow the displays");
+                    }
+                }
             }
             Event::Wallpapers => {
                 self.shell.refresh_wallpaper();
@@ -1710,6 +1819,7 @@ pub fn run(replace: bool) -> Result<(), String> {
                 }
             }
             m.applets.tick();
+            m.shell.lock.tick();
             m.shell.refresh(&m.model, &m.config, &m.applets);
             m.borders();
         },

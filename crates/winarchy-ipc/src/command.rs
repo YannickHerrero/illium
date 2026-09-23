@@ -61,6 +61,9 @@ pub enum Command {
     /// Push-to-talk dictation through `winarchy-dictate.exe`: bound to a held
     /// key, the daemon records while it is down; over IPC it toggles.
     Dictate,
+    /// Winarchy's own lock screen, unlocked with the password set by
+    /// `winarchyctl lock set-password`.
+    Lock,
     /// None selects the solid theme background.
     Wallpaper(Option<String>),
     Explorer(bool),
@@ -132,6 +135,7 @@ impl FromStr for Command {
             ["expose", "toggle"] => Self::Expose,
             ["bar", "hints"] => Self::BarHints,
             ["dictate"] => Self::Dictate,
+            ["lock"] => Self::Lock,
             ["demo"] => Self::Demo,
             ["app", name] if name.chars().all(|c| c.is_ascii_lowercase()) => {
                 Self::App((*name).into())
@@ -190,6 +194,8 @@ mod tests {
         assert_eq!("bar hints".parse(), Ok(Command::BarHints));
         assert_eq!("dictate".parse(), Ok(Command::Dictate));
         assert_eq!("demo".parse(), Ok(Command::Demo));
+        assert_eq!("lock".parse(), Ok(Command::Lock));
+        assert!("lock now".parse::<Command>().is_err());
         assert!("demo extra".parse::<Command>().is_err());
         assert_eq!(
             serde_json::from_str::<Command>(&serde_json::to_string(&Command::Demo).unwrap())

@@ -488,7 +488,7 @@ mod tests {
         Config::install(&p).unwrap();
         let c = Config::load(&p).unwrap();
         assert_eq!(c.global.theme, "catppuccin-mocha");
-        assert_eq!(c.keys.keybindings.len(), 59);
+        assert_eq!(c.keys.keybindings.len(), 60);
         assert_eq!(c.keys.keybindings["Alt+B"], "spawn browser");
         assert_eq!(c.apps.apps["browser"], "winarchy-browser.exe");
         for file in [

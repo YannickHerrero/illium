@@ -177,9 +177,12 @@ mod tests {
         let keys: Keys =
             toml::from_str(include_str!("../config/defaults/keybindings.toml")).unwrap();
         let bs = parse(&keys).unwrap();
-        assert_eq!(bs.len(), 59);
+        assert_eq!(bs.len(), 60);
         assert!(bs.iter().any(|b| b.command == Command::BarHints
             && b.key == b'B' as u32
+            && b.modifiers == CTRL | ALT));
+        assert!(bs.iter().any(|b| b.command == Command::Lock
+            && b.key == b'L' as u32
             && b.modifiers == CTRL | ALT));
         for (key, increase) in [(b'Y', false), (b'U', true)] {
             assert!(

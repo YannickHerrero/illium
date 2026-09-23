@@ -4,6 +4,7 @@
 "Alt+Shift+?" = "keybindings toggle"
 "Alt+Tab" = "expose toggle"
 "Ctrl+Alt+B" = "bar hints"
+"Ctrl+Alt+L" = "lock"
 "Ctrl+Alt+Shift+Space" = "theme picker"
 "Ctrl+Alt+Shift+W" = "wallpaper picker"
 "Ctrl+Alt+Shift+Y" = "opacity decrease"
