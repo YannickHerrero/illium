@@ -119,13 +119,39 @@ pub fn load(home: &Path, name: &str) -> Result<Applet, String> {
         manifest,
     })
 }
+/// Explicitly disabled applets. Missing state preserves legacy discovery.
+/// Kept outside package manifests so updates cannot silently re-enable providers.
+pub fn disabled(home: &Path) -> Result<Vec<String>, String> {
+    #[derive(Default, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct State {
+        #[serde(default)]
+        disabled: Vec<String>,
+    }
+    let path = home.join("plugins.toml");
+    if !path.try_exists().map_err(|e| e.to_string())? {
+        return Ok(vec![]);
+    }
+    let bytes = crate::files::read_config(&path)?;
+    let state: State = toml::from_str(std::str::from_utf8(&bytes).map_err(|e| e.to_string())?)
+        .map_err(|e| format!("plugins.toml: {e}"))?;
+    if state.disabled.len() > 256 || state.disabled.iter().any(|n| !valid_name(n)) {
+        return Err("plugins.toml: invalid disabled applet list".into());
+    }
+    Ok(state.disabled)
+}
 /// Applets referenced by the bar sections, in order, plus the ones attached to
 /// a built-in module that appears in a section; no duplicates.
 pub fn referenced(home: &Path, sections: &[&Vec<String>]) -> Vec<Result<Applet, String>> {
+    let disabled = match disabled(home) {
+        Ok(disabled) => disabled,
+        Err(error) => return vec![Err(error)],
+    };
     let mut seen = Vec::new();
     let mut out = Vec::new();
     let mut push = |name: &str, out: &mut Vec<Result<Applet, String>>| {
-        if seen.iter().any(|s| s == name) || out.len() >= MAX_APPLETS {
+        if disabled.iter().any(|s| s == name)
+            || seen.iter().any(|s| s == name) || out.len() >= MAX_APPLETS {
             return;
         }
         seen.push(name.to_owned());
@@ -266,6 +292,26 @@ pub fn label(template: &str, data: &serde_json::Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn disabled_direct_and_attached_applets_keep_their_configuration() {
+        let home = std::env::temp_dir().join(format!("winarchy-disabled-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        for (name, manifest) in [("todo", ""), ("agenda", "attach = 'clock'")] {
+            std::fs::create_dir_all(dir(&home, name)).unwrap();
+            std::fs::write(dir(&home, name).join("applet.toml"), manifest).unwrap();
+        }
+        let modules = vec!["clock".into(), "todo".into()];
+        assert_eq!(referenced(&home, &[&modules]).len(), 2);
+        std::fs::write(home.join("plugins.toml"), "disabled = ['todo', 'agenda']").unwrap();
+        assert!(referenced(&home, &[&modules]).is_empty());
+        assert!(exists(&home, "todo") && exists(&home, "agenda"));
+        std::fs::write(home.join("plugins.toml"), "disabled = []").unwrap();
+        assert_eq!(referenced(&home, &[&modules]).len(), 2);
+        std::fs::write(home.join("plugins.toml"), "disabled = ['../bad']").unwrap();
+        assert!(disabled(&home).is_err());
+        assert!(referenced(&home, &[&modules])[0].is_err());
+        std::fs::remove_dir_all(home).unwrap();
+    }
     #[test]
     fn intervals() {
         assert_eq!(interval("30s").unwrap(), Duration::from_secs(30));
