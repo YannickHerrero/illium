@@ -37,7 +37,7 @@ impl Fixture {
         } else {
             fs::write(
                 f.source.join("payload/theme.toml"),
-                include_str!("../../config/themes/catppuccin-mocha.toml"),
+                include_str!("../../../../config/themes/catppuccin-mocha.toml"),
             )
             .unwrap();
         }

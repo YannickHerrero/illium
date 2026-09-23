@@ -4,9 +4,9 @@
 
 - `crates/winarchy-ipc`: canonical command grammar, JSON envelope, bounded pipe I/O and token/session identity. Shared by daemon and CLI without graphical dependencies.
 - `crates/winarchy-theme`: theme file types, validation and lookup of the selected theme, without graphics or Windows dependencies; shared by the daemon and the applications.
-- `crates/winarchyctl`: standalone CLI depending only on `winarchy-ipc`, not on the daemon or Slint.
+- `crates/winarchy-config`: configuration files (`config.rs`: subsystem TOML types, first-run defaults, validation, rules, themes), applet manifests, local plugin packages, bounded file reads, clock formats and keybinding parsing, without the desktop toolkit. The daemon reexports its modules under their former paths.
+- `crates/winarchyctl`: standalone CLI depending on `winarchy-ipc`, `winarchy-theme` and `winarchy-config`, never on the daemon or Slint; `scripts/check-cli-dependencies.py` enforces it in CI.
 - `crates/winarchy-apps`: one executable, one subcommand per companion application (`shot`, `tasks`, `files`). Each application keeps its state and key handling in a `model.rs` without Win32 calls, tested on Linux, and its Win32 or shell calls in a `win.rs`; `ui/common.slint` holds the shared palette, scrolling column, status line and key help, compiled at build time. The daemon launches it with `app <name>` and manages its windows like any client; `serve` is the resident mode that keeps the file and task manager windows hidden and shows them on request over its own owner-only pipe (`platform/apps.rs` on the daemon side, with a plain spawn as fallback).
-- `config.rs`: subsystem TOML types, first-run defaults, validation, rules, themes.
 - `layout.rs`: pure Fibonacci rectangles and deterministic geometric neighbor scoring.
 - `model.rs`: ordered client list, nine workspaces, monitor associations and recent history.
 - `platform/native.rs`: HWND filtering, enumeration, title/process lookup, batching, focus, off-screen parking and process launch.

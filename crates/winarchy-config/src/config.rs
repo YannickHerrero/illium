@@ -140,222 +140,231 @@ pub const BUILTIN_MODULES: [&str; 10] = [
 const DEFAULTS: &[(&str, &str)] = &[
     (
         "winarchy.toml",
-        include_str!("../config/defaults/winarchy.toml"),
+        include_str!("../../../config/defaults/winarchy.toml"),
     ),
-    ("wm.toml", include_str!("../config/defaults/wm.toml")),
-    ("bar.toml", include_str!("../config/defaults/bar.toml")),
+    ("wm.toml", include_str!("../../../config/defaults/wm.toml")),
+    (
+        "bar.toml",
+        include_str!("../../../config/defaults/bar.toml"),
+    ),
     (
         "launcher.toml",
-        include_str!("../config/defaults/launcher.toml"),
+        include_str!("../../../config/defaults/launcher.toml"),
     ),
-    ("apps.toml", include_str!("../config/defaults/apps.toml")),
+    (
+        "apps.toml",
+        include_str!("../../../config/defaults/apps.toml"),
+    ),
     (
         "terminal.toml",
-        include_str!("../config/defaults/terminal.toml"),
+        include_str!("../../../config/defaults/terminal.toml"),
     ),
     (
         "keybindings.toml",
-        include_str!("../config/defaults/keybindings.toml"),
+        include_str!("../../../config/defaults/keybindings.toml"),
     ),
-    ("rules.toml", include_str!("../config/defaults/rules.toml")),
+    (
+        "rules.toml",
+        include_str!("../../../config/defaults/rules.toml"),
+    ),
     (
         "themes/catppuccin-mocha.toml",
-        include_str!("../config/themes/catppuccin-mocha.toml"),
+        include_str!("../../../config/themes/catppuccin-mocha.toml"),
     ),
     (
         "themes/catppuccin-latte.toml",
-        include_str!("../config/themes/catppuccin-latte.toml"),
+        include_str!("../../../config/themes/catppuccin-latte.toml"),
     ),
     (
         "themes/dynamic-dark.toml",
-        include_str!("../config/themes/dynamic-dark.toml"),
+        include_str!("../../../config/themes/dynamic-dark.toml"),
     ),
     (
         "themes/dynamic-light.toml",
-        include_str!("../config/themes/dynamic-light.toml"),
+        include_str!("../../../config/themes/dynamic-light.toml"),
     ),
     (
         "applets/weather/applet.toml",
-        include_str!("../config/applets/weather/applet.toml"),
+        include_str!("../../../config/applets/weather/applet.toml"),
     ),
     (
         "applets/weather/weather.ps1",
-        include_str!("../config/applets/weather/weather.ps1"),
+        include_str!("../../../config/applets/weather/weather.ps1"),
     ),
     (
         "applets/weather/view.slint",
-        include_str!("../config/applets/weather/view.slint"),
+        include_str!("../../../config/applets/weather/view.slint"),
     ),
     (
         "applets/weather/icon.svg",
-        include_str!("../config/applets/weather/icon.svg"),
+        include_str!("../../../config/applets/weather/icon.svg"),
     ),
     (
         "applets/weather/sun.svg",
-        include_str!("../config/applets/weather/sun.svg"),
+        include_str!("../../../config/applets/weather/sun.svg"),
     ),
     (
         "applets/weather/cloud.svg",
-        include_str!("../config/applets/weather/cloud.svg"),
+        include_str!("../../../config/applets/weather/cloud.svg"),
     ),
     (
         "applets/weather/rain.svg",
-        include_str!("../config/applets/weather/rain.svg"),
+        include_str!("../../../config/applets/weather/rain.svg"),
     ),
     (
         "applets/weather/snow.svg",
-        include_str!("../config/applets/weather/snow.svg"),
+        include_str!("../../../config/applets/weather/snow.svg"),
     ),
     (
         "applets/wifi/applet.toml",
-        include_str!("../config/applets/wifi/applet.toml"),
+        include_str!("../../../config/applets/wifi/applet.toml"),
     ),
     (
         "applets/wifi/wifi.ps1",
-        include_str!("../config/applets/wifi/wifi.ps1"),
+        include_str!("../../../config/applets/wifi/wifi.ps1"),
     ),
     (
         "applets/wifi/view.slint",
-        include_str!("../config/applets/wifi/view.slint"),
+        include_str!("../../../config/applets/wifi/view.slint"),
     ),
     (
         "applets/wifi/icon.svg",
-        include_str!("../config/applets/wifi/icon.svg"),
+        include_str!("../../../config/applets/wifi/icon.svg"),
     ),
     (
         "applets/wifi/lock.svg",
-        include_str!("../config/applets/wifi/lock.svg"),
+        include_str!("../../../config/applets/wifi/lock.svg"),
     ),
     (
         "applets/timezones/applet.toml",
-        include_str!("../config/applets/timezones/applet.toml"),
+        include_str!("../../../config/applets/timezones/applet.toml"),
     ),
     (
         "applets/timezones/view.slint",
-        include_str!("../config/applets/timezones/view.slint"),
+        include_str!("../../../config/applets/timezones/view.slint"),
     ),
     (
         "applets/timezones/timezones.ps1",
-        include_str!("../config/applets/timezones/timezones.ps1"),
+        include_str!("../../../config/applets/timezones/timezones.ps1"),
     ),
     (
         "applets/calendar/applet.toml",
-        include_str!("../config/applets/calendar/applet.toml"),
+        include_str!("../../../config/applets/calendar/applet.toml"),
     ),
     (
         "applets/calendar/view.slint",
-        include_str!("../config/applets/calendar/view.slint"),
+        include_str!("../../../config/applets/calendar/view.slint"),
     ),
     (
         "applets/volume/applet.toml",
-        include_str!("../config/applets/volume/applet.toml"),
+        include_str!("../../../config/applets/volume/applet.toml"),
     ),
     (
         "applets/volume/view.slint",
-        include_str!("../config/applets/volume/view.slint"),
+        include_str!("../../../config/applets/volume/view.slint"),
     ),
     (
         "applets/volume/speaker.svg",
-        include_str!("../config/applets/volume/speaker.svg"),
+        include_str!("../../../config/applets/volume/speaker.svg"),
     ),
     (
         "applets/volume/speaker-muted.svg",
-        include_str!("../config/applets/volume/speaker-muted.svg"),
+        include_str!("../../../config/applets/volume/speaker-muted.svg"),
     ),
     (
         "applets/volume/output.svg",
-        include_str!("../config/applets/volume/output.svg"),
+        include_str!("../../../config/applets/volume/output.svg"),
     ),
     (
         "applets/volume/input.svg",
-        include_str!("../config/applets/volume/input.svg"),
+        include_str!("../../../config/applets/volume/input.svg"),
     ),
     (
         "applets/volume/source.svg",
-        include_str!("../config/applets/volume/source.svg"),
+        include_str!("../../../config/applets/volume/source.svg"),
     ),
     (
         "applets/battery/applet.toml",
-        include_str!("../config/applets/battery/applet.toml"),
+        include_str!("../../../config/applets/battery/applet.toml"),
     ),
     (
         "applets/battery/view.slint",
-        include_str!("../config/applets/battery/view.slint"),
+        include_str!("../../../config/applets/battery/view.slint"),
     ),
     (
         "applets/_template/applet.toml",
-        include_str!("../config/applets/_template/applet.toml"),
+        include_str!("../../../config/applets/_template/applet.toml"),
     ),
     (
         "applets/_template/_template.ps1",
-        include_str!("../config/applets/_template/_template.ps1"),
+        include_str!("../../../config/applets/_template/_template.ps1"),
     ),
     (
         "applets/_template/view.slint",
-        include_str!("../config/applets/_template/view.slint"),
+        include_str!("../../../config/applets/_template/view.slint"),
     ),
     (
         "applets/_template/icon.svg",
-        include_str!("../config/applets/_template/icon.svg"),
+        include_str!("../../../config/applets/_template/icon.svg"),
     ),
 ];
 // Bundled data, not runtime downloads. Keep existing installed files intact.
 const DEFAULT_ASSETS: &[(&str, &[u8])] = &[
     (
         "themes/catppuccin-mocha/preview.png",
-        include_bytes!("../config/themes/catppuccin-mocha/preview.png"),
+        include_bytes!("../../../config/themes/catppuccin-mocha/preview.png"),
     ),
     (
         "themes/dynamic-dark/preview.png",
-        include_bytes!("../config/themes/dynamic-dark/preview.png"),
+        include_bytes!("../../../config/themes/dynamic-dark/preview.png"),
     ),
     (
         "themes/dynamic-light/preview.png",
-        include_bytes!("../config/themes/dynamic-light/preview.png"),
+        include_bytes!("../../../config/themes/dynamic-light/preview.png"),
     ),
     (
         "themes/catppuccin-mocha/wallpapers/1-totoro.png",
-        include_bytes!("../config/themes/catppuccin-mocha/wallpapers/1-totoro.png"),
+        include_bytes!("../../../config/themes/catppuccin-mocha/wallpapers/1-totoro.png"),
     ),
     (
         "themes/catppuccin-mocha/wallpapers/2-waves.png",
-        include_bytes!("../config/themes/catppuccin-mocha/wallpapers/2-waves.png"),
+        include_bytes!("../../../config/themes/catppuccin-mocha/wallpapers/2-waves.png"),
     ),
     (
         "themes/catppuccin-mocha/wallpapers/3-blue-eye.png",
-        include_bytes!("../config/themes/catppuccin-mocha/wallpapers/3-blue-eye.png"),
+        include_bytes!("../../../config/themes/catppuccin-mocha/wallpapers/3-blue-eye.png"),
     ),
     (
         "themes/catppuccin-mocha/wallpapers/omarchy.png",
-        include_bytes!("../config/themes/catppuccin-mocha/wallpapers/omarchy.png"),
+        include_bytes!("../../../config/themes/catppuccin-mocha/wallpapers/omarchy.png"),
     ),
     (
         "themes/catppuccin-mocha/SOURCES.md",
-        include_bytes!("../config/themes/catppuccin-mocha/SOURCES.md"),
+        include_bytes!("../../../config/themes/catppuccin-mocha/SOURCES.md"),
     ),
     (
         "themes/catppuccin-mocha/LICENSE",
-        include_bytes!("../config/themes/catppuccin-mocha/LICENSE"),
+        include_bytes!("../../../config/themes/catppuccin-mocha/LICENSE"),
     ),
     (
         "themes/catppuccin-latte/preview.png",
-        include_bytes!("../config/themes/catppuccin-latte/preview.png"),
+        include_bytes!("../../../config/themes/catppuccin-latte/preview.png"),
     ),
     (
         "themes/catppuccin-latte/wallpapers/1-color-fade.png",
-        include_bytes!("../config/themes/catppuccin-latte/wallpapers/1-color-fade.png"),
+        include_bytes!("../../../config/themes/catppuccin-latte/wallpapers/1-color-fade.png"),
     ),
     (
         "themes/catppuccin-latte/wallpapers/omarchy.png",
-        include_bytes!("../config/themes/catppuccin-latte/wallpapers/omarchy.png"),
+        include_bytes!("../../../config/themes/catppuccin-latte/wallpapers/omarchy.png"),
     ),
     (
         "themes/catppuccin-latte/SOURCES.md",
-        include_bytes!("../config/themes/catppuccin-latte/SOURCES.md"),
+        include_bytes!("../../../config/themes/catppuccin-latte/SOURCES.md"),
     ),
     (
         "themes/catppuccin-latte/LICENSE",
-        include_bytes!("../config/themes/catppuccin-latte/LICENSE"),
+        include_bytes!("../../../config/themes/catppuccin-latte/LICENSE"),
     ),
 ];
 fn parse<T: serde::de::DeserializeOwned>(home: &Path, name: &str) -> Result<T, String> {
@@ -567,7 +576,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&p);
         Config::install(&p).unwrap();
         let bar = |right: &str| {
-            let text = include_str!("../config/defaults/bar.toml")
+            let text = include_str!("../../../config/defaults/bar.toml")
                 .replace(
                     "center = [\"clock\"]",
                     "center = [\"separator\", \"clock\"]",
@@ -592,7 +601,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&p);
         Config::install(&p).unwrap();
         let bar = |right: &str, drawer: &str| {
-            let text = include_str!("../config/defaults/bar.toml").replace(
+            let text = include_str!("../../../config/defaults/bar.toml").replace(
                 "right = [\"battery\", \"cpu\", \"memory\", \"volume\", \"wifi\"]",
                 &format!("{right}\n{drawer}"),
             );
