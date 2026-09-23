@@ -1,0 +1,7 @@
+# Battery panel opened by clicking the battery module: charge, capacity and
+# health, power mode, built-in display brightness, battery saver and travel
+# mode. Controls the machine lacks are hidden. Refreshes every 5 s while open.
+attach = "battery"
+provider = "builtin:battery"
+interval = "1m"
+popup = { width = 400, height = 560 }

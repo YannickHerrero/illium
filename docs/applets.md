@@ -17,7 +17,7 @@ folder holding an `applet.toml`, or the configuration is rejected. Applets may
 also be listed in the `drawer` list, folded behind a chevron until the bar is
 hovered or the chevron clicked (see [drawer](configuration.md#drawer)).
 
-Winarchy ships `weather`, `wifi`, `calendar`, `timezones`, `volume` and `_template`; they
+Winarchy ships `weather`, `wifi`, `calendar`, `timezones`, `volume`, `battery` and `_template`; they
 are installed with the other defaults and never overwritten. `calendar` uses
 `attach = "clock"`: it has no icon and opens when the date is clicked;
 `timezones` uses `attach = "time"` and opens from the separate time target. Both
@@ -145,6 +145,34 @@ Built-in providers avoid a process for fast cadences:
   failure of the last action. Actions: `mode <saver|balanced|performance>`,
   `brightness <percent>`, `saver <on|off>`, `travel <on|off>` and `refresh`.
   It runs on a worker thread, like `builtin:volume`.
+
+### Battery panel
+
+`battery` attaches to the battery module and uses only generic Windows
+interfaces, so it works on any laptop; a control the machine lacks is hidden.
+
+- Charge, state and remaining time come from `GetSystemPowerStatus`; capacities,
+  cycles and power from the battery class driver (the source of
+  `powercfg /batteryreport`). Batteries reporting relative capacities show no
+  Wh figures, and several batteries are summed. "Not charging" while plugged in
+  is how firmware charge limits appear; Winarchy does not set such limits,
+  which are vendor specific.
+- The power mode is the Windows setting of the same name (the power mode
+  functions of `powrprof.dll`, undocumented but used by the Settings app). It
+  applies to the current power source, and like Windows it is only offered
+  while the Balanced plan is active.
+- Brightness uses the WMI brightness classes of built-in displays; external
+  monitors are not adjusted.
+- The battery saver switch keeps it on whenever the machine runs on battery,
+  by setting its threshold to 100% in the active plan; switching it off
+  restores the previous threshold (20%, the Windows default, if unknown).
+- Travel mode turns on Power saver mode and the battery saver and lowers the
+  brightness to 40% at most, then restores the previous values when switched
+  off. The values to restore are kept in `battery.json` in the configuration
+  home, so they survive a daemon restart.
+
+No setting needs administrator rights. The panel refreshes every 5 seconds
+while open.
 
 ### Timezone viewer
 
