@@ -80,7 +80,7 @@ impl Surface {
         let len = (ICON * ICON * 4) as usize;
         let bgra = unsafe { std::slice::from_raw_parts(self.bits, len) };
         let mut rgba = Vec::with_capacity(len);
-        for px in bgra.chunks_exact(4) {
+        for px in bgra.as_chunks::<4>().0.iter() {
             rgba.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
         }
         Pixels {
@@ -124,7 +124,7 @@ fn icon(exe: &str) -> Option<Pixels> {
         let _ = DestroyIcon(info.hIcon);
         let pixels = surface.filter(|_| drawn)?.pixels();
         // Legacy icons without an alpha channel draw fully transparent here.
-        let transparent = pixels.rgba.chunks_exact(4).all(|px| px[3] == 0);
+        let transparent = pixels.rgba.as_chunks::<4>().0.iter().all(|px| px[3] == 0);
         (!transparent).then_some(pixels)
     }
 }

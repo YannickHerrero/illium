@@ -280,7 +280,11 @@ pub fn blurred(pixels: &[u8], width: u32, height: u32) -> Option<(Vec<u8>, u32, 
             let mut acc = [0u32; 3];
             for dy in 0..BLUR_SCALE {
                 let row = ((y * BLUR_SCALE + dy) * width + x * BLUR_SCALE) as usize * 4;
-                for px in pixels[row..row + (BLUR_SCALE * 4) as usize].chunks_exact(4) {
+                for px in pixels[row..row + (BLUR_SCALE * 4) as usize]
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                {
                     acc[0] += u32::from(px[0]);
                     acc[1] += u32::from(px[1]);
                     acc[2] += u32::from(px[2]);
@@ -349,7 +353,7 @@ mod blur_tests {
             px(0) > px(1) && px(1) > px(2) && px(2) > px(3),
             "edge is smoothed"
         );
-        assert!(small.chunks_exact(4).all(|p| p[3] == 255));
+        assert!(small.as_chunks::<4>().0.iter().all(|p| p[3] == 255));
         assert!(blurred(&pixels, 8, 8).is_none());
     }
 }

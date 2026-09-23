@@ -159,7 +159,13 @@ mod tests {
         let f = card(&image, &key(false)).unwrap();
         assert_eq!((f.width, f.height), (112, 436));
         assert_eq!(pixel(&f, 56, 218), [58, 116, 29, 255]);
-        assert!(f.pixels.chunks_exact(4).any(|p| p[3] > 0 && p[3] < 255));
+        assert!(
+            f.pixels
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|p| p[3] > 0 && p[3] < 255)
+        );
     }
     #[test]
     fn physical_dimensions_track_dpi_and_bad_sizes_are_rejected() {
@@ -171,7 +177,9 @@ mod tests {
             assert_eq!(f.width, (772.0 * dpi as f32 / 96.0).round() as u32);
             assert!(
                 f.pixels
-                    .chunks_exact(4)
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
                     .all(|p| p[..3].iter().all(|c| *c <= p[3]))
             );
         }
