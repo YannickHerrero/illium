@@ -347,10 +347,15 @@ impl App {
         } else {
             self.fonts.clone()
         };
+        let blur = snapshot.theme.background_blur;
+        let blur_changed = blur != self.snapshot.theme.background_blur;
         self.palette = Palette::new(&snapshot.theme);
         self.config = snapshot.config.clone();
         self.fonts = fonts;
         for window in self.windows.values_mut() {
+            if blur_changed {
+                crate::blur::set(window.hwnd, blur);
+            }
             if fonts_changed {
                 window.surface.fonts = self.fonts.clone();
                 window.config.font_family = self.config.font_family.clone();
@@ -396,6 +401,9 @@ impl App {
             )
         }
         .map_err(|e| e.to_string())?;
+        if self.snapshot.theme.background_blur {
+            crate::blur::set(hwnd, true);
+        }
         let result = (|| {
             let mut area = RECT::default();
             unsafe { GetClientRect(hwnd, &mut area) }.map_err(|e| e.to_string())?;

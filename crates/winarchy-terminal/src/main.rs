@@ -1,5 +1,7 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 #[cfg(windows)]
+mod blur;
+#[cfg(windows)]
 mod native;
 #[cfg(windows)]
 mod resident;

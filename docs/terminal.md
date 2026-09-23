@@ -78,7 +78,8 @@ background_opacity = 0.85
 
 Default `0.85` (85% opacity); valid range `0.0..1.0`. The default background receives alpha;
 glyphs, cursor, selection and explicit application background cells stay
-opaque. No blur/acrylic. Upgrade all Winarchy binaries before adding this field:
+opaque. `background_blur` in [`winarchy.toml`](configuration.md#winarchytoml)
+blurs what shows through. Upgrade all Winarchy binaries before adding this field:
 older schema readers reject it. The legacy `terminal_background_opacity` name is
 still accepted. Ctrl+Alt+Shift+Y/U temporarily decrease/increase the shared
 application background opacity by five points. See [themes](themes.md#adjust-opacity-live).
