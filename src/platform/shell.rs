@@ -946,10 +946,6 @@ impl Shell {
                 MetaEntry::Run(Command::WallpaperPicker),
             ),
             (
-                "Solid background".into(),
-                MetaEntry::Run(Command::Wallpaper(None)),
-            ),
-            (
                 format!("Increase opacity ({opacity}%)"),
                 MetaEntry::Adjust(Command::BackgroundOpacity(true)),
             ),

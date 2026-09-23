@@ -130,7 +130,7 @@ The last applied pair is atomically published in `dynamic-theme.state`, separate
 from the cache, installed palettes and preferences. All theme consumers apply
 this state only to dynamic themes, before the temporary opacity override.
 
-- Empty library or **Solid background**: matching built-in fallback palette and
+- Empty library or `winarchyctl wallpaper clear`: matching built-in fallback palette and
   solid background. The explicit solid choice survives restarts.
 - Explicit unreadable image or publication failure: retain the current image,
   palette and saved choice. Inspect `wallpaper_pending` / `wallpaper_error` in
@@ -282,7 +282,7 @@ The installer validates the palette and decodes the images, installs assets unde
 
 For an installed static `my-theme.toml`, place images in `themes/my-theme/wallpapers/`.
 The two dynamic themes instead share `wallpapers/dynamic/` as described above.
-No manifest entries are needed. The first readable JPEG/PNG in alphabetical order is used on first activation. The menu **Alt+Shift+Space → Appearance → Wallpaper** opens the same visual carousel as the theme picker, starting on the current (or pending) image. Left/Right or Tab/Shift+Tab browse, typing filters filenames, and Enter or clicking the selected card applies that exact image through the existing wallpaper loader. Escape clears the filter, then cancels; clicking outside cancels. Browsing never changes the desktop or saved choices. **Alt+Shift+Space → Appearance → Solid background** retains the explicit solid-color choice without adding an artificial image card. Without readable wallpapers, the carousel stays empty and can be cancelled. If the active theme changes while browsing wallpapers, the picker cancels rather than applying an old filename to the new theme. **Ctrl+Alt+Shift+W** opens the wallpaper picker directly. The `winarchyctl wallpaper next` command still cycles through the same theme's images, wrapping around and skipping unreadable files. From a solid background it starts with the first image; without images it does nothing.
+No manifest entries are needed. The first readable JPEG/PNG in alphabetical order is used on first activation. The menu **Alt+Shift+Space → Appearance → Wallpaper** opens the same visual carousel as the theme picker, starting on the current (or pending) image. Left/Right or Tab/Shift+Tab browse, typing filters filenames, and Enter or clicking the selected card applies that exact image through the existing wallpaper loader. Escape clears the filter, then cancels; clicking outside cancels. Browsing never changes the desktop or saved choices. `winarchyctl wallpaper clear` selects the solid theme color without adding an artificial image card. Without readable wallpapers, the carousel stays empty and can be cancelled. If the active theme changes while browsing wallpapers, the picker cancels rather than applying an old filename to the new theme. **Ctrl+Alt+Shift+W** opens the wallpaper picker directly. The `winarchyctl wallpaper next` command still cycles through the same theme's images, wrapping around and skipping unreadable files. From a solid background it starts with the first image; without images it does nothing.
 
 ```powershell
 winarchyctl wallpaper picker
