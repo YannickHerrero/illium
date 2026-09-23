@@ -861,6 +861,14 @@ impl Manager {
                 self.shell.apply_opacity(&self.config);
                 return Ok(format!("background opacity: {:.0}%", opacity * 100.0));
             }
+            Command::ResetOpacity => {
+                winarchy_theme::opacity::clear(&self.config.home)?;
+                self.shell.apply_opacity(&self.config);
+                return Ok(format!(
+                    "background opacity: {:.0}%",
+                    self.config.theme.background_opacity * 100.0
+                ));
+            }
             Command::Theme(name) => {
                 let path = self.config.home.join("winarchy.toml");
                 let old = crate::files::read_config(&path)?;

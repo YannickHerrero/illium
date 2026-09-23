@@ -47,6 +47,8 @@ pub enum Command {
     Theme(String),
     /// Adjust shared application opacity by five points (true increases).
     BackgroundOpacity(bool),
+    /// Drop the live opacity adjustment and return to the theme's own value.
+    ResetOpacity,
     /// Open the visual theme picker; browsing does not change the active theme.
     ThemePicker,
     /// Browse images of the active theme without applying until confirmation.
@@ -147,6 +149,7 @@ impl FromStr for Command {
             ["theme", "picker"] => Self::ThemePicker,
             ["opacity", "increase"] => Self::BackgroundOpacity(true),
             ["opacity", "decrease"] => Self::BackgroundOpacity(false),
+            ["opacity", "reset"] => Self::ResetOpacity,
             ["theme", "set", name] if !name.contains(['/', '\\', '.']) => {
                 Self::Theme((*name).into())
             }
@@ -186,6 +189,7 @@ mod tests {
             "opacity decrease".parse(),
             Ok(Command::BackgroundOpacity(false))
         );
+        assert_eq!("opacity reset".parse(), Ok(Command::ResetOpacity));
         assert!("opacity increase extra".parse::<Command>().is_err());
         assert!("opacity set nan".parse::<Command>().is_err());
         assert_eq!("keybindings toggle".parse(), Ok(Command::Keybindings));

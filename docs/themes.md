@@ -55,6 +55,7 @@ binaries before using the new spelling: older readers reject unknown fields.
 - **Ctrl+Alt+Shift+Y**: decrease by 5 percentage points.
 - **Ctrl+Alt+Shift+U**: increase by 5 percentage points.
 - CLI equivalents: `winarchyctl opacity decrease` / `winarchyctl opacity increase`.
+- `winarchyctl opacity reset` drops the adjustment and returns to the theme's value.
 
 Interactive adjustments are bounded to **5–100%** and apply to all open, hidden
 and subsequently opened companion windows, without restarting sessions or moving

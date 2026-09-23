@@ -105,6 +105,7 @@ pub fn describe(command: &str) -> String {
         Command::Theme(name) => format!("Theme {name}"),
         Command::BackgroundOpacity(true) => "Increase background opacity".into(),
         Command::BackgroundOpacity(false) => "Decrease background opacity".into(),
+        Command::ResetOpacity => "Reset background opacity".into(),
         Command::ThemePicker => "Theme picker".into(),
         Command::WallpaperPicker => "Wallpaper picker".into(),
         Command::WallpaperNext => "Next wallpaper".into(),
