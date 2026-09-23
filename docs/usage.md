@@ -75,6 +75,26 @@ Existing keybinding files are not overwritten on upgrade. Add this line under
 "Ctrl+Alt+B" = "bar hints"
 ```
 
+## Lock screen
+
+**Ctrl+Alt+L** (or `winarchyctl lock`) covers every monitor with the blurred wallpaper, a clock and, on the active monitor, a password field. The password is Winarchy's own, not the Windows one. Set it once, from a console:
+
+```
+winarchyctl lock set-password
+```
+
+Only its Argon2 hash is stored, in `lock-password` in the configuration folder; it is read at each lock, so no reload is needed. Without it, Ctrl+Alt+L locks Windows instead.
+
+While locked, no Winarchy binding or command runs (except `status`), and the Windows key, Alt+Tab, Alt+Esc, Ctrl+Esc and other Ctrl or Alt chords are swallowed. Ctrl+Alt still types AltGr characters. Win+L keeps the regular Windows lock.
+
+This screen is a window over the open session, not a Windows security boundary: Ctrl+Alt+Del cannot be intercepted. Winarchy therefore calls the Windows lock as soon as it may be bypassed: another application takes the foreground (for example Task Manager opened from Ctrl+Alt+Del), five wrong passwords, or the daemon exits while locked (the recovery watchdog locks Windows). For a long absence, Win+L remains the safer choice.
+
+Existing keybinding files are not overwritten on upgrade. Add this line under `[keybindings]`, then reload with Alt+Shift+R:
+
+```toml
+"Ctrl+Alt+L" = "lock"
+```
+
 ## Windows
 
 The first tiled client gets the left half; subsequent clients split the remainder alternately horizontally and vertically. Gaps are configurable. Very small remaining rectangles stack rather than producing negative dimensions; applications can still enforce their own minimum size.
