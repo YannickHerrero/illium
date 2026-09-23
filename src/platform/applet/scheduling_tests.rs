@@ -12,6 +12,7 @@ fn runtime() -> Runtime {
             manifest: toml::from_str("").unwrap(),
         },
         icon: None,
+        sprite: None,
         icon_file: None,
         data: serde_json::json!({"ssid":"current"}),
         error: None,

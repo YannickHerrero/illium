@@ -21,7 +21,26 @@ export component Background inherits Window {
         image-fit: cover;
     }
 }
-export struct StatusItem { kind: string, value: string, secondary: string, icon: image, has-icon: bool, level: int, charging: bool, hint-id: int }
+export struct SpriteFrame { sheet: image, frame-width: int, frame-height: int, display-height: int, interval-ms: int, row: int, frames: int }
+export struct StatusItem { kind: string, value: string, secondary: string, icon: image, has-icon: bool, level: int, charging: bool, hint-id: int, sprite: SpriteFrame }
+component SpriteIcon inherits Image {
+    in property <SpriteFrame> sprite;
+    property <int> frame: 0;
+    property <int> animation-row: sprite.row;
+    changed animation-row => { frame = 0; }
+    Timer {
+        interval: max(60, root.sprite.interval-ms) * 1ms;
+        running: root.visible && root.sprite.frames > 1;
+        triggered => { root.frame = Math.mod(root.frame + 1, max(1, root.sprite.frames)); }
+    }
+    source: sprite.sheet;
+    source-clip-x: Math.mod(frame, max(1, sprite.frames)) * sprite.frame-width;
+    source-clip-y: sprite.row * sprite.frame-height;
+    source-clip-width: sprite.frame-width;
+    source-clip-height: sprite.frame-height;
+    image-rendering: pixelated;
+    width: self.height * sprite.frame-width / max(1, sprite.frame-height);
+}
 component StatusModule inherits Rectangle {
     in property <StatusItem> item;
     in property <color> fg;
@@ -78,7 +97,12 @@ component StatusModule inherits Rectangle {
                 fill: fg; stroke: bg; stroke-width: 1.2px;
             }
         }
-        if has-icon: Image {
+        if item.sprite.frames > 0: SpriteIcon {
+            sprite: item.sprite;
+            height: min(parent.height, item.sprite.display-height * 1px);
+            y: (parent.height - self.height) / 2;
+        }
+        if has-icon && item.sprite.frames == 0: Image {
             width: 16px; height: 16px;
             y: (parent.height - self.height) / 2;
             source: item.kind == "cpu" ? @image-url("icons/cpu.svg")

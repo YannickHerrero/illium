@@ -53,6 +53,7 @@ applets/weather/
 | Key | Default | Meaning |
 |---|---|---|
 | `icon` | `icon.svg` | Bar icon, relative to the folder; `{field}` placeholders let the provider choose the file (a plain name in the folder), so a state can change the icon |
+| `sprite` | none | Optional sprite-pack TOML filename; replaces the icon when valid, otherwise falls back to `icon` |
 | `interval` | `1m` | Provider cadence: `30s`, `10m`, `2h` |
 | `label` | none | Bar text; `{field}` and `{a.b}` read the JSON |
 | `popup` | `{ width = 360, height = 240 }` | Popup size in logical pixels |
@@ -63,6 +64,43 @@ applets/weather/
 | `focusable` | `false` | Let the popup take keyboard focus |
 | `attach` | none | Built-in module (`clock`, `time`, `battery`, `cpu`, `memory`, `volume`, `window-title`) whose click opens this applet; it then has no icon and is loaded whenever that module is in a section |
 | `[settings]` | empty | Passed to the provider as `WINARCHY_APPLET_<KEY>` variables |
+
+### Animated bar icons
+
+Set `sprite = "glitchcat.toml"` in `applet.toml`. Packs are separate data files,
+so multiple packs can be installed side by side and selected by changing this
+one filename (hot reload). No pet names, state names beyond the `idle` fallback,
+or fixed atlas dimensions are built into Winarchy. A picker is not required.
+For example, a pack for an 8 × 9 atlas:
+
+```toml
+sheet = "glitchcat.png"
+frame_width = 192
+frame_height = 208
+columns = 8
+rows = 9
+interval_ms = 140
+display_height = 28
+state = "{pet_state}"
+[states]
+idle = { row = 0, frames = 6 }
+working = { row = 7, frames = 6 }
+waiting = { row = 6, frames = 6 }
+success = { row = 8, frames = 6 }
+error = { row = 5, frames = 8 }
+```
+
+Rows are zero-based; each animation starts at column zero. Unknown/missing
+provider states use `idle`. Images retain their colors and use nearest-neighbor
+sampling. The bar animates locally, independently of provider polling, and keeps
+the usual label and popup click behavior. Changing rows resets the frame.
+Use PNG for portable raster loading. Pack and sheet must be plain filenames in
+the applet folder. Invalid/missing packs or mismatched atlas sizes log a warning
+and use the ordinary icon. Frames are 1–512 pixels per dimension, the grid is
+1–32 rows/columns, the atlas at most 4096 pixels per dimension, cadence
+60–2000 ms, and display height 16–48 logical pixels (clamped to bar height).
+Existing static applets require no changes. Older Winarchy builds reject the
+new manifest key: upgrade Winarchy before installing animated applets.
 
 ### The provider
 

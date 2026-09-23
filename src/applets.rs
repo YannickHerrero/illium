@@ -1,6 +1,7 @@
 //! Applet discovery and manifest handling: a folder per applet under the
 //! configuration home, with an `applet.toml`, an icon, a Slint view and a
 //! data provider (a script printing JSON, or a built-in provider).
+pub mod sprite;
 use serde::Deserialize;
 use std::{
     collections::BTreeMap,
@@ -18,6 +19,9 @@ pub struct Manifest {
     /// hold `{field}` placeholders so the provider picks the file.
     #[serde(default = "default_icon")]
     pub icon: String,
+    /// Optional sprite-pack TOML filename relative to the applet folder.
+    /// Invalid/unavailable packs fall back to `icon`.
+    pub sprite: Option<String>,
     /// Full command line; overrides `script`.
     pub command: Option<Vec<String>>,
     /// PowerShell script relative to the applet folder; defaults to `<name>.ps1`.

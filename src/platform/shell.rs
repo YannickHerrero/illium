@@ -1030,6 +1030,7 @@ impl Shell {
                     StatusItem {
                         kind: name.clone().into(),
                         value: label.into(),
+                        sprite: applets.sprite(name),
                         secondary: Default::default(),
                         has_icon: icon.is_some(),
                         icon: icon.unwrap_or_default(),
@@ -1050,6 +1051,7 @@ impl Shell {
                         level: i32::from(percent),
                         charging: plugged,
                         hint_id: 0,
+                        ..Default::default()
                     }
                 } else if name == "volume" {
                     let Some((_, muted)) = super::audio::volume_state() else {
@@ -1064,6 +1066,7 @@ impl Shell {
                         hint_id: 0,
                         level: 0,
                         charging: false,
+                        ..Default::default()
                     }
                 } else if name == "clock" {
                     let (time, date) = super::status::clock_labels(c);
@@ -1088,6 +1091,7 @@ impl Shell {
                         icon: slint::Image::default(),
                         level: 0,
                         charging: false,
+                        ..Default::default()
                     }
                 } else {
                     continue;

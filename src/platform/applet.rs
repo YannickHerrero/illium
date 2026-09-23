@@ -40,6 +40,7 @@ pub struct Entry {
     generation: u64,
     fingerprint: Option<Vec<(std::path::PathBuf, Vec<u8>)>>,
     pub icon: Option<slint::Image>,
+    sprite: Option<(applets::sprite::Sprite, slint::Image)>,
     /// File the loaded icon came from, so data refreshes only reload on a change.
     icon_file: Option<String>,
     pub data: serde_json::Value,
@@ -78,6 +79,23 @@ fn refresh_icon(e: &mut Entry) {
             .ok()
     });
     e.icon_file = file;
+}
+fn load_sprite(applet: &Applet) -> Option<(applets::sprite::Sprite, slint::Image)> {
+    let name = applet.manifest.sprite.as_ref()?;
+    let load = || -> Result<_, String> {
+        if applets::icon_file(name, &serde_json::Value::Null).as_ref() != Some(name) {
+            return Err("sprite must be a plain filename".into());
+        }
+        let bytes = crate::files::read_config(&applet.dir.join(name))?;
+        let pack = applets::sprite::Sprite::parse(std::str::from_utf8(&bytes).map_err(|e| e.to_string())?)?;
+        let image = slint::Image::load_from_path(&applet.dir.join(&pack.sheet)).map_err(|e| e.to_string())?;
+        let size = image.size();
+        if size.width != pack.frame_width * pack.columns || size.height != pack.frame_height * pack.rows {
+            return Err("sprite sheet dimensions do not match pack".into());
+        }
+        Ok((pack, image))
+    };
+    load().map_err(|error| tracing::warn!(applet = applet.name, %error, "sprite unavailable; using icon")).ok()
 }
 pub struct Runtime {
     pub entries: Vec<Entry>,
@@ -134,6 +152,7 @@ impl Runtime {
                 interval: applets::interval(&applet.manifest.interval)
                     .unwrap_or(Duration::from_secs(60)),
                 icon: None,
+                sprite: load_sprite(&applet),
                 icon_file: None,
                 data: old.map_or(serde_json::Value::Null, |o| o.data),
                 error: None,
@@ -196,6 +215,22 @@ impl Runtime {
             (None, None) => String::new(),
         };
         Some((label, e.icon.clone()))
+    }
+    pub fn sprite(&self, name: &str) -> shell::SpriteFrame {
+        let Some(entry) = self.entries.iter().find(|e| e.applet.name == name) else {
+            return Default::default();
+        };
+        let Some((pack, image)) = &entry.sprite else { return Default::default(); };
+        let animation = pack.animation(&entry.data);
+        shell::SpriteFrame {
+            sheet: image.clone(),
+            frame_width: pack.frame_width as i32,
+            frame_height: pack.frame_height as i32,
+            display_height: pack.display_height as i32,
+            interval_ms: pack.interval_ms as i32,
+            row: animation.row as i32,
+            frames: animation.frames as i32,
+        }
     }
     /// Starts the providers that are due.
     pub fn tick(&mut self) {
