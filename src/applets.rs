@@ -197,8 +197,8 @@ pub fn interval(text: &str) -> Result<Duration, String> {
         .map_err(|_| format!("invalid interval {text:?}"))?;
     let seconds = match unit {
         "s" => n,
-        "m" => n * 60,
-        "h" => n * 3600,
+        "m" => n.checked_mul(60).ok_or("interval overflow")?,
+        "h" => n.checked_mul(3600).ok_or("interval overflow")?,
         _ => return Err(format!("invalid interval {text:?}: use s, m or h")),
     };
     if seconds == 0 {
@@ -317,7 +317,7 @@ mod tests {
         assert_eq!(interval("30s").unwrap(), Duration::from_secs(30));
         assert_eq!(interval("10m").unwrap(), Duration::from_secs(600));
         assert_eq!(interval("2h").unwrap(), Duration::from_secs(7200));
-        for bad in ["0s", "10", "5d", "", "m"] {
+        for bad in ["0s", "10", "5d", "", "m", "18446744073709551615h"] {
             assert!(interval(bad).is_err(), "{bad}");
         }
     }
