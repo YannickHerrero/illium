@@ -81,7 +81,7 @@ All bindings come from `keybindings.toml`, not hard-coded actions in the keyboar
 
 ## Documentation
 
-[Installation](docs/installation.md) · [Usage](docs/usage.md) · [Configuration](docs/configuration.md) · [Applets](docs/applets.md) · [Applications](docs/apps.md) · [Themes](docs/themes.md) · [Architecture](docs/architecture.md) · [Recovery](docs/recovery.md) · [Testing](docs/testing.md)
+[Installation](docs/installation.md) · [Usage](docs/usage.md) · [Configuration](docs/configuration.md) · [Applets](docs/applets.md) · [Plugin packages](docs/plugins.md) · [Applications](docs/apps.md) · [Themes](docs/themes.md) · [Architecture](docs/architecture.md) · [Recovery](docs/recovery.md) · [Testing](docs/testing.md)
 
 ## Screenshots
 

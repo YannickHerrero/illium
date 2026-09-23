@@ -244,6 +244,16 @@ keyboard focus, so global Alt chords keep working while it is open. Errors in
 the manifest, provider or view appear in a plain popup under the icon and in
 the daemon log.
 
+## Explicit activation state
+
+`plugins.toml` in the configuration home may contain `disabled = ["weather",
+"calendar-agenda"]`. This suppresses both direct bar references and automatic
+attachments without editing the package manifests or losing bar placement.
+Missing state preserves existing discovery. Invalid state rejects configuration
+reload. See the experimental [local plugin manager](plugins.md) for CLI commands,
+packages and preservation rules. Disabling an applet does not stop external
+services it controls.
+
 ## Writing your own
 
 1. Copy `applets/_template` to `applets/<name>` and rename `_template.ps1` to
