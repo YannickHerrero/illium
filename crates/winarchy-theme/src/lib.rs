@@ -1,6 +1,8 @@
 //! Theme palette read from `themes/<name>.toml` under the configuration home.
 //! No graphics dependency: the daemon and every application convert the
 //! `#rrggbb` strings to their own color type.
+#[cfg(windows)]
+pub mod blur;
 pub mod dynamic;
 #[cfg(feature = "live")]
 pub mod live;
@@ -39,6 +41,10 @@ pub struct Theme {
     /// Windows color mode to apply with this theme: "dark" or "light".
     #[serde(default)]
     pub mode: Option<String>,
+    /// Blur behind translucent application backgrounds. A `winarchy.toml`
+    /// preference, not a theme key: it survives theme switches.
+    #[serde(skip)]
+    pub background_blur: bool,
 }
 fn default_background_opacity() -> f32 {
     0.85
@@ -46,6 +52,8 @@ fn default_background_opacity() -> f32 {
 #[derive(Deserialize)]
 struct Global {
     theme: String,
+    #[serde(default)]
+    background_blur: bool,
 }
 /// Configuration location shared by the daemon, installer and external consumers.
 pub fn config_home() -> std::path::PathBuf {
@@ -130,14 +138,17 @@ impl Theme {
             &self.red,
         ]
     }
-    /// Name of the theme selected in `winarchy.toml`.
-    pub fn selected(home: &Path) -> Result<String, String> {
+    fn global(home: &Path) -> Result<Global, String> {
         let global: Global = toml::from_str(&read(&home.join("winarchy.toml"))?)
             .map_err(|e| format!("winarchy.toml: {e}"))?;
         if !valid_name(&global.theme) {
             return Err("invalid theme name".into());
         }
-        Ok(global.theme)
+        Ok(global)
+    }
+    /// Name of the theme selected in `winarchy.toml`.
+    pub fn selected(home: &Path) -> Result<String, String> {
+        Ok(Self::global(home)?.theme)
     }
     /// The theme `name` from `themes/` under `home`.
     pub fn load(home: &Path, name: &str) -> Result<Self, String> {
@@ -149,10 +160,14 @@ impl Theme {
     }
     /// Selected theme with the daemon's temporary application opacity override.
     pub fn effective(home: &Path) -> Result<Self, String> {
-        let name = Self::selected(home)?;
+        let Global {
+            theme: name,
+            background_blur,
+        } = Self::global(home)?;
         let mut theme = Self::load(home, &name)?;
         dynamic::apply(home, &name, &mut theme)?;
         opacity::apply(home, &name, &mut theme);
+        theme.background_blur = background_blur;
         Ok(theme)
     }
     /// The selected theme, or the embedded default when the configuration is
@@ -248,6 +263,14 @@ mod tests {
         .unwrap();
         assert_eq!(Theme::selected(&home).unwrap(), "mine");
         assert_eq!(Theme::current(&home).name, "Mine");
+        assert!(!Theme::current(&home).background_blur);
+        std::fs::write(
+            home.join("winarchy.toml"),
+            "theme = \"mine\"\nbackground_blur = true\n",
+        )
+        .unwrap();
+        assert!(Theme::current(&home).background_blur);
+        assert!(Theme::parse(&format!("{DEFAULT}background_blur = true\n")).is_err());
         std::fs::write(home.join("winarchy.toml"), "theme = \"../x\"\n").unwrap();
         assert!(Theme::selected(&home).is_err());
         assert!(Theme::load(&home, "missing").is_err());

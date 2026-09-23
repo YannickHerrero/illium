@@ -8,6 +8,7 @@ pub fn color(hex: &str) -> slint::Color {
 /// Pushes the theme into the window's `Palette` global.
 pub fn apply(palette: Palette<'_>, theme: &Theme) {
     palette.set_background_opacity(theme.background_opacity);
+    palette.set_background_blur(theme.background_blur);
     palette.set_bg(color(&theme.background));
     palette.set_surface(color(&theme.surface));
     palette.set_overlay(color(&theme.overlay));
@@ -29,7 +30,12 @@ where
         let weak = weak.clone();
         let _ = slint::invoke_from_event_loop(move || {
             if let Some(window) = weak.upgrade() {
+                let blur_changed =
+                    window.global::<Palette>().get_background_blur() != theme.background_blur;
                 apply(window.global::<Palette>(), &theme);
+                if blur_changed && let Some(hwnd) = hwnd(&window) {
+                    winarchy_theme::blur::set(hwnd.0 as isize, theme.background_blur);
+                }
                 window.window().request_redraw();
             }
         });
@@ -60,15 +66,33 @@ pub fn init_com() {
         );
     }
 }
-/// Brings an already shown window to the front, for a second `show` request.
-pub fn raise(window: &impl slint::ComponentHandle) {
+/// None until the window is first shown: Slint creates the native window lazily.
+fn hwnd(window: &impl slint::ComponentHandle) -> Option<windows::Win32::Foundation::HWND> {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    use windows::Win32::{Foundation::HWND, UI::WindowsAndMessaging::SetForegroundWindow};
-    if let Ok(handle) = window.window().window_handle().window_handle()
-        && let RawWindowHandle::Win32(h) = handle.as_raw()
+    match window
+        .window()
+        .window_handle()
+        .window_handle()
+        .ok()?
+        .as_raw()
     {
+        RawWindowHandle::Win32(h) => Some(windows::Win32::Foundation::HWND(h.hwnd.get() as *mut _)),
+        _ => None,
+    }
+}
+/// Brings a shown window to the front, for a second `show` request, with the
+/// blur preference a theme update could not apply before the window existed.
+pub fn raise<T>(window: &T)
+where
+    T: slint::ComponentHandle,
+    for<'a> Palette<'a>: slint::Global<'a, T>,
+{
+    if let Some(hwnd) = hwnd(window) {
+        if window.global::<Palette>().get_background_blur() {
+            winarchy_theme::blur::set(hwnd.0 as isize, true);
+        }
         unsafe {
-            let _ = SetForegroundWindow(HWND(h.hwnd.get() as *mut _));
+            let _ = windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(hwnd);
         }
     }
 }

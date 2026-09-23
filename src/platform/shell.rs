@@ -166,11 +166,14 @@ fn sync<T: Clone + PartialEq + 'static>(model: &Rc<VecModel<T>>, rows: &[T]) {
 pub enum MetaMenu {
     Apps,
     System,
+    Appearance,
 }
 #[derive(Clone)]
 pub enum MetaEntry {
     Menu(MetaMenu),
     Run(crate::command::Command),
+    /// Runs with the menu left open, so the setting can be stepped repeatedly.
+    Adjust(crate::command::Command),
 }
 pub(super) mod bar_hints;
 pub(super) mod expose;
@@ -929,19 +932,40 @@ impl Shell {
                 "Keybindings ›".into(),
                 MetaEntry::Run(crate::command::Command::Keybindings),
             ),
-            (
-                "Theme ›".into(),
-                MetaEntry::Run(crate::command::Command::ThemePicker),
-            ),
+            ("Appearance ›".into(), MetaEntry::Menu(MetaMenu::Appearance)),
+            ("Demo".into(), MetaEntry::Run(crate::command::Command::Demo)),
+        ]
+    }
+    fn meta_appearance(c: &Config) -> Vec<(String, MetaEntry)> {
+        use crate::command::Command;
+        let opacity = (Self::background_opacity(c) * 100.0).round();
+        vec![
+            ("Theme ›".into(), MetaEntry::Run(Command::ThemePicker)),
             (
                 "Wallpaper ›".into(),
-                MetaEntry::Run(crate::command::Command::WallpaperPicker),
+                MetaEntry::Run(Command::WallpaperPicker),
             ),
             (
-                "Solid background".into(),
-                MetaEntry::Run(crate::command::Command::Wallpaper(None)),
+                format!("Increase opacity ({opacity}%)"),
+                MetaEntry::Adjust(Command::BackgroundOpacity(true)),
             ),
-            ("Demo".into(), MetaEntry::Run(crate::command::Command::Demo)),
+            (
+                format!("Decrease opacity ({opacity}%)"),
+                MetaEntry::Adjust(Command::BackgroundOpacity(false)),
+            ),
+            (
+                "Reset opacity".into(),
+                MetaEntry::Adjust(Command::ResetOpacity),
+            ),
+            (
+                if c.global.background_blur {
+                    "Disable blur"
+                } else {
+                    "Enable blur"
+                }
+                .into(),
+                MetaEntry::Adjust(Command::ToggleBlur),
+            ),
         ]
     }
     /// Companion applications, also indexed by the launcher.
@@ -1009,21 +1033,37 @@ impl Shell {
         let dir = winarchy_theme::pack::wallpaper_dir(&self.home, &self.theme)?;
         winarchy_theme::pack::images(&dir)
     }
-    /// Enters a submenu or returns the command to run for result `n`.
-    pub fn meta_activate(&mut self, n: usize, max: usize) -> Option<crate::command::Command> {
+    /// Enters a submenu or returns the command to run for result `n`, and
+    /// whether the menu stays open around it.
+    pub fn meta_activate(
+        &mut self,
+        n: usize,
+        c: &Config,
+    ) -> Option<(crate::command::Command, bool)> {
         match self.meta_results.get(n).cloned()? {
-            MetaEntry::Run(command) => Some(command),
+            MetaEntry::Run(command) => Some((command, false)),
+            MetaEntry::Adjust(command) => Some((command, true)),
             MetaEntry::Menu(menu) => {
                 self.meta_items = match menu {
                     MetaMenu::Apps => Self::meta_apps(),
                     MetaMenu::System => Self::meta_system().unwrap_or_default(),
+                    MetaMenu::Appearance => Self::meta_appearance(c),
                 };
                 self.meta_menu = Some(menu);
                 self.launcher.set_query("".into());
                 self.launcher.set_selected(0);
-                self.search("", max);
+                self.search("", c.launcher.max_results);
                 None
             }
+        }
+    }
+    /// Relabels the Appearance entries after an adjustment, keeping the query
+    /// and the selected row.
+    pub fn meta_refresh(&mut self, c: &Config) {
+        if self.meta_menu == Some(MetaMenu::Appearance) {
+            self.meta_items = Self::meta_appearance(c);
+            let query = self.launcher.get_query();
+            self.search(&query, c.launcher.max_results);
         }
     }
     /// Backspace on an empty query: back to the menu root.

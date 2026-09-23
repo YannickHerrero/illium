@@ -477,6 +477,22 @@ impl Manager {
     fn reload(&mut self) -> Result<(), String> {
         self.reload_config(true)
     }
+    /// Edits one `winarchy.toml` key in place, keeping the others, and restores
+    /// the previous file when the resulting configuration does not load.
+    fn set_global(&mut self, key: &str, value: toml_edit::Item) -> Result<(), String> {
+        let path = self.config.home.join("winarchy.toml");
+        let old = crate::files::read_config(&path)?;
+        let mut doc = String::from_utf8_lossy(&old)
+            .parse::<toml_edit::DocumentMut>()
+            .map_err(|e| format!("winarchy.toml: {e}"))?;
+        doc[key] = value;
+        std::fs::write(&path, doc.to_string()).map_err(|e| e.to_string())?;
+        if let Err(e) = self.reload_config(false) {
+            let _ = std::fs::write(path, old);
+            return Err(e);
+        }
+        Ok(())
+    }
     fn reload_config(&mut self, force: bool) -> Result<(), String> {
         let started = std::time::Instant::now();
         let files = crate::files::snapshot(&self.config.home)?;
@@ -488,8 +504,9 @@ impl Manager {
             winarchy_theme::opacity::clear(&config.home)?;
         }
         if !force && crate::files::same_subsystems(&config.home, &self.config_files, &files) {
-            if config.global.theme != self.config.global.theme || config.theme != self.config.theme
-            {
+            let theme_changed = config.global.theme != self.config.global.theme
+                || config.theme != self.config.theme;
+            if theme_changed {
                 self.shell.apply_theme(&config);
                 self.applets.apply_theme(&config);
                 if config.theme.mode != self.config.theme.mode
@@ -497,7 +514,10 @@ impl Manager {
                 {
                     native::color_mode(mode == "light");
                 }
-                self.config = config;
+            }
+            // Also keeps settings the shell does not draw, such as background_blur.
+            self.config = config;
+            if theme_changed {
                 self.borders();
                 tracing::info!(
                     elapsed_ms = started.elapsed().as_millis(),
@@ -861,14 +881,21 @@ impl Manager {
                 self.shell.apply_opacity(&self.config);
                 return Ok(format!("background opacity: {:.0}%", opacity * 100.0));
             }
+            Command::ResetOpacity => {
+                winarchy_theme::opacity::clear(&self.config.home)?;
+                self.shell.apply_opacity(&self.config);
+                return Ok(format!(
+                    "background opacity: {:.0}%",
+                    self.config.theme.background_opacity * 100.0
+                ));
+            }
             Command::Theme(name) => {
-                let path = self.config.home.join("winarchy.toml");
-                let old = crate::files::read_config(&path)?;
-                std::fs::write(&path, format!("theme = {name:?}\n")).map_err(|e| e.to_string())?;
-                if let Err(e) = self.reload_config(false) {
-                    let _ = std::fs::write(path, old);
-                    return Err(e);
-                }
+                self.set_global("theme", toml_edit::value(name.as_str()))?
+            }
+            Command::ToggleBlur => {
+                let blur = !self.config.global.background_blur;
+                self.set_global("background_blur", toml_edit::value(blur))?;
+                return Ok(format!("background blur: {}", if blur { "on" } else { "off" }));
             }
             Command::Explorer(start) => session::explorer(start)?,
             Command::Quit => {
@@ -1248,11 +1275,17 @@ impl Manager {
                     .indexed(generation, apps, self.config.launcher.max_results);
             }
             Event::Launch(n) if self.shell.meta => {
-                let max = self.config.launcher.max_results;
-                if let Some(command) = self.shell.meta_activate(n.max(0) as usize, max) {
-                    self.shell.dismiss();
+                if let Some((command, stay)) =
+                    self.shell.meta_activate(n.max(0) as usize, &self.config)
+                {
+                    if !stay {
+                        self.shell.dismiss();
+                    }
                     if let Err(e) = self.execute(command) {
                         tracing::error!(%e,"session action failed");
+                    }
+                    if stay {
+                        self.shell.meta_refresh(&self.config);
                     }
                 }
             }
