@@ -10,7 +10,10 @@ Only global settings:
 
 ```toml
 theme = "catppuccin-mocha"
+background_blur = false
 ```
+
+`background_blur` (optional, default `false`) blurs what lies behind the translucent backgrounds of the native terminal, Files and Tasks, for a frosted-glass look with [`background_opacity`](themes.md). It applies live to open and hidden windows and survives theme switches. It uses the Windows accent blur, which stays visible on unfocused windows, and needs Windows' "Transparency effects" setting (Settings > Personalization > Colors) to be on. The browser, the status bar and external applications are not blurred.
 
 ## wm.toml
 
