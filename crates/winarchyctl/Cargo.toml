@@ -7,6 +7,8 @@ description = "Command-line controller for the Winarchy window manager"
 repository = "https://github.com/YannickHerrero/winarchy"
 
 [dependencies]
+argon2 = "0.6"
+rpassword = "7.5.4"
 winarchy-ipc = { path = "../winarchy-ipc" }
 winarchy-theme = { path = "../winarchy-theme" }
 

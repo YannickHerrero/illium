@@ -8,6 +8,7 @@ pub mod files;
 pub mod keybindings;
 pub mod keyboard;
 pub mod layout;
+pub mod lockscreen;
 pub mod model;
 pub mod modifiers;
 #[cfg(windows)]

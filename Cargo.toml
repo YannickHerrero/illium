@@ -25,6 +25,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png"]
 tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+argon2 = "0.6"
 
 [target.'cfg(windows)'.dependencies]
 slint = { version = "=1.12.1", default-features = false, features = ["std", "backend-winit", "renderer-software", "compat-1-2", "raw-window-handle-06", "unstable-winit-030"] }
