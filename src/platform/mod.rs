@@ -504,8 +504,9 @@ impl Manager {
             winarchy_theme::opacity::clear(&config.home)?;
         }
         if !force && crate::files::same_subsystems(&config.home, &self.config_files, &files) {
-            if config.global.theme != self.config.global.theme || config.theme != self.config.theme
-            {
+            let theme_changed = config.global.theme != self.config.global.theme
+                || config.theme != self.config.theme;
+            if theme_changed {
                 self.shell.apply_theme(&config);
                 self.applets.apply_theme(&config);
                 if config.theme.mode != self.config.theme.mode
@@ -513,7 +514,10 @@ impl Manager {
                 {
                     native::color_mode(mode == "light");
                 }
-                self.config = config;
+            }
+            // Also keeps settings the shell does not draw, such as background_blur.
+            self.config = config;
+            if theme_changed {
                 self.borders();
                 tracing::info!(
                     elapsed_ms = started.elapsed().as_millis(),
