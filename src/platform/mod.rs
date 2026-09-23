@@ -477,6 +477,22 @@ impl Manager {
     fn reload(&mut self) -> Result<(), String> {
         self.reload_config(true)
     }
+    /// Edits one `winarchy.toml` key in place, keeping the others, and restores
+    /// the previous file when the resulting configuration does not load.
+    fn set_global(&mut self, key: &str, value: toml_edit::Item) -> Result<(), String> {
+        let path = self.config.home.join("winarchy.toml");
+        let old = crate::files::read_config(&path)?;
+        let mut doc = String::from_utf8_lossy(&old)
+            .parse::<toml_edit::DocumentMut>()
+            .map_err(|e| format!("winarchy.toml: {e}"))?;
+        doc[key] = value;
+        std::fs::write(&path, doc.to_string()).map_err(|e| e.to_string())?;
+        if let Err(e) = self.reload_config(false) {
+            let _ = std::fs::write(path, old);
+            return Err(e);
+        }
+        Ok(())
+    }
     fn reload_config(&mut self, force: bool) -> Result<(), String> {
         let started = std::time::Instant::now();
         let files = crate::files::snapshot(&self.config.home)?;
@@ -870,17 +886,7 @@ impl Manager {
                 ));
             }
             Command::Theme(name) => {
-                let path = self.config.home.join("winarchy.toml");
-                let old = crate::files::read_config(&path)?;
-                let mut doc = String::from_utf8_lossy(&old)
-                    .parse::<toml_edit::DocumentMut>()
-                    .map_err(|e| format!("winarchy.toml: {e}"))?;
-                doc["theme"] = toml_edit::value(name.as_str());
-                std::fs::write(&path, doc.to_string()).map_err(|e| e.to_string())?;
-                if let Err(e) = self.reload_config(false) {
-                    let _ = std::fs::write(path, old);
-                    return Err(e);
-                }
+                self.set_global("theme", toml_edit::value(name.as_str()))?
             }
             Command::Explorer(start) => session::explorer(start)?,
             Command::Quit => {
