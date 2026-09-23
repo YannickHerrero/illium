@@ -1271,11 +1271,17 @@ impl Manager {
                     .indexed(generation, apps, self.config.launcher.max_results);
             }
             Event::Launch(n) if self.shell.meta => {
-                let max = self.config.launcher.max_results;
-                if let Some(command) = self.shell.meta_activate(n.max(0) as usize, max) {
-                    self.shell.dismiss();
+                if let Some((command, stay)) =
+                    self.shell.meta_activate(n.max(0) as usize, &self.config)
+                {
+                    if !stay {
+                        self.shell.dismiss();
+                    }
                     if let Err(e) = self.execute(command) {
                         tracing::error!(%e,"session action failed");
+                    }
+                    if stay {
+                        self.shell.meta_refresh(&self.config);
                     }
                 }
             }
