@@ -888,6 +888,11 @@ impl Manager {
             Command::Theme(name) => {
                 self.set_global("theme", toml_edit::value(name.as_str()))?
             }
+            Command::ToggleBlur => {
+                let blur = !self.config.global.background_blur;
+                self.set_global("background_blur", toml_edit::value(blur))?;
+                return Ok(format!("background blur: {}", if blur { "on" } else { "off" }));
+            }
             Command::Explorer(start) => session::explorer(start)?,
             Command::Quit => {
                 apps::stop_resident();
