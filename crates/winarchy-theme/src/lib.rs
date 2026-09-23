@@ -1,6 +1,8 @@
 //! Theme palette read from `themes/<name>.toml` under the configuration home.
 //! No graphics dependency: the daemon and every application convert the
 //! `#rrggbb` strings to their own color type.
+#[cfg(windows)]
+pub mod blur;
 pub mod dynamic;
 #[cfg(feature = "live")]
 pub mod live;

@@ -34,7 +34,7 @@ where
                     window.global::<Palette>().get_background_blur() != theme.background_blur;
                 apply(window.global::<Palette>(), &theme);
                 if blur_changed && let Some(hwnd) = hwnd(&window) {
-                    crate::blur::set(hwnd, theme.background_blur);
+                    winarchy_theme::blur::set(hwnd.0 as isize, theme.background_blur);
                 }
                 window.window().request_redraw();
             }
@@ -89,7 +89,7 @@ where
 {
     if let Some(hwnd) = hwnd(window) {
         if window.global::<Palette>().get_background_blur() {
-            crate::blur::set(hwnd, true);
+            winarchy_theme::blur::set(hwnd.0 as isize, true);
         }
         unsafe {
             let _ = windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(hwnd);

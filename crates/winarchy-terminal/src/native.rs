@@ -354,7 +354,7 @@ impl App {
         self.fonts = fonts;
         for window in self.windows.values_mut() {
             if blur_changed {
-                crate::blur::set(window.hwnd, blur);
+                winarchy_theme::blur::set(window.hwnd.0 as isize, blur);
             }
             if fonts_changed {
                 window.surface.fonts = self.fonts.clone();
@@ -402,7 +402,7 @@ impl App {
         }
         .map_err(|e| e.to_string())?;
         if self.snapshot.theme.background_blur {
-            crate::blur::set(hwnd, true);
+            winarchy_theme::blur::set(hwnd.0 as isize, true);
         }
         let result = (|| {
             let mut area = RECT::default();

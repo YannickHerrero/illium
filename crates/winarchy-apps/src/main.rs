@@ -5,8 +5,6 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 // Only the pure models and their tests build elsewhere than Windows.
 #![cfg_attr(not(windows), allow(dead_code))]
-#[cfg(windows)]
-mod blur;
 mod files;
 mod key;
 mod log;
