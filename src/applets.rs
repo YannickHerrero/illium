@@ -26,7 +26,8 @@ pub struct Manifest {
     pub command: Option<Vec<String>>,
     /// PowerShell script relative to the applet folder; defaults to `<name>.ps1`.
     pub script: Option<String>,
-    /// `builtin:clock`, `builtin:system` or `builtin:volume` instead of a command.
+    /// `builtin:clock`, `builtin:system`, `builtin:volume` or `builtin:battery`
+    /// instead of a command.
     pub provider: Option<String>,
     /// Add native Wi-Fi traffic fields using the provider's `interface_guid`.
     #[serde(default)]
@@ -103,7 +104,13 @@ pub fn load(home: &Path, name: &str) -> Result<Applet, String> {
         return Err(format!("applet {name}: popup size out of range"));
     }
     if let Some(p) = &manifest.provider
-        && !["builtin:clock", "builtin:system", "builtin:volume"].contains(&p.as_str())
+        && ![
+            "builtin:clock",
+            "builtin:system",
+            "builtin:volume",
+            "builtin:battery",
+        ]
+        .contains(&p.as_str())
     {
         return Err(format!("applet {name}: unknown provider {p}"));
     }
@@ -373,6 +380,12 @@ mod tests {
         std::fs::write(
             dir.join("applet.toml"),
             "provider = \"builtin:volume\"\nattach = \"volume\"\n",
+        )
+        .unwrap();
+        assert!(load(&home, "sample").is_ok());
+        std::fs::write(
+            dir.join("applet.toml"),
+            "provider = \"builtin:battery\"\nattach = \"battery\"\n",
         )
         .unwrap();
         assert!(load(&home, "sample").is_ok());

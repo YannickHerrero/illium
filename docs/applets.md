@@ -60,7 +60,7 @@ applets/weather/
 | `script` | `<name>.ps1` | PowerShell script run hidden with `-NoProfile -ExecutionPolicy Bypass` |
 | `command` | none | Full command line instead of `script` |
 | `wifi_traffic` | `false` | Merge native Wi-Fi traffic counters using the script's `connected` and `interface_guid` fields; independent of script cadence |
-| `provider` | none | `builtin:clock`, `builtin:system` or `builtin:volume` instead of a process |
+| `provider` | none | `builtin:clock`, `builtin:system`, `builtin:volume` or `builtin:battery` instead of a process |
 | `focusable` | `false` | Let the popup take keyboard focus |
 | `attach` | none | Built-in module (`clock`, `time`, `battery`, `cpu`, `memory`, `volume`, `window-title`) whose click opens this applet; it then has no icon and is loaded whenever that module is in a section |
 | `[settings]` | empty | Passed to the provider as `WINARCHY_APPLET_<KEY>` variables |
@@ -127,13 +127,24 @@ Built-in providers avoid a process for fast cadences:
   the active devices, `input_volume`, `input_muted`, `input_level` (peak of the
   default input at call time, in percent) and `sessions`, up to 16
   `{ id, name, volume, muted }` entries for the applications using the default
-  output. It is the only built-in provider that acts on the view's action:
+  output. It acts on the view's action:
   `set <percent>`, `up`, `down` (5% steps), `toggle-mute`, `input-set <percent>`,
   `input-toggle-mute`, `output <id>`, `input <id>` (default device for every
   role, through the same undocumented COM interface the third-party switchers
   use) and `session <percent> <id>`. Setting a level above zero also unmutes;
   `refresh` only reads. The bar reads the same endpoint for its speaker icon,
   crossed out while muted.
+- `builtin:battery`: `present` (false without a battery), `percent`, `plugged`,
+  `state` (`Charging`, `Full`, `Not charging`, `On battery`), `time` (to full or
+  left, empty when unknown), `stats`, a `{ label, value }` list of the figures
+  the battery reports (design capacity, full charge, health, cycles, power),
+  `mode` (`saver`, `balanced`, `performance`, empty when unavailable),
+  `saver_active`, `saver_threshold` (-1 when unavailable), `saver_forced`,
+  `brightness` (-1 without an adjustable built-in display), `travel`,
+  `travel_summary` (empty when travel mode can change nothing) and `error`, the
+  failure of the last action. Actions: `mode <saver|balanced|performance>`,
+  `brightness <percent>`, `saver <on|off>`, `travel <on|off>` and `refresh`.
+  It runs on a worker thread, like `builtin:volume`.
 
 ### Timezone viewer
 
