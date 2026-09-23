@@ -330,6 +330,31 @@ fn uninstall_last_drawer_item_removes_empty_drawer_anchor() {
 }
 
 #[test]
+fn preparation_detects_edits_before_the_backup_is_created() {
+    let f = Fixture::new(Kind::Applet, "todo");
+    let session = Session::open(&f.home).unwrap();
+    let stage = session.stage().unwrap();
+    let replacement = staged_text(
+        stage.path(),
+        "bar",
+        &text(&f.home.join("bar.toml")).unwrap(),
+    )
+    .unwrap();
+    fs::write(f.home.join("bar.toml"), "edited during preparation").unwrap();
+    let error = session
+        .commit(vec![(PathBuf::from("bar.toml"), Some(replacement))], || {
+            Ok(())
+        })
+        .unwrap_err();
+    assert!(error.contains("changed while preparing"));
+    assert_eq!(
+        text(&f.home.join("bar.toml")).unwrap(),
+        "edited during preparation"
+    );
+    assert!(ensure_ready(&f.home).is_ok());
+}
+
+#[test]
 fn rollback_does_not_destroy_concurrent_edits() {
     let f = Fixture::new(Kind::Applet, "todo");
     let session = Session::open(&f.home).unwrap();

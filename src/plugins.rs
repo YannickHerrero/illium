@@ -442,9 +442,11 @@ pub fn ensure_ready(home: &Path) -> Result<()> {
 
 /// A manager lock prevents concurrent manager writes. A crash leaves a pending
 /// backup for manual recovery; further mutations fail closed, never guess.
+type Signature = (bool, BTreeMap<PathBuf, String>);
 struct Session {
     home: PathBuf,
     _lock: fs::File,
+    observed: BTreeMap<PathBuf, Option<Signature>>,
 }
 impl Session {
     fn open(home: &Path) -> Result<Self> {
@@ -467,7 +469,47 @@ impl Session {
         lock.try_lock()
             .map_err(|e| format!("another plugin operation is running: {e}"))?;
         ensure_ready(&home)?;
-        Ok(Self { home, _lock: lock })
+        let mut session = Self {
+            home,
+            _lock: lock,
+            observed: BTreeMap::new(),
+        };
+        session.observe(&[
+            "bar.toml".into(),
+            "plugins.toml".into(),
+            "winarchy.toml".into(),
+        ])?;
+        Ok(session)
+    }
+    fn observe(&mut self, paths: &[PathBuf]) -> Result<()> {
+        for relative in paths {
+            let path = self.home.join(relative);
+            self.observed
+                .entry(relative.clone())
+                .or_insert(if exists(&path)? {
+                    Some(signature(&path)?)
+                } else {
+                    None
+                });
+        }
+        Ok(())
+    }
+    fn check_observed(&self) -> Result<()> {
+        for (relative, expected) in &self.observed {
+            let path = self.home.join(relative);
+            let actual = if exists(&path)? {
+                Some(signature(&path)?)
+            } else {
+                None
+            };
+            if &actual != expected {
+                return Err(format!(
+                    "{} changed while preparing the operation",
+                    relative.display()
+                ));
+            }
+        }
+        Ok(())
     }
     /// Each replacement is staged on the config volume. Backups survive success
     /// and failure. Publication errors roll back in reverse order.
@@ -476,6 +518,7 @@ impl Session {
         changes: Vec<(PathBuf, Option<PathBuf>)>,
         validate: impl FnOnce() -> Result<()>,
     ) -> Result<PathBuf> {
+        self.check_observed()?;
         let backup = tempfile::Builder::new()
             .prefix("transaction-")
             .tempdir_in(self.home.join(META).join("backups"))
@@ -496,6 +539,7 @@ impl Session {
                 _ => None,
             });
         }
+        self.check_observed()?;
         let journal = serde_json::json!({"backup": backup, "paths": changes.iter().map(|(p,_)| p.to_string_lossy()).collect::<Vec<_>>(), "existed": before});
         let bytes = serde_json::to_vec_pretty(&journal).map_err(|e| e.to_string())?;
         let mut file = fs::File::create(backup.join("pending.json")).map_err(|e| e.to_string())?;
@@ -587,7 +631,7 @@ fn remove(path: &Path) -> Result<()> {
     }
     .map_err(|e| e.to_string())
 }
-fn signature(root: &Path) -> Result<(bool, BTreeMap<PathBuf, String>)> {
+fn signature(root: &Path) -> Result<Signature> {
     let sums = tree(root)?
         .into_iter()
         .map(|p| Ok((p.strip_prefix(root).unwrap().to_path_buf(), digest(&p)?)))
@@ -620,7 +664,8 @@ pub fn set_enabled(home: &Path, id: &str, enabled: bool, section: Option<&str>) 
     if section.is_some_and(|s| !SECTIONS.contains(&s)) {
         return Err("section must be left, center, right or drawer".into());
     }
-    let session = Session::open(home)?;
+    let mut session = Session::open(home)?;
+    session.observe(&paths(Kind::Applet, id))?;
     let home = &session.home;
     validate_config(home)?;
     directory(&home.join("applets"))?;
@@ -779,11 +824,13 @@ fn merge_manifest(base: &str, local: &str, incoming: &str) -> Result<String> {
 /// Install/update only explicit schema-1 local packages. Unknown existing
 /// installations are never adopted by matching their names.
 pub fn install(home: &Path, source: &Path, update: bool) -> Result<PathBuf> {
-    let session = Session::open(home)?;
-    let home = &session.home;
-    validate_config(home)?;
+    let mut session = Session::open(home)?;
+    validate_config(&session.home)?;
     let stage = session.stage()?;
     let package = prepare(stage.path(), source)?;
+    session.observe(&paths(package.kind, &package.id))?;
+    session.observe(&[record_path(Path::new(""), package.kind, &package.id)])?;
+    let home = &session.home;
     let upstream_manifest = if package.kind == Kind::Applet {
         Some(text(
             &stage
@@ -891,7 +938,9 @@ pub fn uninstall(home: &Path, kind: Kind, id: &str) -> Result<PathBuf> {
     if kind.bundled(id) {
         return Err("built-ins cannot be uninstalled; disable the applet instead".into());
     }
-    let session = Session::open(home)?;
+    let mut session = Session::open(home)?;
+    session.observe(&paths(kind, id))?;
+    session.observe(&[record_path(Path::new(""), kind, id)])?;
     let home = &session.home;
     validate_config(home)?;
     directory(&home.join(kind.directory()))?;
