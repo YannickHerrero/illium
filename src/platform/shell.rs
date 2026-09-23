@@ -6,9 +6,9 @@ use std::rc::Rc;
 use windows::Win32::{Foundation::*, UI::WindowsAndMessaging::*};
 slint::include_modules!();
 #[cfg(test)]
-mod bar_tests;
-#[cfg(test)]
 mod bar_hints_tests;
+#[cfg(test)]
+mod bar_tests;
 #[cfg(test)]
 mod native_surface_tests;
 pub(super) fn color(s: &str) -> slint::Color {
@@ -79,7 +79,8 @@ pub(super) fn tool(w: &slint::Window, no_activate: bool) {
         SetWindowLongPtrW(
             h,
             GWL_EXSTYLE,
-            ((ex & !(WS_EX_NOACTIVATE.0 as isize)) | WS_EX_TOOLWINDOW.0 as isize
+            ((ex & !(WS_EX_NOACTIVATE.0 as isize))
+                | WS_EX_TOOLWINDOW.0 as isize
                 | if no_activate {
                     WS_EX_NOACTIVATE.0 as isize
                 } else {
@@ -182,13 +183,29 @@ mod wallpaper_tests;
 /// exists, avoiding a first frame at the backend's default position.
 pub(super) fn prepare(window: &slint::Window, r: Rect, passive: bool) {
     window.set_position(slint::PhysicalPosition::new(r.x, r.y));
-    window.set_size(slint::PhysicalSize::new(r.w.max(1) as u32, r.h.max(1) as u32));
-    if id(window) != 0 { tool(window, passive); }
+    window.set_size(slint::PhysicalSize::new(
+        r.w.max(1) as u32,
+        r.h.max(1) as u32,
+    ));
+    if id(window) != 0 {
+        tool(window, passive);
+    }
 }
 pub(super) fn prewarm<T: ComponentHandle + 'static>(component: &T) {
     let window = component.window();
-    if id(window) != 0 { return; } // Already prepared/opened once.
-    prepare(window, Rect { x: -32000, y: -32000, w: 1, h: 1 }, true);
+    if id(window) != 0 {
+        return;
+    } // Already prepared/opened once.
+    prepare(
+        window,
+        Rect {
+            x: -32000,
+            y: -32000,
+            w: 1,
+            h: 1,
+        },
+        true,
+    );
     if let Err(error) = component.show() {
         tracing::warn!(%error, "surface prewarm failed");
         return;
@@ -199,15 +216,21 @@ fn finish_prewarm<T: ComponentHandle + 'static>(weak: slint::Weak<T>, attempts: 
     // Winit creates the HWND on a later loop turn. Hiding synchronously would
     // cancel creation entirely. A real open supersedes this offscreen request.
     slint::Timer::single_shot(std::time::Duration::from_millis(1), move || {
-        let Some(component) = weak.upgrade() else { return; };
+        let Some(component) = weak.upgrade() else {
+            return;
+        };
         let window = component.window();
         let position = window.position();
-        if id(window) != 0 && (position.x != -32000 || position.y != -32000) { return; }
+        if id(window) != 0 && (position.x != -32000 || position.y != -32000) {
+            return;
+        }
         if id(window) == 0 && attempts < 50 {
             finish_prewarm(weak, attempts + 1);
             return;
         }
-        if id(window) != 0 { tool(window, true); }
+        if id(window) != 0 {
+            tool(window, true);
+        }
         let _ = component.hide();
     });
 }
@@ -467,7 +490,12 @@ impl Shell {
             self.wallpaper_key = None;
         }
         self.refresh_wallpaper();
-        let surface_key = (monitors.to_vec(), c.bar.enabled, c.bar.position.clone(), c.bar.height);
+        let surface_key = (
+            monitors.to_vec(),
+            c.bar.enabled,
+            c.bar.position.clone(),
+            c.bar.height,
+        );
         if self.surface_key.as_ref() != Some(&surface_key) {
             self.create_surfaces(c, monitors)?;
             self.surface_key = Some(surface_key);
@@ -575,10 +603,19 @@ impl Shell {
         self.reindex(); // Explicit reload also discovers installed/removed applications.
     }
     fn rebuild_apps(&mut self, max: usize) {
-        self.apps = self.aliases.iter().chain(&self.indexed_apps).cloned().collect();
+        self.apps = self
+            .aliases
+            .iter()
+            .chain(&self.indexed_apps)
+            .cloned()
+            .collect();
         self.apps.sort_by_cached_key(|a| a.name.to_lowercase());
         self.apps.dedup_by(|a, b| a.name == b.name);
-        self.search_names = self.apps.iter().map(|app| app.name.to_lowercase()).collect();
+        self.search_names = self
+            .apps
+            .iter()
+            .map(|app| app.name.to_lowercase())
+            .collect();
         let query = self.launcher.get_query();
         self.search(&query, max);
     }
@@ -596,13 +633,28 @@ impl Shell {
             let mut apps = Vec::new();
             for env in ["APPDATA", "PROGRAMDATA"] {
                 if let Some(root) = std::env::var_os(env) {
-                    scan(&std::path::PathBuf::from(root).join("Microsoft/Windows/Start Menu/Programs"), &mut apps);
+                    scan(
+                        &std::path::PathBuf::from(root)
+                            .join("Microsoft/Windows/Start Menu/Programs"),
+                        &mut apps,
+                    );
                 }
             }
-            apps.extend(native::packaged_apps().into_iter().map(|(name, target)| App {
-                name, target, shortcut: true, app: None,
-            }));
-            tracing::debug!(elapsed_ms = started.elapsed().as_millis(), count = apps.len(), "applications indexed off UI thread");
+            apps.extend(
+                native::packaged_apps()
+                    .into_iter()
+                    .map(|(name, target)| App {
+                        name,
+                        target,
+                        shortcut: true,
+                        app: None,
+                    }),
+            );
+            tracing::debug!(
+                elapsed_ms = started.elapsed().as_millis(),
+                count = apps.len(),
+                "applications indexed off UI thread"
+            );
             // This is a worker, not a hook: retry a full bounded queue so the
             // single-flight completion cannot be lost during an event burst.
             let mut event = Event::AppsIndexed(generation, apps);
@@ -619,11 +671,15 @@ impl Shell {
         });
     }
     pub fn indexed(&mut self, generation: u64, apps: Vec<App>, max: usize) {
-        if generation != self.index_generation { return; }
+        if generation != self.index_generation {
+            return;
+        }
         self.index_running = false;
         self.indexed_apps = apps;
         self.rebuild_apps(max);
-        if std::mem::take(&mut self.index_again) { self.reindex(); }
+        if std::mem::take(&mut self.index_again) {
+            self.reindex();
+        }
     }
     /// At most one native surface per idle turn, without activating it.
     pub fn prewarm_step(&mut self) -> bool {
@@ -782,7 +838,9 @@ impl Shell {
                 .iter()
                 .filter_map(|(name, command)| score(q, name).map(|s| (s, name, command)))
                 .collect();
-            matches.sort_by(|(a, name_a, _), (b, name_b, _)| a.cmp(b).then_with(|| name_a.cmp(name_b)));
+            matches.sort_by(|(a, name_a, _), (b, name_b, _)| {
+                a.cmp(b).then_with(|| name_a.cmp(name_b))
+            });
             let shown: Vec<slint::SharedString> = matches
                 .iter()
                 .take(max)
@@ -804,7 +862,8 @@ impl Shell {
             .zip(&self.search_names)
             .filter_map(|(a, name)| score_folded(&query, name).map(|s| (s, a)))
             .collect();
-        matches.sort_by(|(a, app_a), (b, app_b)| a.cmp(b).then_with(|| app_a.name.cmp(&app_b.name)));
+        matches
+            .sort_by(|(a, app_a), (b, app_b)| a.cmp(b).then_with(|| app_a.name.cmp(&app_b.name)));
         self.results = matches
             .into_iter()
             .take(max)
@@ -978,7 +1037,16 @@ impl Shell {
         let h = super::dpi::scale(r, c.launcher.max_results as i32 * 38 + 65).min(r.h);
         self.launcher.set_surface_width(super::dpi::logical(r, w));
         self.launcher.set_surface_height(super::dpi::logical(r, h));
-        prepare(self.launcher.window(), Rect { x: r.x + (r.w - w) / 2, y: r.y + (r.h - h) / 2, w, h }, false);
+        prepare(
+            self.launcher.window(),
+            Rect {
+                x: r.x + (r.w - w) / 2,
+                y: r.y + (r.h - h) / 2,
+                w,
+                h,
+            },
+            false,
+        );
         self.launcher.show().map_err(|e| e.to_string())?;
         self.launcher_pending = Some(r);
         self.visible = true;
@@ -988,12 +1056,17 @@ impl Shell {
         let Some(models) = self.models.get(monitor) else {
             return;
         };
-        let kinds = [&models.before_workspaces, &models.left, &models.center, &models.right]
-            .into_iter()
-            .flat_map(|model| model.iter())
-            .filter(|item| item.hint_id > 0)
-            .map(|item| item.kind.to_string())
-            .collect();
+        let kinds = [
+            &models.before_workspaces,
+            &models.left,
+            &models.center,
+            &models.right,
+        ]
+        .into_iter()
+        .flat_map(|model| model.iter())
+        .filter(|item| item.hint_id > 0)
+        .map(|item| item.kind.to_string())
+        .collect();
         self.hints.open(c, r, monitor, kinds);
         if self.hints.opened {
             self.bars[monitor].set_hint_request(self.hints.generation as i32);
@@ -1106,7 +1179,12 @@ impl Shell {
         let mut center = items(&c.bar.center);
         let mut right = items(&c.bar.right);
         let mut hint_id = 0;
-        for item in before_workspaces.iter_mut().chain(&mut left).chain(&mut center).chain(&mut right) {
+        for item in before_workspaces
+            .iter_mut()
+            .chain(&mut left)
+            .chain(&mut center)
+            .chain(&mut right)
+        {
             let kind = item.kind.as_str();
             let interactive = matches!(kind, "clock" | "battery" | "cpu" | "memory")
                 || applets.is_applet(kind)

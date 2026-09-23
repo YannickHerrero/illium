@@ -109,17 +109,33 @@ pub fn applet_snapshot(dir: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, String> {
     let mut examined = 0;
     while let Some((path, depth)) = pending.pop() {
         examined += 1;
-        if examined > 512 || depth > 16 { return Err(format!("{}: applet source tree exceeds limits", dir.display())); }
+        if examined > 512 || depth > 16 {
+            return Err(format!(
+                "{}: applet source tree exceeds limits",
+                dir.display()
+            ));
+        }
         let meta = std::fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
-        if reparse(&meta) { return Err(format!("{}: linked applet source refused", path.display())); }
+        if reparse(&meta) {
+            return Err(format!("{}: linked applet source refused", path.display()));
+        }
         if meta.is_dir() {
             for entry in std::fs::read_dir(&path).map_err(|e| e.to_string())? {
-                if pending.len() + examined >= 512 { return Err(format!("{}: applet source tree exceeds limits", dir.display())); }
+                if pending.len() + examined >= 512 {
+                    return Err(format!(
+                        "{}: applet source tree exceeds limits",
+                        dir.display()
+                    ));
+                }
                 pending.push((entry.map_err(|e| e.to_string())?.path(), depth + 1));
             }
         } else if meta.is_file() {
-            let modified = meta.modified().map_err(|e| e.to_string())?
-                .duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_nanos();
+            let modified = meta
+                .modified()
+                .map_err(|e| e.to_string())?
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| e.to_string())?
+                .as_nanos();
             files.push((path, format!("{}:{modified}", meta.len()).into_bytes()));
         }
     }
@@ -198,7 +214,9 @@ mod tests {
         assert_ne!(before, applet_snapshot(&t.0).unwrap());
         std::fs::remove_file(file).unwrap();
         assert!(applet_snapshot(&t.0).unwrap().is_empty());
-        for i in 0..512 { std::fs::write(t.0.join(format!("{i}.slint")), "").unwrap(); }
+        for i in 0..512 {
+            std::fs::write(t.0.join(format!("{i}.slint")), "").unwrap();
+        }
         assert!(applet_snapshot(&t.0).is_err());
     }
     #[test]

@@ -232,7 +232,11 @@ fn run_inner(
                     if window.pending.load(Ordering::Acquire) {
                         // Isolated output/input paints on the leading edge. A
                         // sustained stream keeps the bounded coalescing timer.
-                        if !window.timer && window.last_paint.is_none_or(|at| at.elapsed() >= std::time::Duration::from_millis(8)) {
+                        if !window.timer
+                            && window.last_paint.is_none_or(|at| {
+                                at.elapsed() >= std::time::Duration::from_millis(8)
+                            })
+                        {
                             window.paint(&app.palette);
                         } else {
                             window.schedule();

@@ -218,11 +218,19 @@ fn prepare(key: &Key, cancelled: &dyn Fn() -> bool) -> ResultPixels {
     }
     let pixels = winarchy_theme::pack::decode(&key.path)?;
     let decoded = started.elapsed();
-    if cancelled() { return Err("wallpaper request superseded".into()); }
+    if cancelled() {
+        return Err("wallpaper request superseded".into());
+    }
     let palette = if let Some(home) = &key.dynamic_home {
-        let source = key.path.file_name().and_then(|s| s.to_str()).ok_or("invalid wallpaper filename")?;
+        let source = key
+            .path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or("invalid wallpaper filename")?;
         Some(winarchy_theme::dynamic::prepare(home, source, &pixels))
-    } else { None };
+    } else {
+        None
+    };
     let mut frames: Vec<Arc<Frame>> = Vec::new();
     for (index, &(width, height)) in key.screens.iter().enumerate() {
         if cancelled() {
@@ -248,7 +256,11 @@ fn prepare(key: &Key, cancelled: &dyn Fn() -> bool) -> ResultPixels {
         total_ms = started.elapsed().as_millis(),
         "wallpaper prepared in worker"
     );
-    Ok(Arc::new(Prepared { frames, palette, bytes }))
+    Ok(Arc::new(Prepared {
+        frames,
+        palette,
+        bytes,
+    }))
 }
 
 #[cfg(test)]
@@ -393,13 +405,17 @@ mod tests {
         std::fs::create_dir_all(&home).unwrap();
         let mut key = key("unused");
         key.path = home.join("image.png");
-        std::fs::write(&key.path, include_bytes!("../../tests/fixtures/wallpaper.png")).unwrap();
+        std::fs::write(
+            &key.path,
+            include_bytes!("../../tests/fixtures/wallpaper.png"),
+        )
+        .unwrap();
         key.dynamic_home = Some(home.clone());
         let first = prepare(&key, &|| false).unwrap();
         assert!(first.palette.is_some());
         assert!(!home.join(winarchy_theme::dynamic::FILE).exists());
         assert!(!home.join("wallpapers.json").exists());
-        key.screens = vec![(8,4), (4,8)];
+        key.screens = vec![(8, 4), (4, 8)];
         assert_eq!(first.palette, prepare(&key, &|| false).unwrap().palette);
         assert!(prepare(&key, &|| true).is_err());
         key.dynamic_home = None;
@@ -409,9 +425,16 @@ mod tests {
     #[test]
     fn tiny_images_prepare_once_for_identical_monitor_sizes() {
         let mut key = key("unused");
-        key.path = std::env::temp_dir().join(format!("winarchy-wallpaper-fixture-{}.png", std::process::id()));
+        key.path = std::env::temp_dir().join(format!(
+            "winarchy-wallpaper-fixture-{}.png",
+            std::process::id()
+        ));
         // Cross-compiled tests cannot access the build host's manifest path.
-        std::fs::write(&key.path, include_bytes!("../../tests/fixtures/wallpaper.png")).unwrap();
+        std::fs::write(
+            &key.path,
+            include_bytes!("../../tests/fixtures/wallpaper.png"),
+        )
+        .unwrap();
         key.screens = vec![(640, 360), (640, 360), (360, 640)];
         let result = prepare(&key, &|| false);
         std::fs::remove_file(&key.path).unwrap();

@@ -24,7 +24,8 @@ impl Shell {
                     size,
                     modified,
                     screens: self.wallpaper_sizes.clone(),
-                    dynamic_home: winarchy_theme::dynamic::is_dynamic(&self.theme).then(|| self.home.clone()),
+                    dynamic_home: winarchy_theme::dynamic::is_dynamic(&self.theme)
+                        .then(|| self.home.clone()),
                 };
                 (name, key)
             })
@@ -151,9 +152,12 @@ impl Shell {
             return;
         };
         if let Err(e) = crate::wallpaper::commit_choice(
-            &self.home, &self.theme, Some(name.clone()), pixels.palette.as_ref(), pending.persist,
-        )
-        {
+            &self.home,
+            &self.theme,
+            Some(name.clone()),
+            pixels.palette.as_ref(),
+            pending.persist,
+        ) {
             tracing::warn!(%e, "wallpaper choice not saved");
             self.wallpaper_error = Some(e);
             return;

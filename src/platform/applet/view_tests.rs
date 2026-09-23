@@ -91,7 +91,12 @@ fn escape_closes_applet_even_when_its_cancel_callback_would_handle_it() {
     runtime
         .toggle(
             &config,
-            crate::layout::Rect { x: 0, y: 0, w: 800, h: 600 },
+            crate::layout::Rect {
+                x: 0,
+                y: 0,
+                w: 800,
+                h: 600,
+            },
             "escape-test",
             100,
         )
@@ -104,16 +109,22 @@ fn escape_closes_applet_even_when_its_cancel_callback_would_handle_it() {
     assert!(runtime.open.is_none());
     assert!(runtime.pending.is_none());
     assert!(!runtime.keyboard_focus);
-    assert!(matches!(view.get_property("open").unwrap(), Value::Bool(false)));
     assert!(matches!(
-        view.get_property("cancel-count").unwrap(), Value::Number(0.0)
+        view.get_property("open").unwrap(),
+        Value::Bool(false)
     ));
     assert!(matches!(
-        view.get_property("dismissed-count").unwrap(), Value::Number(1.0)
+        view.get_property("cancel-count").unwrap(),
+        Value::Number(0.0)
+    ));
+    assert!(matches!(
+        view.get_property("dismissed-count").unwrap(),
+        Value::Number(1.0)
     ));
     runtime.escape();
     assert!(matches!(
-        view.get_property("dismissed-count").unwrap(), Value::Number(1.0)
+        view.get_property("dismissed-count").unwrap(),
+        Value::Number(1.0)
     ));
     std::fs::remove_dir_all(home).unwrap();
 }
@@ -128,10 +139,12 @@ fn volume_keyboard_intent_is_optimistic_until_authoritative_completion() {
     let instance = def.create().unwrap();
     let actions = Rc::new(RefCell::new(Vec::new()));
     let recorded = actions.clone();
-    instance.set_callback("action", move |args| {
-        recorded.borrow_mut().push(action_argument(args).unwrap());
-        Value::Void
-    }).unwrap();
+    instance
+        .set_callback("action", move |args| {
+            recorded.borrow_mut().push(action_argument(args).unwrap());
+            Value::Void
+        })
+        .unwrap();
     let mut data = serde_json::json!({"volume":40,"muted":false,"output_name":"Fixture",
         "outputs":[],"input_volume":0,"input_muted":false,"input_level":0,"inputs":[],"sessions":[]});
     set_data(&instance, &def, &data).unwrap();
@@ -171,22 +184,41 @@ fn timezone_columns_align_despite_different_label_widths() {
             })).collect::<Vec<_>>()
         }))
         .collect();
-    set_data(&instance, &def, &serde_json::json!({"rows": rows, "position": 12.5})).unwrap();
+    set_data(
+        &instance,
+        &def,
+        &serde_json::json!({"rows": rows, "position": 12.5}),
+    )
+    .unwrap();
     instance.show().unwrap();
     let window = windows.borrow().last().unwrap().clone();
     for width in [1120, 860] {
-        instance.set_property("popup-width", Value::Number(width as f64)).unwrap();
+        instance
+            .set_property("popup-width", Value::Number(width as f64))
+            .unwrap();
         window.set_size(slint::PhysicalSize::new(width, 310));
         window.request_redraw();
         let mut pixels = vec![Rgb8Pixel::default(); width as usize * 310];
-        window.draw_if_needed(|renderer| { renderer.render(&mut pixels, width as usize); });
+        window.draw_if_needed(|renderer| {
+            renderer.render(&mut pixels, width as usize);
+        });
         // Sample above the centered labels, below each rounded corner. Every
         // row must have exactly the same cell edges and current-time marker.
         let strip = |y: usize| &pixels[y * width as usize + 266..(y + 1) * width as usize - 20];
         for y in [98, 167, 237] {
-            assert_eq!(strip(28), strip(y), "misaligned timeline at width {width}, y={y}");
+            assert_eq!(
+                strip(28),
+                strip(y),
+                "misaligned timeline at width {width}, y={y}"
+            );
         }
-        assert!(strip(28).windows(2).filter(|pair| pair[0] != pair[1]).count() >= 46);
+        assert!(
+            strip(28)
+                .windows(2)
+                .filter(|pair| pair[0] != pair[1])
+                .count()
+                >= 46
+        );
     }
     instance.hide().unwrap();
     std::fs::remove_dir_all(home).unwrap();

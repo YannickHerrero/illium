@@ -1,8 +1,8 @@
 //! One prepared window per Windows user/session. Extra simultaneous windows are
 //! standalone; we do not keep an unbounded pool of Chromium instances alive.
 use crate::native;
-use winarchy_browser::launch;
 use std::{sync::mpsc, time::Duration};
+use winarchy_browser::launch;
 use winarchy_ipc::{client, identity, server};
 use windows::Win32::{
     Foundation::{LPARAM, WPARAM},
@@ -92,30 +92,38 @@ pub fn run() -> Result<(), String> {
     let mut target = targets;
     let mut resources = native::Resources::new().map_err(|e| e.to_string())?;
     loop {
-        let result = native::run_prepared(&target, hidden, Some(&rx), |thread| {
-            // Retain one owner-only pipe and one server thread across window rebuilds.
-            if let Some((file, tx)) = server.take() {
-                std::thread::spawn(move || {
-                    server::accept_loop(
-                        &file,
-                        |command| {
-                            if command == "pid" {
-                                return Ok(std::process::id().to_string());
-                            }
-                            let (reply, answer) = mpsc::sync_channel(1);
-                            tx.try_send(Request { command, reply })
-                                .map_err(|_| "Browser UI is busy".to_string())?;
-                            unsafe { PostThreadMessageW(thread, REQUEST, WPARAM(0), LPARAM(0)) }
+        let result = native::run_prepared(
+            &target,
+            hidden,
+            Some(&rx),
+            |thread| {
+                // Retain one owner-only pipe and one server thread across window rebuilds.
+                if let Some((file, tx)) = server.take() {
+                    std::thread::spawn(move || {
+                        server::accept_loop(
+                            &file,
+                            |command| {
+                                if command == "pid" {
+                                    return Ok(std::process::id().to_string());
+                                }
+                                let (reply, answer) = mpsc::sync_channel(1);
+                                tx.try_send(Request { command, reply })
+                                    .map_err(|_| "Browser UI is busy".to_string())?;
+                                unsafe {
+                                    PostThreadMessageW(thread, REQUEST, WPARAM(0), LPARAM(0))
+                                }
                                 .map_err(|e| e.to_string())?;
-                            answer.recv_timeout(Duration::from_secs(3)).map_err(|_| {
-                                "Browser request timed out; outcome unknown".to_string()
-                            })?
-                        },
-                        log,
-                    )
-                });
-            }
-        }, &mut resources)
+                                answer.recv_timeout(Duration::from_secs(3)).map_err(|_| {
+                                    "Browser request timed out; outcome unknown".to_string()
+                                })?
+                            },
+                            log,
+                        )
+                    });
+                }
+            },
+            &mut resources,
+        )
         .map_err(|e| e.to_string())?;
         if result == Exit::Quit {
             return Ok(());

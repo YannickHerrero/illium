@@ -1113,7 +1113,11 @@ impl Drop for Apartment {
 
 type FilterStamp = Vec<Option<(u64, std::time::SystemTime)>>;
 type BrowserLibraries = (Rc<RefCell<Blocker>>, Rc<RefCell<Library>>);
-struct CachedBlocker { dir: PathBuf, stamp: FilterStamp, value: Rc<RefCell<Blocker>> }
+struct CachedBlocker {
+    dir: PathBuf,
+    stamp: FilterStamp,
+    value: Rc<RefCell<Blocker>>,
+}
 /// Resident resources outlive controllers/pages. Cached COM interfaces are
 /// released before the owning UI thread's apartment is uninitialized.
 pub struct Resources {
@@ -1126,7 +1130,9 @@ unsafe fn release_window() {
     if let Some(app) = APP.with(|state| state.borrow_mut().take()) {
         // Also cover initialization errors, which bypass the normal host loop.
         unsafe {
-            if IsWindow(Some(app.hwnd)).as_bool() { let _ = DestroyWindow(app.hwnd); }
+            if IsWindow(Some(app.hwnd)).as_bool() {
+                let _ = DestroyWindow(app.hwnd);
+            }
             let views = std::mem::take(&mut *app.views.borrow_mut());
             drop(views);
             let _ = DeleteObject(app.brush.into());
@@ -1135,24 +1141,48 @@ unsafe fn release_window() {
     }
 }
 impl Drop for Resources {
-    fn drop(&mut self) { unsafe { release_window(); } }
+    fn drop(&mut self) {
+        unsafe {
+            release_window();
+        }
+    }
 }
 impl Resources {
     pub fn new() -> AppResult<Self> {
-        unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?; }
-        Ok(Self { env: None, blocker: None, library: None, _apartment: Apartment })
+        unsafe {
+            CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
+        }
+        Ok(Self {
+            env: None,
+            blocker: None,
+            library: None,
+            _apartment: Apartment,
+        })
     }
     fn libraries(&mut self, dir: &std::path::Path) -> AppResult<BrowserLibraries> {
         let mut stamp = Vec::new();
-        for name in ["easylist.txt", "easyprivacy.txt", "custom.txt", "exceptions.json"] {
+        for name in [
+            "easylist.txt",
+            "easyprivacy.txt",
+            "custom.txt",
+            "exceptions.json",
+        ] {
             stamp.push(match std::fs::metadata(dir.join(name)) {
                 Ok(meta) => Some((meta.len(), meta.modified()?)),
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
                 Err(error) => return Err(error.into()),
             });
         }
-        if self.blocker.as_ref().is_none_or(|cached| cached.dir != dir || cached.stamp != stamp) {
-            self.blocker = Some(CachedBlocker { dir: dir.to_owned(), stamp, value: Rc::new(RefCell::new(Blocker::load(dir)?)) });
+        if self
+            .blocker
+            .as_ref()
+            .is_none_or(|cached| cached.dir != dir || cached.stamp != stamp)
+        {
+            self.blocker = Some(CachedBlocker {
+                dir: dir.to_owned(),
+                stamp,
+                value: Rc::new(RefCell::new(Blocker::load(dir)?)),
+            });
         }
         if self.library.as_ref().is_none_or(|(path, _)| path != dir) {
             self.library = Some((dir.to_owned(), Rc::new(RefCell::new(Library::load(dir)?))));
@@ -1165,11 +1195,19 @@ impl Resources {
     }
 }
 unsafe fn additional_launch_tabs(inputs: &[String]) -> AppResult<()> {
-    let first = snapshot().and_then(|app| app.tabs.borrow().active()).ok_or("No initial tab")?;
+    let first = snapshot()
+        .and_then(|app| app.tabs.borrow().active())
+        .ok_or("No initial tab")?;
     for input in inputs.iter().skip(1) {
-        unsafe { create_tab(&address(input), false)?; }
+        unsafe {
+            create_tab(&address(input), false)?;
+        }
     }
-    if inputs.len() > 1 { unsafe { activate_tab(first, false)?; } }
+    if inputs.len() > 1 {
+        unsafe {
+            activate_tab(first, false)?;
+        }
+    }
     Ok(())
 }
 pub fn run_demo(data: &std::path::Path) -> AppResult<Exit> {
@@ -1296,37 +1334,37 @@ fn run_inner(
         let env = if let Some(env) = &resources.env {
             env.clone()
         } else {
-        let (tx, rx) = std::sync::mpsc::channel();
-        let profile = wide(&profile.to_string_lossy());
-        // Keep WebView-owned UI (find, context menus, dialogs) in English too.
-        // This does not translate page content or change the system language.
-        let options: ICoreWebView2EnvironmentOptions =
-            CoreWebView2EnvironmentOptions::default().into();
-        options.SetLanguage(w!("en-US"))?;
-        if demo.is_some() {
-            options.SetAdditionalBrowserArguments(w!(
-                "--disable-background-networking --disable-sync --no-first-run"
-            ))?;
-        }
-        CreateCoreWebView2EnvironmentCompletedHandler::wait_for_async_operation(
-            Box::new(move |handler| {
-                CreateCoreWebView2EnvironmentWithOptions(
-                    PCWSTR::null(),
-                    PCWSTR(profile.as_ptr()),
-                    &options,
-                    &handler,
-                )
-                .map_err(webview2_com::Error::WindowsError)
-            }),
-            Box::new(move |result, env| {
-                result?;
-                let _ = tx.send(env.ok_or_else(|| windows::core::Error::from(E_POINTER)));
-                Ok(())
-            }),
-        )?;
-        let env = rx.recv()??;
-        resources.env = Some(env.clone());
-        env
+            let (tx, rx) = std::sync::mpsc::channel();
+            let profile = wide(&profile.to_string_lossy());
+            // Keep WebView-owned UI (find, context menus, dialogs) in English too.
+            // This does not translate page content or change the system language.
+            let options: ICoreWebView2EnvironmentOptions =
+                CoreWebView2EnvironmentOptions::default().into();
+            options.SetLanguage(w!("en-US"))?;
+            if demo.is_some() {
+                options.SetAdditionalBrowserArguments(w!(
+                    "--disable-background-networking --disable-sync --no-first-run"
+                ))?;
+            }
+            CreateCoreWebView2EnvironmentCompletedHandler::wait_for_async_operation(
+                Box::new(move |handler| {
+                    CreateCoreWebView2EnvironmentWithOptions(
+                        PCWSTR::null(),
+                        PCWSTR(profile.as_ptr()),
+                        &options,
+                        &handler,
+                    )
+                    .map_err(webview2_com::Error::WindowsError)
+                }),
+                Box::new(move |result, env| {
+                    result?;
+                    let _ = tx.send(env.ok_or_else(|| windows::core::Error::from(E_POINTER)));
+                    Ok(())
+                }),
+            )?;
+            let env = rx.recv()??;
+            resources.env = Some(env.clone());
+            env
         };
         let context = ViewContext {
             hwnd,

@@ -111,12 +111,28 @@ pub const HELP: [&str; 15] = [
 ];
 /// Read-only jobs contain no UI state and can safely run on one worker.
 pub enum ReadRequest {
-    Directory { revision: u64, cwd: Option<PathBuf> },
-    Preview { revision: u64, entry: Option<Entry>, hidden: bool, sort: Sort },
+    Directory {
+        revision: u64,
+        cwd: Option<PathBuf>,
+    },
+    Preview {
+        revision: u64,
+        entry: Option<Entry>,
+        hidden: bool,
+        sort: Sort,
+    },
 }
 pub enum ReadResult {
-    Directory { revision: u64, entries: Vec<Entry>, parent: Vec<Entry>, notice: String },
-    Preview { revision: u64, preview: Preview },
+    Directory {
+        revision: u64,
+        entries: Vec<Entry>,
+        parent: Vec<Entry>,
+        notice: String,
+    },
+    Preview {
+        revision: u64,
+        preview: Preview,
+    },
 }
 impl ReadRequest {
     pub fn run(self) -> ReadResult {
@@ -132,13 +148,25 @@ impl ReadRequest {
                 let parent = match cwd.as_ref() {
                     None => vec![],
                     Some(dir) => match dir.parent() {
-                        Some(parent) => read_dir(parent).map(|(entries, _)| entries).unwrap_or_default(),
+                        Some(parent) => read_dir(parent)
+                            .map(|(entries, _)| entries)
+                            .unwrap_or_default(),
                         None => root_entries(),
                     },
                 };
-                ReadResult::Directory { revision, entries, parent, notice }
+                ReadResult::Directory {
+                    revision,
+                    entries,
+                    parent,
+                    notice,
+                }
             }
-            Self::Preview { revision, entry, hidden, sort } => {
+            Self::Preview {
+                revision,
+                entry,
+                hidden,
+                sort,
+            } => {
                 let preview = match entry {
                     None => Preview::Empty,
                     Some(e) if e.dir => match read_dir(&e.path) {
@@ -191,11 +219,16 @@ pub struct Files {
 }
 fn arrange_entries(entries: &mut Vec<Entry>, filter: &str, hidden: bool, sort: Sort) {
     entries.retain(|e| (hidden || !e.hidden) && matches(filter, &e.name));
-    entries.sort_by(|a, b| b.dir.cmp(&a.dir).then_with(|| match sort {
-        Sort::Natural => natural(&a.name, &b.name),
-        Sort::Size => b.size.cmp(&a.size).then_with(|| natural(&a.name, &b.name)),
-        Sort::Modified => b.modified.cmp(&a.modified).then_with(|| natural(&a.name, &b.name)),
-    }));
+    entries.sort_by(|a, b| {
+        b.dir.cmp(&a.dir).then_with(|| match sort {
+            Sort::Natural => natural(&a.name, &b.name),
+            Sort::Size => b.size.cmp(&a.size).then_with(|| natural(&a.name, &b.name)),
+            Sort::Modified => b
+                .modified
+                .cmp(&a.modified)
+                .then_with(|| natural(&a.name, &b.name)),
+        })
+    });
 }
 /// Case-insensitive comparison treating digit runs as numbers: `a2` < `a10`.
 pub fn natural(a: &str, b: &str) -> Ordering {
@@ -447,53 +480,91 @@ impl Files {
     }
     pub fn take_read(&mut self) -> Option<ReadRequest> {
         if std::mem::take(&mut self.directory_pending) {
-            Some(ReadRequest::Directory { revision: self.directory_revision, cwd: self.cwd.clone() })
+            Some(ReadRequest::Directory {
+                revision: self.directory_revision,
+                cwd: self.cwd.clone(),
+            })
         } else if !self.loading && std::mem::take(&mut self.preview_pending) {
             Some(ReadRequest::Preview {
-                revision: self.preview_revision, entry: self.current().cloned(),
-                hidden: self.show_hidden, sort: self.sort,
+                revision: self.preview_revision,
+                entry: self.current().cloned(),
+                hidden: self.show_hidden,
+                sort: self.sort,
             })
-        } else { None }
+        } else {
+            None
+        }
     }
     /// Apply only data, never a worker's copy of selection, filter or clipboard.
     pub fn apply_read(&mut self, result: ReadResult) -> bool {
         match result {
-            ReadResult::Directory { revision, entries, parent, notice } => {
-                if revision != self.directory_revision { return false; }
-                let name = self.next_cursor.take().or_else(|| self.current().map(|e| e.name.clone())).or_else(|| {
-                    self.cwd.as_ref().and_then(|cwd| self.memory.get(cwd).cloned())
-                });
+            ReadResult::Directory {
+                revision,
+                entries,
+                parent,
+                notice,
+            } => {
+                if revision != self.directory_revision {
+                    return false;
+                }
+                let name = self
+                    .next_cursor
+                    .take()
+                    .or_else(|| self.current().map(|e| e.name.clone()))
+                    .or_else(|| {
+                        self.cwd
+                            .as_ref()
+                            .and_then(|cwd| self.memory.get(cwd).cloned())
+                    });
                 self.all = entries;
                 self.parent_all = parent;
                 self.apply_parent();
                 self.notice = self.operation_notice.clone().unwrap_or(notice);
                 self.loading = false;
                 self.apply_view();
-                self.cursor = name.and_then(|name| self.entries.iter().position(|e| e.name == name))
+                self.cursor = name
+                    .and_then(|name| self.entries.iter().position(|e| e.name == name))
                     .unwrap_or(self.cursor.min(self.entries.len().saturating_sub(1)));
                 let existing: BTreeSet<_> = self.all.iter().map(|e| &e.path).collect();
                 self.selected.retain(|p| existing.contains(p));
                 self.refresh_preview();
             }
             ReadResult::Preview { revision, preview } => {
-                if revision != self.preview_revision { return false; }
+                if revision != self.preview_revision {
+                    return false;
+                }
                 self.preview = preview;
             }
         }
         true
     }
     /// Complete only the operation, not the UI state from when it started.
-    pub fn finish_operation(&mut self, action: &Action, directory: Option<&Path>, result: Result<(), String>) {
+    pub fn finish_operation(
+        &mut self,
+        action: &Action,
+        directory: Option<&Path>,
+        result: Result<(), String>,
+    ) {
         self.working = false;
-        let changes_disk = !matches!(action, Action::None | Action::Quit | Action::Open(_) | Action::Terminal(_));
+        let changes_disk = !matches!(
+            action,
+            Action::None | Action::Quit | Action::Open(_) | Action::Terminal(_)
+        );
         if self.cwd.as_deref() == directory && changes_disk {
             self.reload();
-            if result.is_ok() && let Action::Rename { to, .. } | Action::CreateDir(to) | Action::CreateFile(to) = action {
-                self.next_cursor = to.file_name().map(|name| name.to_string_lossy().into_owned());
+            if result.is_ok()
+                && let Action::Rename { to, .. } | Action::CreateDir(to) | Action::CreateFile(to) =
+                    action
+            {
+                self.next_cursor = to
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned());
             }
         }
         if let Err(error) = result {
-            if self.clipboard.is_none() && let Action::Move { sources, .. } = action {
+            if self.clipboard.is_none()
+                && let Action::Move { sources, .. } = action
+            {
                 self.clipboard = Some((sources.clone(), true));
             }
             self.notice = error.clone();
@@ -503,14 +574,18 @@ impl Files {
     fn apply_parent(&mut self) {
         let mut parent = self.parent_all.clone();
         self.arrange(&mut parent, "");
-        self.parent_cursor = self.cwd.as_ref().and_then(|cwd| parent.iter().position(|e| &e.path == cwd));
+        self.parent_cursor = self
+            .cwd
+            .as_ref()
+            .and_then(|cwd| parent.iter().position(|e| &e.path == cwd));
         self.parent = parent;
     }
     fn rearrange(&mut self) {
         let path = self.current().map(|entry| entry.path.clone());
         self.apply_view();
         self.apply_parent();
-        self.cursor = path.and_then(|path| self.entries.iter().position(|entry| entry.path == path))
+        self.cursor = path
+            .and_then(|path| self.entries.iter().position(|entry| entry.path == path))
             .unwrap_or(self.cursor.min(self.entries.len().saturating_sub(1)));
         self.refresh_preview();
     }
@@ -553,7 +628,10 @@ impl Files {
     fn place(&mut self, cursor: usize) {
         self.cursor = cursor.min(self.entries.len().saturating_sub(1));
         if let Mode::Visual(anchor) = self.mode {
-            if self.entries.is_empty() { self.selected.clear(); return; }
+            if self.entries.is_empty() {
+                self.selected.clear();
+                return;
+            }
             let (lo, hi) = (anchor.min(self.cursor), anchor.max(self.cursor));
             self.selected = self.entries[lo..=hi.min(self.entries.len().saturating_sub(1))]
                 .iter()
@@ -952,7 +1030,9 @@ mod tests {
         f.entries.iter().map(|e| e.name.as_str()).collect()
     }
     fn finish_reads(f: &mut Files) {
-        while let Some(job) = f.take_read() { assert!(f.apply_read(job.run())); }
+        while let Some(job) = f.take_read() {
+            assert!(f.apply_read(job.run()));
+        }
     }
     #[test]
     fn visual_selection_is_safe_while_initial_listing_is_loading() {
@@ -1019,7 +1099,10 @@ mod tests {
         finish_reads(&mut f);
         f.working = true;
         let source = t.0.join("file2.txt");
-        let action = Action::Move { sources: vec![source.clone()], into: t.0.join("docs") };
+        let action = Action::Move {
+            sources: vec![source.clone()],
+            into: t.0.join("docs"),
+        };
         f.go(t.0.join("src"));
         f.finish_operation(&action, Some(&t.0), Err("Synthetic failure".into()));
         finish_reads(&mut f);
@@ -1039,7 +1122,8 @@ mod tests {
         finish_reads(&mut f);
         assert_eq!(f.current().unwrap().path, path);
         f.finish_operation(&Action::CreateFile(path), Some(&t.0), Ok(()));
-        f.key(Key::Char('g'), false, 10); f.key(Key::Char('g'), false, 10);
+        f.key(Key::Char('g'), false, 10);
+        f.key(Key::Char('g'), false, 10);
         finish_reads(&mut f);
         assert_eq!(f.current().unwrap().name, "docs");
     }

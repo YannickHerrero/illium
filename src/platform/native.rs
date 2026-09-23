@@ -167,7 +167,11 @@ impl Border {
             )
             .ok()?;
             corners(h.0 as isize, true);
-            Some(Self { id: h.0 as isize, shape: None, color: None })
+            Some(Self {
+                id: h.0 as isize,
+                shape: None,
+                color: None,
+            })
         }
     }
     /// Surrounds `frame` with a `width`-pixel ring of `color`, just above `client`.
@@ -187,7 +191,13 @@ impl Border {
             let recolor = self.color != Some(color);
             if recolor {
                 let key = wide(BORDER_COLOR);
-                if SetPropW(h, PCWSTR(key.as_ptr()), Some(HANDLE(color as usize as *mut _))).is_ok() {
+                if SetPropW(
+                    h,
+                    PCWSTR(key.as_ptr()),
+                    Some(HANDLE(color as usize as *mut _)),
+                )
+                .is_ok()
+                {
                     self.color = Some(color);
                 }
             }
@@ -215,7 +225,9 @@ impl Border {
                 hgt,
                 SWP_NOACTIVATE | SWP_SHOWWINDOW | order,
             );
-            if recolor || reshape { let _ = InvalidateRect(Some(h), None, true); }
+            if recolor || reshape {
+                let _ = InvalidateRect(Some(h), None, true);
+            }
         }
     }
     pub fn hide(&self) {
@@ -483,7 +495,9 @@ pub fn show(id: isize, visible: bool) {
 /// Left edge of a parked window, beside the -32000 Windows uses for minimized
 /// ones. Windows clamps positions at -32768, so the width cannot be added.
 const PARK_X: i32 = -32000;
-pub fn parking_rect(rect: Rect) -> Rect { Rect { x: PARK_X, ..rect } }
+pub fn parking_rect(rect: Rect) -> Rect {
+    Rect { x: PARK_X, ..rect }
+}
 /// Parked off screen by Winarchy while its workspace is inactive. Minimized
 /// windows sit at the same coordinates on their own and are left alone.
 pub fn parked(id: isize) -> bool {
@@ -659,8 +673,14 @@ pub fn position(id: isize, r: Rect, layer: Option<HWND>) {
     }
 }
 pub fn batch(items: &[(isize, Rect)]) {
-    if items.is_empty() { return; }
-    let fallback = || { for (id, rect) in items { position(*id, *rect, None); } };
+    if items.is_empty() {
+        return;
+    }
+    let fallback = || {
+        for (id, rect) in items {
+            position(*id, *rect, None);
+        }
+    };
     unsafe {
         let Ok(mut d) = BeginDeferWindowPos(items.len() as i32) else {
             fallback();
@@ -732,10 +752,16 @@ pub fn packaged_apps() -> Vec<(String, String)> {
     unsafe {
         // This enumeration runs on a dedicated worker. Balance even S_FALSE;
         // the guard is declared before interfaces so they are released first.
-        if CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_err() { return out; }
+        if CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_err() {
+            return out;
+        }
         struct Apartment;
         impl Drop for Apartment {
-            fn drop(&mut self) { unsafe { CoUninitialize(); } }
+            fn drop(&mut self) {
+                unsafe {
+                    CoUninitialize();
+                }
+            }
         }
         let _apartment = Apartment;
         let Ok(folder) =

@@ -300,8 +300,11 @@ impl Manager {
             dpi::scale(area, self.config.wm.gap),
             dpi::scale(area, self.config.wm.outer_gap),
         );
-        let mut placements: Vec<_> = ids.into_iter().zip(rs)
-            .map(|(id, r)| (id, native::framed(id, r))).collect();
+        let mut placements: Vec<_> = ids
+            .into_iter()
+            .zip(rs)
+            .map(|(id, r)| (id, native::framed(id, r)))
+            .collect();
         let mut show = Vec::new();
         let mut concealed_foreground = false;
         for c in &mut self.model.clients {
@@ -312,10 +315,21 @@ impl Manager {
                     placements.push((c.id, native::framed(c.id, area)));
                 } else if c.floating && parked {
                     let current = native::rect(c.id);
-                    placements.push((c.id, c.parked.unwrap_or(Rect { x: 64, y: 64, ..current })));
+                    placements.push((
+                        c.id,
+                        c.parked.unwrap_or(Rect {
+                            x: 64,
+                            y: 64,
+                            ..current
+                        }),
+                    ));
                 }
-                if parked || !native::visible(c.id) { c.parked = None; }
-                if !native::visible(c.id) { show.push(c.id); }
+                if parked || !native::visible(c.id) {
+                    c.parked = None;
+                }
+                if !native::visible(c.id) {
+                    show.push(c.id);
+                }
             } else if !active && !native::concealed(c.id) {
                 if park {
                     let current = native::rect(c.id);
@@ -331,7 +345,9 @@ impl Manager {
         // Park the outgoing workspace and reveal tiled clients directly at
         // their final rectangles. Hidden clients are mapped only afterwards.
         native::batch(&placements);
-        for id in show { native::show(id, true); }
+        for id in show {
+            native::show(id, true);
+        }
         for c in &self.model.clients {
             if c.workspace == self.model.active && c.fullscreen && !native::minimized(c.id) {
                 native::position(c.id, native::framed(c.id, area), Some(HWND_TOP));
@@ -432,10 +448,17 @@ impl Manager {
     /// Called before returning to the UI loop: wallpaper and shell colors land
     /// in the same frame. Companion processes observe the published snapshot.
     fn sync_wallpaper_palette(&mut self) {
-        if !self.shell.take_wallpaper_palette_dirty() { return; }
+        if !self.shell.take_wallpaper_palette_dirty() {
+            return;
+        }
         let result = (|| {
-            let mut theme = winarchy_theme::Theme::load(&self.config.home, &self.config.global.theme)?;
-            winarchy_theme::dynamic::apply(&self.config.home, &self.config.global.theme, &mut theme)?;
+            let mut theme =
+                winarchy_theme::Theme::load(&self.config.home, &self.config.global.theme)?;
+            winarchy_theme::dynamic::apply(
+                &self.config.home,
+                &self.config.global.theme,
+                &mut theme,
+            )?;
             Ok::<_, String>(theme)
         })();
         match result {
@@ -862,9 +885,7 @@ impl Manager {
         }
     }
     fn restore_focus(&mut self, restore: Option<isize>) {
-        if let Some(id) =
-            restore.filter(|id| !native::concealed(*id) && !native::minimized(*id))
-        {
+        if let Some(id) = restore.filter(|id| !native::concealed(*id) && !native::minimized(*id)) {
             native::focus(id, false);
         } else {
             self.focus_visible();
@@ -903,7 +924,9 @@ impl Manager {
         let entries = clients
             .into_iter()
             .map(|c| {
-                let exe = native::process(c.id).map(|(_, exe)| exe).unwrap_or_default();
+                let exe = native::process(c.id)
+                    .map(|(_, exe)| exe)
+                    .unwrap_or_default();
                 let app = std::path::Path::new(&exe)
                     .file_stem()
                     .map(|stem| stem.to_string_lossy().into_owned())
@@ -998,7 +1021,10 @@ impl Manager {
     }
     fn event(&mut self, event: Event) {
         self.dispatch(event);
-        if !self.shell.hints.opened && self.shell.popup_open.is_none() && self.applets.open.is_none() {
+        if !self.shell.hints.opened
+            && self.shell.popup_open.is_none()
+            && self.applets.open.is_none()
+        {
             self.bar_restore = None;
         }
         input::set_popup_open(self.shell.popup_open.is_some() || self.applets.open.is_some());
@@ -1120,8 +1146,9 @@ impl Manager {
             }
             Event::Search(q) => self.shell.search(&q, self.config.launcher.max_results),
             Event::AppsIndexed(generation, apps) => {
-                self.shell.indexed(generation, apps, self.config.launcher.max_results);
-            },
+                self.shell
+                    .indexed(generation, apps, self.config.launcher.max_results);
+            }
             Event::Launch(n) if self.shell.meta => {
                 let max = self.config.launcher.max_results;
                 if let Some(command) = self.shell.meta_activate(n.max(0) as usize, max) {
@@ -1255,7 +1282,9 @@ impl Manager {
                 self.shell.hints.close();
                 self.shell.close_popup();
                 self.applets.escape();
-                if self.applets.open.is_none() && let Some(restore) = self.bar_restore.take() {
+                if self.applets.open.is_none()
+                    && let Some(restore) = self.bar_restore.take()
+                {
                     self.restore_focus(Some(restore));
                 }
                 self.shell.refresh(&self.model, &self.config, &self.applets);
@@ -1274,7 +1303,9 @@ impl Manager {
                 self.applets
                     .apply_traffic(&name, generation, &interface, result);
             }
-            Event::AppletAction(name, generation, action) => self.applets.action(&name, generation, action),
+            Event::AppletAction(name, generation, action) => {
+                self.applets.action(&name, generation, action)
+            }
             Event::Mouse(id) => {
                 let hovered = self.shell.is_bar(id);
                 if hovered != self.shell.drawer_hovered {
@@ -1417,7 +1448,9 @@ fn backend() -> slint::BackendSelector {
     slint::BackendSelector::new()
         .backend_name("winit".into())
         .renderer_name("software".into())
-        .with_winit_window_attributes_hook(|attributes| attributes.with_active(false).with_skip_taskbar(true))
+        .with_winit_window_attributes_hook(|attributes| {
+            attributes.with_active(false).with_skip_taskbar(true)
+        })
 }
 pub fn run(replace: bool) -> Result<(), String> {
     security::require_standard_user()?;
@@ -1477,13 +1510,24 @@ pub fn run(replace: bool) -> Result<(), String> {
         // Finish interactive placement before returning to Slint's next frame,
         // not at the next maintenance tick.
         if m.shell.interactive() || m.applets.open.is_some() {
-            let Manager { shell, config, monitors, applets, bar_restore, .. } = &mut *m;
+            let Manager {
+                shell,
+                config,
+                monitors,
+                applets,
+                bar_restore,
+                ..
+            } = &mut *m;
             shell.arrange(config, monitors);
             applets.arrange();
             shell.hints.arrange(*bar_restore);
         }
         if count > 0 {
-            tracing::trace!(count, elapsed_us = started.elapsed().as_micros(), "event drain");
+            tracing::trace!(
+                count,
+                elapsed_us = started.elapsed().as_micros(),
+                "event drain"
+            );
         }
     });
     let notified = drain.clone();

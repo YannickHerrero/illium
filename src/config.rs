@@ -163,8 +163,14 @@ const DEFAULTS: &[(&str, &str)] = &[
         "themes/catppuccin-latte.toml",
         include_str!("../config/themes/catppuccin-latte.toml"),
     ),
-    ("themes/dynamic-dark.toml", include_str!("../config/themes/dynamic-dark.toml")),
-    ("themes/dynamic-light.toml", include_str!("../config/themes/dynamic-light.toml")),
+    (
+        "themes/dynamic-dark.toml",
+        include_str!("../config/themes/dynamic-dark.toml"),
+    ),
+    (
+        "themes/dynamic-light.toml",
+        include_str!("../config/themes/dynamic-light.toml"),
+    ),
     (
         "applets/weather/applet.toml",
         include_str!("../config/applets/weather/applet.toml"),
@@ -288,8 +294,14 @@ const DEFAULT_ASSETS: &[(&str, &[u8])] = &[
         "themes/catppuccin-mocha/preview.png",
         include_bytes!("../config/themes/catppuccin-mocha/preview.png"),
     ),
-    ("themes/dynamic-dark/preview.png", include_bytes!("../config/themes/dynamic-dark/preview.png")),
-    ("themes/dynamic-light/preview.png", include_bytes!("../config/themes/dynamic-light/preview.png")),
+    (
+        "themes/dynamic-dark/preview.png",
+        include_bytes!("../config/themes/dynamic-dark/preview.png"),
+    ),
+    (
+        "themes/dynamic-light/preview.png",
+        include_bytes!("../config/themes/dynamic-light/preview.png"),
+    ),
     (
         "themes/catppuccin-mocha/wallpapers/1-totoro.png",
         include_bytes!("../config/themes/catppuccin-mocha/wallpapers/1-totoro.png"),
@@ -509,10 +521,27 @@ mod tests {
         let home = std::env::temp_dir().join(format!("winarchy-clock-date-{}", std::process::id()));
         Config::install(&home).unwrap();
         let original = std::fs::read_to_string(home.join("bar.toml")).unwrap();
-        assert!(Config::load(&home).unwrap().bar.clock_date_format.is_empty());
-        std::fs::write(home.join("bar.toml"), format!("{original}\nclock_date_format = \"%a %d %b\"\n")).unwrap();
-        assert_eq!(Config::load(&home).unwrap().bar.clock_date_format, "%a %d %b");
-        std::fs::write(home.join("bar.toml"), format!("{original}\nclock_date_format = \"%Q\"\n")).unwrap();
+        assert!(
+            Config::load(&home)
+                .unwrap()
+                .bar
+                .clock_date_format
+                .is_empty()
+        );
+        std::fs::write(
+            home.join("bar.toml"),
+            format!("{original}\nclock_date_format = \"%a %d %b\"\n"),
+        )
+        .unwrap();
+        assert_eq!(
+            Config::load(&home).unwrap().bar.clock_date_format,
+            "%a %d %b"
+        );
+        std::fs::write(
+            home.join("bar.toml"),
+            format!("{original}\nclock_date_format = \"%Q\"\n"),
+        )
+        .unwrap();
         assert!(Config::load(&home).is_err());
         std::fs::remove_dir_all(home).unwrap();
     }
@@ -577,11 +606,15 @@ mod tests {
     }
     #[test]
     fn dynamic_runtime_corruption_does_not_invalidate_installed_configuration() {
-        let home = std::env::temp_dir().join(format!("winarchy-dynamic-config-{}", std::process::id()));
+        let home =
+            std::env::temp_dir().join(format!("winarchy-dynamic-config-{}", std::process::id()));
         Config::install(&home).unwrap();
         std::fs::write(home.join("winarchy.toml"), "theme = 'dynamic-light'").unwrap();
         std::fs::write(home.join(winarchy_theme::dynamic::FILE), "broken").unwrap();
-        assert_eq!(Config::load(&home).unwrap().theme, winarchy_theme::Theme::load(&home, "dynamic-light").unwrap());
+        assert_eq!(
+            Config::load(&home).unwrap().theme,
+            winarchy_theme::Theme::load(&home, "dynamic-light").unwrap()
+        );
         std::fs::remove_dir_all(home).unwrap();
     }
     #[test]
@@ -601,7 +634,10 @@ mod tests {
         assert_eq!(catalog.len(), 4);
         for id in ["dynamic-dark", "dynamic-light"] {
             assert!(catalog.iter().any(|entry| entry.id == id));
-            assert_eq!(winarchy_theme::pack::wallpaper_dir(&home, id).unwrap(), home.join("wallpapers/dynamic"));
+            assert_eq!(
+                winarchy_theme::pack::wallpaper_dir(&home, id).unwrap(),
+                home.join("wallpapers/dynamic")
+            );
         }
         assert!(home.join("wallpapers/dynamic").is_dir());
         for (id, count) in [("catppuccin-mocha", 4), ("catppuccin-latte", 2)] {

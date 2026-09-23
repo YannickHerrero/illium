@@ -18,11 +18,15 @@ mod app {
     use std::{
         cell::RefCell,
         rc::Rc,
-        sync::{Arc, Mutex, Condvar},
+        sync::{Arc, Condvar, Mutex},
         time::Duration,
     };
     #[derive(Default)]
-    struct Sampling { visible: bool, generation: u64, stopped: bool }
+    struct Sampling {
+        visible: bool,
+        generation: u64,
+        stopped: bool,
+    }
     pub struct App {
         window: TasksWindow,
         _theme: winarchy_theme::live::Subscription,
@@ -109,7 +113,9 @@ mod app {
             {
                 let weak = window.as_weak();
                 window.on_sample_ready(move || {
-                    if let Ok(processes) = rx.try_recv() && let Some(window) = weak.upgrade() {
+                    if let Ok(processes) = rx.try_recv()
+                        && let Some(window) = weak.upgrade()
+                    {
                         let mut t = tasks.borrow_mut();
                         t.update(processes);
                         render(&window, &rows, &t);
@@ -124,19 +130,38 @@ mod app {
                     let mut last_generation = None;
                     loop {
                         let state = sampling.0.lock().unwrap();
-                        let state = sampling.1.wait_while(state, |s| !s.visible && !s.stopped).unwrap();
-                        if state.stopped { return; }
+                        let state = sampling
+                            .1
+                            .wait_while(state, |s| !s.visible && !s.stopped)
+                            .unwrap();
+                        if state.stopped {
+                            return;
+                        }
                         let generation = state.generation;
                         let first = last_generation != Some(generation);
                         last_generation = Some(generation);
                         drop(state);
-                        if tx.send(sampler.sample()).is_err() { return; }
-                        if weak.upgrade_in_event_loop(|window| window.invoke_sample_ready()).is_err() { return; }
+                        if tx.send(sampler.sample()).is_err() {
+                            return;
+                        }
+                        if weak
+                            .upgrade_in_event_loop(|window| window.invoke_sample_ready())
+                            .is_err()
+                        {
+                            return;
+                        }
                         let state = sampling.0.lock().unwrap();
-                        let delay = if first { Duration::from_millis(300) } else { Duration::from_secs(2) };
-                        let _ = sampling.1.wait_timeout_while(state, delay, |s| {
-                            s.visible && !s.stopped && s.generation == generation
-                        }).unwrap();
+                        let delay = if first {
+                            Duration::from_millis(300)
+                        } else {
+                            Duration::from_secs(2)
+                        };
+                        let _ = sampling
+                            .1
+                            .wait_timeout_while(state, delay, |s| {
+                                s.visible && !s.stopped && s.generation == generation
+                            })
+                            .unwrap();
                     }
                 });
             }

@@ -243,12 +243,15 @@ mod tests {
     }
     #[test]
     fn reload_tracks_external_changes_and_deletion_without_losing_good_data() {
-        let dir = std::env::temp_dir().join(format!("browser-library-reload-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("browser-library-reload-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let mut reader = Library::load(&dir).unwrap();
         let mut writer = Library::load(&dir).unwrap();
-        writer.visit("https://example.com", "External visit").unwrap();
+        writer
+            .visit("https://example.com", "External visit")
+            .unwrap();
         reader.reload().unwrap();
         assert_eq!(reader.suggestions("").len(), 1);
         let pointer = reader.data.history.as_ptr();

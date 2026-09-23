@@ -54,7 +54,9 @@ mod resident {
             Request::Ping => Ok("ok".into()),
             Request::Quit => {
                 if APPS.with_borrow(|apps| apps.as_ref().is_some_and(|apps| apps.files.working())) {
-                    return Err("a file operation is still in progress; retry quit when it finishes".into());
+                    return Err(
+                        "a file operation is still in progress; retry quit when it finishes".into(),
+                    );
                 }
                 slint::quit_event_loop().map_err(|e| e.to_string())?;
                 Ok("ok".into())

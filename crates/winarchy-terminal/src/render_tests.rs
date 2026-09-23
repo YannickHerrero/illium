@@ -11,7 +11,13 @@ fn frame_preserves_combining_wide_and_hidden_cells_without_scalar_allocations() 
     model.feed("é界 e\u{301} \x1b[8mX\x1b[0m".as_bytes());
     let palette = Palette::new(&winarchy_theme::Theme::default_theme());
     let frame = Frame::new(Some(&model), &palette);
-    let cell = |col| frame.cells.iter().find(|cell| cell.row == 0 && cell.col == col).unwrap();
+    let cell = |col| {
+        frame
+            .cells
+            .iter()
+            .find(|cell| cell.row == 0 && cell.col == col)
+            .unwrap()
+    };
     assert!(matches!(cell(0).text, Glyph::Scalar('é')));
     assert!(matches!(cell(1).text, Glyph::Scalar('界')));
     assert!(cell(1).flags.contains(Flags::WIDE_CHAR));
@@ -52,10 +58,24 @@ fn hidden_gpu_surface_survives_resize_and_font_changes() {
         let g = Graphics::new(&config).unwrap();
         for style in 0..4 {
             let first = g.fonts.layout("e\u{301}", style).unwrap();
-            let count = g.fonts.cache.borrow().iter().map(HashMap::len).sum::<usize>();
+            let count = g
+                .fonts
+                .cache
+                .borrow()
+                .iter()
+                .map(HashMap::len)
+                .sum::<usize>();
             let second = g.fonts.layout("e\u{301}", style).unwrap();
             assert_eq!(first.as_raw(), second.as_raw());
-            assert_eq!(g.fonts.cache.borrow().iter().map(HashMap::len).sum::<usize>(), count);
+            assert_eq!(
+                g.fonts
+                    .cache
+                    .borrow()
+                    .iter()
+                    .map(HashMap::len)
+                    .sum::<usize>(),
+                count
+            );
         }
         let mut surface = Surface::new(g.clone(), hwnd, 320, 160, 96, 4).unwrap();
         let mut theme = winarchy_theme::Theme::default_theme();

@@ -7,7 +7,9 @@ pub fn targets(mut inputs: Vec<String>) -> Result<Vec<String>, String> {
     if inputs.len() > MAX_TABS {
         return Err(format!("Open at most {MAX_TABS} tabs per launch"));
     }
-    if inputs.is_empty() { inputs.push(String::new()); }
+    if inputs.is_empty() {
+        inputs.push(String::new());
+    }
     Ok(inputs)
 }
 
@@ -18,7 +20,8 @@ pub fn open_command(inputs: &[String]) -> Result<String, String> {
         serde_json::to_string(&inputs[0])
     } else {
         serde_json::to_string(&inputs)
-    }.map_err(|e| e.to_string())?;
+    }
+    .map_err(|e| e.to_string())?;
     let command = format!("open {payload}");
     if command.len() > winarchy_ipc::protocol::MAX_COMMAND_BYTES {
         return Err("Browser launch exceeds the IPC command size limit".into());
@@ -29,7 +32,10 @@ pub fn open_command(inputs: &[String]) -> Result<String, String> {
 pub fn parse_open(payload: &str) -> Result<Vec<String>, String> {
     #[derive(Deserialize)]
     #[serde(untagged)]
-    enum Input { One(String), Many(Vec<String>) }
+    enum Input {
+        One(String),
+        Many(Vec<String>),
+    }
     let values = match serde_json::from_str(payload).map_err(|e| e.to_string())? {
         Input::One(value) => vec![value],
         Input::Many(values) => values,
@@ -49,9 +55,16 @@ mod tests {
     }
     #[test]
     fn multiple_targets_preserve_order_unicode_and_quoted_searches() {
-        let inputs = vec!["https://example.com/?a=1&b=2".into(), "日本語 with spaces".into(), "about:blank".into()];
+        let inputs = vec![
+            "https://example.com/?a=1&b=2".into(),
+            "日本語 with spaces".into(),
+            "about:blank".into(),
+        ];
         let wire = open_command(&inputs).unwrap();
-        assert_eq!(parse_open(wire.strip_prefix("open ").unwrap()).unwrap(), inputs);
+        assert_eq!(
+            parse_open(wire.strip_prefix("open ").unwrap()).unwrap(),
+            inputs
+        );
     }
     #[test]
     fn invalid_or_excessive_requests_are_rejected_before_opening() {

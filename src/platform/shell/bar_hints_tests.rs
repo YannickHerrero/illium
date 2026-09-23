@@ -156,7 +156,10 @@ fn modules_unfolded_right_before_a_hint_request_still_report_their_center() {
     );
     assert!(first.iter().all(|(epoch, _, _)| *epoch == 4));
     let x = |index: i32| first.iter().find(|(_, i, _)| *i == index).unwrap().2;
-    assert!(x(2) > 400. && x(2) < x(3) && x(3) < x(1) && x(1) < 800., "{first:?}");
+    assert!(
+        x(2) > 400. && x(2) < x(3) && x(3) < x(1) && x(1) < 800.,
+        "{first:?}"
+    );
 }
 
 #[test]

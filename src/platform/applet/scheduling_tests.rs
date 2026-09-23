@@ -30,13 +30,28 @@ fn runtime() -> Runtime {
 fn volume_polls_coalesce_and_user_slider_intent_takes_priority() {
     let mut runtime = runtime();
     runtime.entries[0].applet.manifest.provider = Some("builtin:volume".into());
-    for _ in 0..20 { runtime.action("wifi", 2, Some("refresh".into())); }
+    for _ in 0..20 {
+        runtime.action("wifi", 2, Some("refresh".into()));
+    }
     assert_eq!(runtime.entries[0].pending_actions.len(), 1);
-    for action in ["levels", "refresh", "set 10", "set 20", "toggle-mute", "set 30"] {
+    for action in [
+        "levels",
+        "refresh",
+        "set 10",
+        "set 20",
+        "toggle-mute",
+        "set 30",
+    ] {
         runtime.action("wifi", 2, Some(action.into()));
     }
-    assert_eq!(runtime.entries[0].pending_actions.iter().map(String::as_str).collect::<Vec<_>>(),
-        vec!["set 20", "toggle-mute", "set 30"]);
+    assert_eq!(
+        runtime.entries[0]
+            .pending_actions
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec!["set 20", "toggle-mute", "set 30"]
+    );
 }
 #[test]
 fn reload_keeps_unchanged_workers_and_invalidates_nested_source_edits() {
@@ -49,7 +64,9 @@ fn reload_keeps_unchanged_workers_and_invalidates_nested_source_edits() {
     std::fs::write(dir.join("imports/shared.slint"), "old").unwrap();
     let mut config = Config::load(&home).unwrap();
     config.bar.left = vec!["fixture".into()];
-    config.bar.right.clear(); config.bar.center.clear(); config.bar.drawer.clear();
+    config.bar.right.clear();
+    config.bar.center.clear();
+    config.bar.drawer.clear();
     let (tx, _) = crate::queue::channel(8);
     let mut runtime = Runtime::new(tx);
     runtime.load(&config);
@@ -57,12 +74,17 @@ fn reload_keeps_unchanged_workers_and_invalidates_nested_source_edits() {
     let due = Instant::now() + Duration::from_secs(123);
     runtime.entries[0].due = due;
     runtime.entries[0].running = true;
-    runtime.entries[0].pending_actions.push_back("queued".into());
+    runtime.entries[0]
+        .pending_actions
+        .push_back("queued".into());
     runtime.load(&config);
     assert_eq!(runtime.entries[0].generation, generation);
     assert!(runtime.entries[0].running);
     assert_eq!(runtime.entries[0].due, due);
-    assert_eq!(runtime.entries[0].pending_actions.pop_front().as_deref(), Some("queued"));
+    assert_eq!(
+        runtime.entries[0].pending_actions.pop_front().as_deref(),
+        Some("queued")
+    );
     runtime.apply("fixture", generation, Ok("{\"value\":1}".into()));
     assert_eq!(runtime.entries[0].data["value"], 1);
     std::fs::write(dir.join("imports/shared.slint"), "changed source").unwrap();

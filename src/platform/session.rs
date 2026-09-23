@@ -163,13 +163,7 @@ pub fn stop_processes(names: &[String]) {
         };
         // taskkill reports failure when nothing matched, which is not an error.
         let stopped = std::process::Command::new(&taskkill)
-            .args([
-                "/IM",
-                &image,
-                "/FI",
-                &format!("SESSION eq {session}"),
-                "/F",
-            ])
+            .args(["/IM", &image, "/FI", &format!("SESSION eq {session}"), "/F"])
             .creation_flags(0x08000000)
             .status()
             .is_ok_and(|status| status.success());

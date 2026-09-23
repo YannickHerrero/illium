@@ -54,14 +54,27 @@ pub struct Entry {
     instance: Option<ComponentInstance>,
 }
 fn instantiate(e: &mut Entry, tx: &EventSender) -> Result<ComponentInstance, String> {
-    if e.definition.is_none() { e.definition = Some(compile(&e.applet)?); }
-    if let Some(instance) = &e.instance { return Ok(instance.clone_strong()); }
-    let instance = e.definition.as_ref().unwrap().create().map_err(|error| error.to_string())?;
+    if e.definition.is_none() {
+        e.definition = Some(compile(&e.applet)?);
+    }
+    if let Some(instance) = &e.instance {
+        return Ok(instance.clone_strong());
+    }
+    let instance = e
+        .definition
+        .as_ref()
+        .unwrap()
+        .create()
+        .map_err(|error| error.to_string())?;
     let tx = tx.clone();
     let name = e.applet.name.clone();
     let generation = e.generation;
     let _ = instance.set_callback("action", move |args| {
-        let _ = tx.send(Event::AppletAction(name.clone(), generation, action_argument(args)));
+        let _ = tx.send(Event::AppletAction(
+            name.clone(),
+            generation,
+            action_argument(args),
+        ));
         Value::Void
     });
     e.instance = Some(instance.clone_strong());
@@ -87,15 +100,24 @@ fn load_sprite(applet: &Applet) -> Option<(applets::sprite::Sprite, slint::Image
             return Err("sprite must be a plain filename".into());
         }
         let bytes = crate::files::read_config(&applet.dir.join(name))?;
-        let pack = applets::sprite::Sprite::parse(std::str::from_utf8(&bytes).map_err(|e| e.to_string())?)?;
-        let image = slint::Image::load_from_path(&applet.dir.join(&pack.sheet)).map_err(|e| e.to_string())?;
+        let pack = applets::sprite::Sprite::parse(
+            std::str::from_utf8(&bytes).map_err(|e| e.to_string())?,
+        )?;
+        let image = slint::Image::load_from_path(&applet.dir.join(&pack.sheet))
+            .map_err(|e| e.to_string())?;
         let size = image.size();
-        if size.width != pack.frame_width * pack.columns || size.height != pack.frame_height * pack.rows {
+        if size.width != pack.frame_width * pack.columns
+            || size.height != pack.frame_height * pack.rows
+        {
             return Err("sprite sheet dimensions do not match pack".into());
         }
         Ok((pack, image))
     };
-    load().map_err(|error| tracing::warn!(applet = applet.name, %error, "sprite unavailable; using icon")).ok()
+    load()
+        .map_err(
+            |error| tracing::warn!(applet = applet.name, %error, "sprite unavailable; using icon"),
+        )
+        .ok()
 }
 pub struct Runtime {
     pub entries: Vec<Entry>,
@@ -136,11 +158,19 @@ impl Runtime {
                 }
             };
             let fingerprint = crate::files::applet_snapshot(&applet.dir).ok();
-            let old = previous.iter().position(|e| e.applet.name == applet.name)
+            let old = previous
+                .iter()
+                .position(|e| e.applet.name == applet.name)
                 .map(|index| previous.swap_remove(index));
-            if fingerprint.is_some() && old.as_ref().is_some_and(|entry| entry.fingerprint == fingerprint) {
+            if fingerprint.is_some()
+                && old
+                    .as_ref()
+                    .is_some_and(|entry| entry.fingerprint == fingerprint)
+            {
                 let entry = old.unwrap();
-                if let Some(instance) = &entry.instance { set_colors(instance, &c.theme); }
+                if let Some(instance) = &entry.instance {
+                    set_colors(instance, &c.theme);
+                }
                 // Keep generation, running worker, action queue, due time and
                 // instance together. In-flight results remain valid for this entry.
                 self.entries.push(entry);
@@ -180,10 +210,16 @@ impl Runtime {
                     let _ = instance.set_property("open", Value::Bool(false));
                     shell::prewarm(&instance);
                 }
-                Err(error) => tracing::warn!(applet = e.applet.name, %error, "view preparation failed"),
+                Err(error) => {
+                    tracing::warn!(applet = e.applet.name, %error, "view preparation failed")
+                }
             }
         }
-        tracing::info!(elapsed_ms = started.elapsed().as_millis(), count = self.entries.len(), "applet views prepared before desktop readiness");
+        tracing::info!(
+            elapsed_ms = started.elapsed().as_millis(),
+            count = self.entries.len(),
+            "applet views prepared before desktop readiness"
+        );
     }
     /// Recolor existing views without resetting providers, data, intervals or compiled definitions.
     pub fn apply_theme(&self, c: &Config) {
@@ -220,7 +256,9 @@ impl Runtime {
         let Some(entry) = self.entries.iter().find(|e| e.applet.name == name) else {
             return Default::default();
         };
-        let Some((pack, image)) = &entry.sprite else { return Default::default(); };
+        let Some((pack, image)) = &entry.sprite else {
+            return Default::default();
+        };
         let animation = pack.animation(&entry.data);
         shell::SpriteFrame {
             sheet: image.clone(),
@@ -251,7 +289,11 @@ impl Runtime {
         }
     }
     pub fn action(&mut self, name: &str, generation: u64, action: Option<String>) {
-        if let Some(i) = self.entries.iter().position(|e| e.applet.name == name && e.generation == generation) {
+        if let Some(i) = self
+            .entries
+            .iter()
+            .position(|e| e.applet.name == name && e.generation == generation)
+        {
             self.refresh(i, action);
         }
     }
@@ -262,9 +304,13 @@ impl Runtime {
                 if e.applet.manifest.provider.as_deref() == Some("builtin:volume") {
                     // Periodic reads never queue behind user intent. Consecutive
                     // absolute slider values replace each other, unlike mute toggles.
-                    if action == "levels" { return; }
+                    if action == "levels" {
+                        return;
+                    }
                     if matches!(action.as_str(), "refresh" | "") {
-                        if e.pending_actions.len() < 8 && !e.pending_actions.iter().any(|a| a == "refresh") {
+                        if e.pending_actions.len() < 8
+                            && !e.pending_actions.iter().any(|a| a == "refresh")
+                        {
                             e.pending_actions.push_back("refresh".into());
                         }
                         return;
@@ -273,7 +319,10 @@ impl Runtime {
                     e.pending_actions.retain(|a| a != "refresh");
                     for prefix in ["set ", "input-set "] {
                         if action.starts_with(prefix)
-                            && e.pending_actions.back().is_some_and(|last| last.starts_with(prefix)) {
+                            && e.pending_actions
+                                .back()
+                                .is_some_and(|last| last.starts_with(prefix))
+                        {
                             e.pending_actions.pop_back();
                         }
                     }
@@ -309,8 +358,11 @@ impl Runtime {
         let audio = e.applet.manifest.provider.as_deref() == Some("builtin:volume");
         let full_audio = !e.data["outputs"].is_array();
         std::thread::spawn(move || {
-            let result = if audio { super::audio::query(action.as_deref(), full_audio) }
-                else { run(&command, &env, &dir, action.as_deref()) };
+            let result = if audio {
+                super::audio::query(action.as_deref(), full_audio)
+            } else {
+                run(&command, &env, &dir, action.as_deref())
+            };
             let mut event = Event::AppletData(name, generation, result);
             loop {
                 match tx.send(event) {
@@ -326,7 +378,11 @@ impl Runtime {
     }
     /// Stores a provider result and pushes it to the open view.
     pub fn apply(&mut self, name: &str, generation: u64, result: Result<String, String>) {
-        let Some(index) = self.entries.iter().position(|e| e.applet.name == name && e.generation == generation) else {
+        let Some(index) = self
+            .entries
+            .iter()
+            .position(|e| e.applet.name == name && e.generation == generation)
+        else {
             return;
         };
         let e = &mut self.entries[index];
@@ -340,7 +396,8 @@ impl Runtime {
         }) {
             Ok(data) => {
                 if e.applet.manifest.provider.as_deref() == Some("builtin:volume")
-                    && let (Some(current), Some(fields)) = (e.data.as_object_mut(), data.as_object())
+                    && let (Some(current), Some(fields)) =
+                        (e.data.as_object_mut(), data.as_object())
                 {
                     current.extend(fields.clone());
                 } else {
@@ -383,7 +440,9 @@ impl Runtime {
             // retain their existing per-result completion callback contract.
             let _ = instance.invoke("completed", &[]);
         }
-        if let Some(action) = next { self.refresh(index, Some(action)); }
+        if let Some(action) = next {
+            self.refresh(index, Some(action));
+        }
     }
     pub fn apply_traffic(
         &mut self,
@@ -392,7 +451,11 @@ impl Runtime {
         interface: &str,
         result: Result<crate::traffic::Sample, String>,
     ) {
-        let Some(e) = self.entries.iter_mut().find(|e| e.applet.name == name && e.generation == generation) else {
+        let Some(e) = self
+            .entries
+            .iter_mut()
+            .find(|e| e.applet.name == name && e.generation == generation)
+        else {
             return;
         };
         let Some(traffic) = &mut e.traffic else {
@@ -433,7 +496,10 @@ impl Runtime {
         set_colors(&instance, &c.theme);
         let _ = instance.set_property("busy", Value::Bool(e.running));
         let _ = instance.set_property("has-data", Value::Bool(e.data != serde_json::Value::Null));
-        let _ = instance.set_property("provider-error", Value::String(e.error.clone().unwrap_or_default().into()));
+        let _ = instance.set_property(
+            "provider-error",
+            Value::String(e.error.clone().unwrap_or_default().into()),
+        );
         if e.data != serde_json::Value::Null {
             set_data(&instance, def, &e.data)?;
         }
@@ -513,7 +579,11 @@ impl Runtime {
         }
         self.pending = None;
         if let Some(started) = self.pending_since.take() {
-            tracing::debug!(applet = e.applet.name, elapsed_us = started.elapsed().as_micros(), "applet placement submitted");
+            tracing::debug!(
+                applet = e.applet.name,
+                elapsed_us = started.elapsed().as_micros(),
+                "applet placement submitted"
+            );
         }
     }
     pub fn owns(&self, id: isize) -> bool {

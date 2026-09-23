@@ -36,7 +36,10 @@ impl Sprite {
             || sprite.frame_width * sprite.columns > 4096
             || sprite.frame_height * sprite.rows > 4096
             || !sprite.states.contains_key("idle")
-            || sprite.states.values().any(|a| a.row >= sprite.rows || a.frames == 0 || a.frames > sprite.columns)
+            || sprite
+                .states
+                .values()
+                .any(|a| a.row >= sprite.rows || a.frames == 0 || a.frames > sprite.columns)
         {
             return Err("invalid sprite dimensions, cadence, sheet or animations".into());
         }
@@ -44,7 +47,10 @@ impl Sprite {
     }
     pub fn animation(&self, data: &serde_json::Value) -> Animation {
         let state = super::label(&self.state, data);
-        self.states.get(&state).copied().unwrap_or(self.states["idle"])
+        self.states
+            .get(&state)
+            .copied()
+            .unwrap_or(self.states["idle"])
     }
 }
 
@@ -68,17 +74,35 @@ error = { row = 5, frames = 8 }
     #[test]
     fn selects_states_and_falls_back() {
         let pack = Sprite::parse(PACK).unwrap();
-        assert_eq!(pack.animation(&serde_json::json!({"pet_state":"working"})).row, 7);
-        assert_eq!(pack.animation(&serde_json::json!({"pet_state":"error"})).frames, 8);
-        assert_eq!(pack.animation(&serde_json::json!({"pet_state":"unknown"})).row, 0);
+        assert_eq!(
+            pack.animation(&serde_json::json!({"pet_state":"working"}))
+                .row,
+            7
+        );
+        assert_eq!(
+            pack.animation(&serde_json::json!({"pet_state":"error"}))
+                .frames,
+            8
+        );
+        assert_eq!(
+            pack.animation(&serde_json::json!({"pet_state":"unknown"}))
+                .row,
+            0
+        );
         assert_eq!(pack.animation(&serde_json::Value::Null).row, 0);
     }
     #[test]
     fn rejects_unsafe_or_unbounded_packs() {
-        for (from, to) in [("cat.png", "../cat.png"), ("cat.png", "{file}"),
-            ("frames = 8", "frames = 9"), ("row = 7", "row = 9"),
-            ("frame_width = 192", "frame_width = 0"), ("interval_ms = 140", "interval_ms = 1"),
-            ("display_height = 28", "display_height = 100"), ("idle =", "rest =")] {
+        for (from, to) in [
+            ("cat.png", "../cat.png"),
+            ("cat.png", "{file}"),
+            ("frames = 8", "frames = 9"),
+            ("row = 7", "row = 9"),
+            ("frame_width = 192", "frame_width = 0"),
+            ("interval_ms = 140", "interval_ms = 1"),
+            ("display_height = 28", "display_height = 100"),
+            ("idle =", "rest ="),
+        ] {
             assert!(Sprite::parse(&PACK.replace(from, to)).is_err(), "{to}");
         }
     }

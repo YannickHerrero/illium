@@ -33,7 +33,10 @@ impl<T> Sender<T> {
     /// Install after the consumer is ready. The notifier must be nonblocking
     /// and coalesce notifications; it runs on the sending (possibly hook) thread.
     pub fn set_waker(&self, wake: impl Fn() + Send + Sync + 'static) {
-        assert!(self.wake.set(Box::new(wake)).is_ok(), "waker already installed");
+        assert!(
+            self.wake.set(Box::new(wake)).is_ok(),
+            "waker already installed"
+        );
     }
     pub fn send(&self, value: T) -> Result<(), TrySendError<T>> {
         let result = self.inner.try_send(value);
@@ -73,7 +76,9 @@ mod tests {
         let (tx, rx) = channel(1);
         let calls = Arc::new(AtomicUsize::new(0));
         let count = calls.clone();
-        tx.set_waker(move || { count.fetch_add(1, Ordering::Relaxed); });
+        tx.set_waker(move || {
+            count.fetch_add(1, Ordering::Relaxed);
+        });
         tx.clone().send(1).unwrap();
         assert!(tx.send(2).is_err());
         assert_eq!(calls.load(Ordering::Relaxed), 2);

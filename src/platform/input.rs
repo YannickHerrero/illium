@@ -43,12 +43,15 @@ pub fn set_popup_open(open: bool) {
     if open != was_open && TRACE_ESCAPE.load(std::sync::atomic::Ordering::Relaxed) {
         tracing::info!(open, "Escape diagnostic: popup capture changed");
     }
-    if open && !was_open && let Some(thread) = HOOK_THREAD.get() {
+    if open
+        && !was_open
+        && let Some(thread) = HOOK_THREAD.get()
+    {
         // Hooks must be replaced on their message-pumping thread, not the UI
         // thread (which can spend time compiling an applet).
-        if let Err(error) = unsafe {
-            PostThreadMessageW(*thread, REFRESH_KEYBOARD_HOOK, WPARAM(0), LPARAM(0))
-        } {
+        if let Err(error) =
+            unsafe { PostThreadMessageW(*thread, REFRESH_KEYBOARD_HOOK, WPARAM(0), LPARAM(0)) }
+        {
             tracing::warn!(%error, "could not refresh popup keyboard capture");
         }
     }
@@ -144,7 +147,8 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                 && let Some((tx, _)) = STATE.get()
             {
                 // Never log or query the foreground window on the hook thread.
-                let consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner())[k.vkCode as usize]
+                let consumed = CONSUMED.lock().unwrap_or_else(|e| e.into_inner())
+                    [k.vkCode as usize]
                     != Consumed::No;
                 let _ = tx.send(Event::EscapeTrace(EscapeTrace {
                     source: "hook",
@@ -424,7 +428,9 @@ pub fn start(tx: EventSender, bindings: Vec<Binding>) -> Result<(), String> {
                     }
                     return;
                 }
-                if let Ok(window) = _display && let Err(error) = raw::register(window) {
+                if let Ok(window) = _display
+                    && let Err(error) = raw::register(window)
+                {
                     tracing::warn!(%error, "physical popup Escape capture unavailable");
                 }
                 let _ = HOOK_THREAD.set(windows::Win32::System::Threading::GetCurrentThreadId());
@@ -440,7 +446,9 @@ pub fn start(tx: EventSender, bindings: Vec<Binding>) -> Result<(), String> {
                                 let _ = UnhookWindowsHookEx(hook);
                                 hook = replacement;
                             }
-                            Err(error) => tracing::warn!(%error, "could not refresh popup keyboard hook"),
+                            Err(error) => {
+                                tracing::warn!(%error, "could not refresh popup keyboard hook")
+                            }
                         }
                         continue;
                     }

@@ -155,9 +155,19 @@ fn level(endpoint: &IAudioEndpointVolume) -> Option<(u32, bool)> {
     }
 }
 fn with_com<T>(f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
-    unsafe { CoInitializeEx(None, COINIT_MULTITHREADED).ok().map_err(|e| e.to_string())?; }
+    unsafe {
+        CoInitializeEx(None, COINIT_MULTITHREADED)
+            .ok()
+            .map_err(|e| e.to_string())?;
+    }
     struct Apartment;
-    impl Drop for Apartment { fn drop(&mut self) { unsafe { CoUninitialize(); } } }
+    impl Drop for Apartment {
+        fn drop(&mut self) {
+            unsafe {
+                CoUninitialize();
+            }
+        }
+    }
     let _apartment = Apartment;
     f()
 }
@@ -169,11 +179,16 @@ thread_local! {
 /// Nonblocking stale-while-revalidate bar reading. COM never runs on the UI.
 pub fn volume_state() -> Option<(u32, bool)> {
     use std::sync::atomic::Ordering;
-    let due = BAR_READ_AT.with(|last| last.get().is_none_or(|at| at.elapsed() >= std::time::Duration::from_millis(500)));
+    let due = BAR_READ_AT.with(|last| {
+        last.get()
+            .is_none_or(|at| at.elapsed() >= std::time::Duration::from_millis(500))
+    });
     if due && !BAR_READING.swap(true, Ordering::AcqRel) {
         BAR_READ_AT.with(|last| last.set(Some(std::time::Instant::now())));
         std::thread::spawn(|| {
-            let value = with_com(|| Ok(endpoint(eRender).and_then(|e| level(&e)))).ok().flatten();
+            let value = with_com(|| Ok(endpoint(eRender).and_then(|e| level(&e))))
+                .ok()
+                .flatten();
             *BAR_LEVEL.lock().unwrap_or_else(|e| e.into_inner()) = value;
             BAR_READING.store(false, Ordering::Release);
         });
@@ -186,9 +201,18 @@ pub fn query(action: Option<&str>, full: bool) -> Result<String, String> {
         if let Some(action) = action.filter(|a| !matches!(*a, "refresh" | "levels" | "")) {
             apply(action)?;
         }
-        let cheap = action.is_some_and(|a| a == "levels" || a.starts_with("set ")
-            || a.starts_with("input-set ") || matches!(a, "up" | "down" | "toggle-mute" | "input-toggle-mute"));
-        Ok(if cheap && !full { levels()? } else { snapshot()? }.to_string())
+        let cheap = action.is_some_and(|a| {
+            a == "levels"
+                || a.starts_with("set ")
+                || a.starts_with("input-set ")
+                || matches!(a, "up" | "down" | "toggle-mute" | "input-toggle-mute")
+        });
+        Ok(if cheap && !full {
+            levels()?
+        } else {
+            snapshot()?
+        }
+        .to_string())
     })
 }
 /// Fast path: no device lists, session enumeration or process-name lookups.
@@ -197,7 +221,9 @@ pub fn levels() -> Result<serde_json::Value, String> {
     let state = level(&output).ok_or("no audio output device")?;
     *BAR_LEVEL.lock().unwrap_or_else(|e| e.into_inner()) = Some(state);
     let (volume, muted) = state;
-    let (input_volume, input_muted) = endpoint(eCapture).and_then(|e| level(&e)).unwrap_or((0, true));
+    let (input_volume, input_muted) = endpoint(eCapture)
+        .and_then(|e| level(&e))
+        .unwrap_or((0, true));
     Ok(serde_json::json!({
         "volume": volume, "muted": muted, "input_volume": input_volume,
         "input_muted": input_muted, "input_level": input_level().unwrap_or(0),

@@ -42,35 +42,46 @@ fn demo_home_never_loads_the_normal_library() {
     let mut resources = Resources::new().unwrap();
     let mut cached = None;
     for _ in 0..2 {
-    let result = run_inner(
-        &vec!["about:blank".into(); 3],
-        true,
-        None,
-        |_| {
-            let app = snapshot().unwrap();
-            assert!(app.home);
-            assert_eq!(app.tabs.borrow().entries().len(), 3);
-            assert_eq!(app.views.borrow().len(), 3);
-            assert_eq!(app.tabs.borrow().active(), Some(app.tabs.borrow().entries()[0].id));
-            let picker = app.picker.borrow();
-            let rows = picker.library.borrow().suggestions("");
-            assert_eq!(rows.len(), 5);
-            assert!(
-                rows.iter()
-                    .any(|row| row.site.title == "Rust Programming Language")
+        let result = run_inner(
+            &vec!["about:blank".into(); 3],
+            true,
+            None,
+            |_| {
+                let app = snapshot().unwrap();
+                assert!(app.home);
+                assert_eq!(app.tabs.borrow().entries().len(), 3);
+                assert_eq!(app.views.borrow().len(), 3);
+                assert_eq!(
+                    app.tabs.borrow().active(),
+                    Some(app.tabs.borrow().entries()[0].id)
+                );
+                let picker = app.picker.borrow();
+                let rows = picker.library.borrow().suggestions("");
+                assert_eq!(rows.len(), 5);
+                assert!(
+                    rows.iter()
+                        .any(|row| row.site.title == "Rust Programming Language")
+                );
+                checked = true;
+                unsafe {
+                    let _ = PostMessageW(Some(app.hwnd), WM_CLOSE, WPARAM(0), LPARAM(0));
+                }
+            },
+            Some(demo.path()),
+            &mut resources,
+        );
+        assert!(result.is_ok(), "{:?}", result.err());
+        let current = (
+            resources.env.as_ref().unwrap().as_raw(),
+            Rc::as_ptr(&resources.blocker.as_ref().unwrap().value),
+        );
+        if let Some(previous) = cached {
+            assert_eq!(
+                previous, current,
+                "resident environment and filters must survive closing"
             );
-            checked = true;
-            unsafe {
-                let _ = PostMessageW(Some(app.hwnd), WM_CLOSE, WPARAM(0), LPARAM(0));
-            }
-        },
-        Some(demo.path()),
-        &mut resources,
-    );
-    assert!(result.is_ok(), "{:?}", result.err());
-    let current = (resources.env.as_ref().unwrap().as_raw(), Rc::as_ptr(&resources.blocker.as_ref().unwrap().value));
-    if let Some(previous) = cached { assert_eq!(previous, current, "resident environment and filters must survive closing"); }
-    cached = Some(current);
+        }
+        cached = Some(current);
     }
     assert!(checked);
     assert_eq!(

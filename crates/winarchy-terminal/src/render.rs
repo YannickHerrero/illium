@@ -171,7 +171,9 @@ impl Fonts {
                 layout.SetFontStyle(DWRITE_FONT_STYLE_ITALIC, range)?;
             }
             if cache.iter().map(HashMap::len).sum::<usize>() >= 4096 {
-                for bucket in cache.iter_mut() { bucket.clear(); }
+                for bucket in cache.iter_mut() {
+                    bucket.clear();
+                }
             }
             cache[bucket].insert(text.to_owned(), layout.clone());
             Ok(layout)
@@ -449,19 +451,21 @@ impl Surface {
             let layouts: Vec<_> = frame
                 .cells
                 .iter()
-                .map(|c| c.text.with_str(|text| {
-                    if text.trim().is_empty() {
-                        Ok(None)
-                    } else {
-                        self.fonts
-                            .layout(
-                                text,
-                                u8::from(c.flags.contains(Flags::BOLD))
-                                    | (2 * u8::from(c.flags.contains(Flags::ITALIC))),
-                            )
-                            .map(Some)
-                    }
-                }))
+                .map(|c| {
+                    c.text.with_str(|text| {
+                        if text.trim().is_empty() {
+                            Ok(None)
+                        } else {
+                            self.fonts
+                                .layout(
+                                    text,
+                                    u8::from(c.flags.contains(Flags::BOLD))
+                                        | (2 * u8::from(c.flags.contains(Flags::ITALIC))),
+                                )
+                                .map(Some)
+                        }
+                    })
+                })
                 .collect::<Result<_>>()?;
             self.context.BeginDraw();
             self.context

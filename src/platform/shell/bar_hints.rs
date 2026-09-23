@@ -31,7 +31,11 @@ impl Hints {
             ready: false,
         })
     }
-    pub fn prewarm(&self) { if !self.opened { super::prewarm(&self.ui); } }
+    pub fn prewarm(&self) {
+        if !self.opened {
+            super::prewarm(&self.ui);
+        }
+    }
     pub fn open(&mut self, c: &Config, r: Rect, monitor: usize, kinds: Vec<String>) {
         self.close();
         if kinds.is_empty() {
@@ -90,7 +94,9 @@ impl Hints {
                 })
                 .collect::<Vec<_>>(),
         )));
-        if let Some(r) = self.pending { super::prepare(self.ui.window(), r, true); }
+        if let Some(r) = self.pending {
+            super::prepare(self.ui.window(), r, true);
+        }
         if let Err(e) = self.ui.show() {
             tracing::warn!(%e, "bar hints unavailable");
             self.close();

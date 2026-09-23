@@ -1,10 +1,10 @@
 //! Theme palette read from `themes/<name>.toml` under the configuration home.
 //! No graphics dependency: the daemon and every application convert the
 //! `#rrggbb` strings to their own color type.
+pub mod dynamic;
 #[cfg(feature = "live")]
 pub mod live;
 pub mod opacity;
-pub mod dynamic;
 #[cfg(feature = "assets")]
 pub mod pack;
 #[cfg(feature = "assets")]

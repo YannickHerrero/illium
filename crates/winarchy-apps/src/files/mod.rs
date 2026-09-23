@@ -15,7 +15,12 @@ mod app {
         ui::{self, FileRow, FilesWindow},
     };
     use slint::{ComponentHandle, Model, ModelRc, VecModel};
-    use std::{cell::{Cell, RefCell}, path::PathBuf, rc::Rc, sync::mpsc};
+    use std::{
+        cell::{Cell, RefCell},
+        path::PathBuf,
+        rc::Rc,
+        sync::mpsc,
+    };
     /// At most one read is in flight. Further input only replaces the model's
     /// pending intention, so rapid cursor movement cannot spawn a thread storm.
     struct Reader {
@@ -26,8 +31,12 @@ mod app {
     }
     impl Reader {
         fn schedule(&self) {
-            if self.busy.get() { return; }
-            let Some(job) = self.files.borrow_mut().take_read() else { return; };
+            if self.busy.get() {
+                return;
+            }
+            let Some(job) = self.files.borrow_mut().take_read() else {
+                return;
+            };
             self.busy.set(true);
             let tx = self.tx.clone();
             let window = self.window.clone();
@@ -46,9 +55,19 @@ mod app {
     }
     fn perform(action: &Action, home: &std::path::Path) -> Result<(), String> {
         use windows::Win32::System::Com::*;
-        unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().map_err(|e| e.to_string())?; }
+        unsafe {
+            CoInitializeEx(None, COINIT_APARTMENTTHREADED)
+                .ok()
+                .map_err(|e| e.to_string())?;
+        }
         struct Apartment;
-        impl Drop for Apartment { fn drop(&mut self) { unsafe { CoUninitialize(); } } }
+        impl Drop for Apartment {
+            fn drop(&mut self) {
+                unsafe {
+                    CoUninitialize();
+                }
+            }
+        }
         let _apartment = Apartment;
         match action {
             Action::Open(path) => win::open(path),
@@ -59,7 +78,9 @@ mod app {
             Action::Delete(paths) => win::delete(paths, false),
             Action::Rename { from, to } => std::fs::rename(from, to).map_err(|e| e.to_string()),
             Action::CreateDir(path) => std::fs::create_dir(path).map_err(|e| e.to_string()),
-            Action::CreateFile(path) => std::fs::File::create_new(path).map(|_| ()).map_err(|e| e.to_string()),
+            Action::CreateFile(path) => std::fs::File::create_new(path)
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
             Action::None | Action::Quit => Ok(()),
         }
     }
@@ -80,8 +101,10 @@ mod app {
     impl Rows {
         fn new(window: &FilesWindow) -> Self {
             let rows = Self {
-                parent: Rc::new(VecModel::default()), current: Rc::new(VecModel::default()),
-                preview: Rc::new(VecModel::default()), lines: Rc::new(VecModel::default()),
+                parent: Rc::new(VecModel::default()),
+                current: Rc::new(VecModel::default()),
+                preview: Rc::new(VecModel::default()),
+                lines: Rc::new(VecModel::default()),
             };
             window.set_parent_rows(ModelRc::from(rows.parent.clone()));
             window.set_rows(ModelRc::from(rows.current.clone()));
@@ -90,17 +113,22 @@ mod app {
             rows
         }
     }
-    fn sync<T: Clone + PartialEq + 'static>(model: &VecModel<T>, rows: impl IntoIterator<Item = T>) {
+    fn sync<T: Clone + PartialEq + 'static>(
+        model: &VecModel<T>,
+        rows: impl IntoIterator<Item = T>,
+    ) {
         let mut len = 0;
         for (i, row) in rows.into_iter().enumerate() {
             match model.row_data(i) {
-                Some(current) if current == row => {},
+                Some(current) if current == row => {}
                 Some(_) => model.set_row_data(i, row),
                 None => model.push(row),
             }
             len += 1;
         }
-        while model.row_count() > len { model.remove(model.row_count() - 1); }
+        while model.row_count() > len {
+            model.remove(model.row_count() - 1);
+        }
     }
     #[test]
     fn differential_models_grow_change_and_shrink() {
@@ -142,11 +170,19 @@ mod app {
             Preview::Empty => (&[], vec![]),
         };
         sync(&models.preview, preview_rows.iter().map(row));
-        sync(&models.lines, lines.into_iter().map(slint::SharedString::from));
+        sync(
+            &models.lines,
+            lines.into_iter().map(slint::SharedString::from),
+        );
         let (left, right) = f.status();
         window.set_loading(f.loading);
-        window.set_status_left(if f.working { "Working… — navigation remains available".into() }
-            else if f.loading && f.notice.is_empty() { "Reading…".into() } else { left.into() });
+        window.set_status_left(if f.working {
+            "Working… — navigation remains available".into()
+        } else if f.loading && f.notice.is_empty() {
+            "Reading…".into()
+        } else {
+            left.into()
+        });
         window.set_status_right(right.into());
         window.set_help(f.mode == Mode::Help);
     }
@@ -168,7 +204,10 @@ mod app {
             };
             let (tx, rx) = mpsc::sync_channel(1);
             let reader = Rc::new(Reader {
-                busy: Cell::new(false), files: files.clone(), window: window.as_weak(), tx,
+                busy: Cell::new(false),
+                files: files.clone(),
+                window: window.as_weak(),
+                tx,
             });
             {
                 let reader = reader.clone();
@@ -177,7 +216,9 @@ mod app {
                     if let Ok(result) = rx.try_recv() {
                         reader.busy.set(false);
                         let mut f = reader.files.borrow_mut();
-                        if f.apply_read(result) { render(&f); }
+                        if f.apply_read(result) {
+                            render(&f);
+                        }
                         drop(f);
                         reader.schedule();
                     }
@@ -206,7 +247,9 @@ mod app {
                         f.notice = "Wait for the file operation before closing".into();
                         render(&f);
                         slint::CloseRequestResponse::KeepWindowShown
-                    } else { slint::CloseRequestResponse::HideWindow }
+                    } else {
+                        slint::CloseRequestResponse::HideWindow
+                    }
                 });
             }
             {
@@ -222,15 +265,20 @@ mod app {
                     let mut f = files.borrow_mut();
                     let action = f.key(key, ctrl, window.get_page().max(1) as usize);
                     match action {
-                        Action::None => {},
+                        Action::None => {}
                         Action::Quit if f.working && !resident => {
                             f.notice = "Wait for the file operation before closing".into();
                         }
                         Action::Quit => {
-                            if resident { let _ = window.hide(); }
-                            else { let _ = slint::quit_event_loop(); }
+                            if resident {
+                                let _ = window.hide();
+                            } else {
+                                let _ = slint::quit_event_loop();
+                            }
                         }
-                        _ if f.working => { f.notice = "A file operation is still in progress".into(); }
+                        _ if f.working => {
+                            f.notice = "A file operation is still in progress".into();
+                        }
                         action => {
                             f.working = true;
                             let directory = f.cwd.clone();
@@ -239,8 +287,17 @@ mod app {
                             let weak = window.as_weak();
                             std::thread::spawn(move || {
                                 let result = perform(&action, &home);
-                                if tx.send(Operation { action, directory, result }).is_ok() {
-                                    let _ = weak.upgrade_in_event_loop(|window| window.invoke_operation_ready());
+                                if tx
+                                    .send(Operation {
+                                        action,
+                                        directory,
+                                        result,
+                                    })
+                                    .is_ok()
+                                {
+                                    let _ = weak.upgrade_in_event_loop(|window| {
+                                        window.invoke_operation_ready()
+                                    });
                                 }
                             });
                         }
@@ -259,7 +316,9 @@ mod app {
                 reader,
             })
         }
-        pub fn working(&self) -> bool { self.files.borrow().working }
+        pub fn working(&self) -> bool {
+            self.files.borrow().working
+        }
         /// Show the retained snapshot first; theme and directory updates are asynchronous.
         pub fn show(&self, dir: Option<PathBuf>) -> Result<(), String> {
             // Theme subscription keeps the resident current; no disk read on show.
@@ -285,9 +344,7 @@ mod app {
 pub fn run() -> Result<(), String> {
     crate::ui::init_com();
     let app = App::new(false)?;
-    let start = std::env::args()
-        .nth(2)
-        .map(std::path::PathBuf::from);
+    let start = std::env::args().nth(2).map(std::path::PathBuf::from);
     app.show(start)?;
     slint::run_event_loop().map_err(|e| e.to_string())
 }
