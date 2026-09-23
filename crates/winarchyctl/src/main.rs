@@ -59,6 +59,21 @@ fn main() {
         }
         return;
     }
+    if args.first().is_some_and(|s| s == "lock") && args.get(1).is_some_and(|s| s == "set-password")
+    {
+        if args.len() != 2 {
+            eprintln!("usage: winarchyctl lock set-password");
+            std::process::exit(2);
+        }
+        match set_password() {
+            Ok(()) => println!("lock password saved; lock with: winarchyctl lock"),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     let command = args.join(" ");
     if let Err(e) = command.parse::<winarchy_ipc::command::Command>() {
         eprintln!("{e}");
@@ -84,4 +99,22 @@ fn main() {
         eprintln!("winarchyctl requires Windows");
         std::process::exit(1);
     }
+}
+/// Only the Argon2 hash is stored, in the file the daemon reads at each lock
+/// (`src/lockscreen.rs`).
+fn set_password() -> Result<(), String> {
+    use argon2::password_hash::PasswordHasher;
+    let password = rpassword::prompt_password("New lock password: ").map_err(|e| e.to_string())?;
+    if password.is_empty() {
+        return Err("the lock password cannot be empty".into());
+    }
+    if rpassword::prompt_password("Repeat it: ").map_err(|e| e.to_string())? != password {
+        return Err("the passwords do not match".into());
+    }
+    let hash = argon2::Argon2::default()
+        .hash_password(password.as_bytes())
+        .map_err(|e| e.to_string())?;
+    let home = winarchy_theme::config_home();
+    std::fs::create_dir_all(&home).map_err(|e| e.to_string())?;
+    std::fs::write(home.join("lock-password"), format!("{hash}\n")).map_err(|e| e.to_string())
 }

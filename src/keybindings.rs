@@ -112,6 +112,7 @@ pub fn describe(command: &str) -> String {
         Command::Expose => "Exposé: all windows".into(),
         Command::BarHints => "Bar applet hints".into(),
         Command::Dictate => "Dictate while held".into(),
+        Command::Lock => "Lock screen".into(),
         Command::Wallpaper(None) => "Solid background".into(),
         Command::Wallpaper(Some(name)) => format!("Wallpaper {name}"),
         Command::Explorer(true) => "Start Explorer".into(),
@@ -251,7 +252,7 @@ mod tests {
     #[test]
     fn defaults_are_unchanged_and_ordered() {
         let rows = rows(DEFAULTS, DEFAULTS);
-        assert_eq!(rows.len(), 59);
+        assert_eq!(rows.len(), 60);
         assert!(rows.iter().all(|r| !r.changed()));
         assert_eq!(rows[0].description, "Launcher");
         assert_eq!(rows[0].label(), "Alt + Space");

@@ -73,17 +73,20 @@ pub fn battery_status() -> Option<(u8, bool)> {
     unsafe { GetSystemPowerStatus(&mut p) }.ok()?;
     (p.BatteryLifePercent <= 100).then_some((p.BatteryLifePercent, p.ACLineStatus == 1))
 }
-/// Both clock labels use the same timestamp, including across midnight.
-pub fn clock_labels(c: &Config) -> (String, String) {
+pub fn now() -> crate::clock::Moment {
     let t = unsafe { GetLocalTime() };
-    let moment = crate::clock::Moment {
+    crate::clock::Moment {
         weekday: t.wDayOfWeek as u8,
         day: t.wDay as u8,
         month: t.wMonth as u8,
         hour: t.wHour as u8,
         minute: t.wMinute as u8,
         second: t.wSecond as u8,
-    };
+    }
+}
+/// Both clock labels use the same timestamp, including across midnight.
+pub fn clock_labels(c: &Config) -> (String, String) {
+    let moment = now();
     (
         crate::clock::format(
             if c.bar.clock_format == "%A %d %b - %H:%M" {

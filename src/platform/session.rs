@@ -51,6 +51,35 @@ fn marker() -> Option<std::path::PathBuf> {
         .get()
         .map(|id| crate::config::Config::home().join(format!("session-{id}.explorer")))
 }
+fn lock_marker() -> Option<std::path::PathBuf> {
+    IDENTITY
+        .get()
+        .map(|id| crate::config::Config::home().join(format!("session-{id}.locked")))
+}
+/// Tells the watchdog to lock Windows if the daemon dies while the Winarchy
+/// lock screen is shown.
+pub fn set_locked(locked: bool) {
+    let Some(path) = lock_marker() else {
+        return;
+    };
+    let result = if locked {
+        std::fs::write(&path, b"lock Windows")
+    } else {
+        std::fs::remove_file(&path).or_else(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                Ok(())
+            } else {
+                Err(e)
+            }
+        })
+    };
+    if let Err(error) = result {
+        tracing::warn!(%error, locked, "lock marker not updated");
+    }
+}
+pub fn lock_workstation() -> Result<(), String> {
+    unsafe { windows::Win32::System::Shutdown::LockWorkStation() }.map_err(|e| e.to_string())
+}
 fn creation_time(h: HANDLE) -> Result<u64, String> {
     unsafe {
         let (mut created, mut exited, mut kernel, mut user) = (
@@ -265,6 +294,12 @@ pub fn watchdog(pid: u32, identity: &str, started: u64) -> Result<(), String> {
             return Err("could not wait for daemon exit".into());
         }
         drop(process);
+        if let Some(path) = lock_marker()
+            && path.exists()
+        {
+            let _ = lock_workstation();
+            let _ = std::fs::remove_file(path);
+        }
         if let Some(key) = PROPERTY.get() {
             for id in native::enumerate() {
                 if !GetPropW(native::hwnd(id), PCWSTR(key.as_ptr())).is_invalid() {
