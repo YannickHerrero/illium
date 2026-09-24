@@ -5,6 +5,7 @@ use winarchy_config::screensaver::Effect;
 
 mod burn;
 mod beams;
+mod colorshift;
 mod decrypt;
 mod laseretch;
 mod pour;
@@ -22,6 +23,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
     match effect {
         Effect::Burn => Box::new(burn::Burn::new(t)),
         Effect::Beams => Box::new(beams::Beams::new(t)),
+        Effect::ColorShift => Box::new(colorshift::ColorShift::new(t)),
         Effect::Decrypt => Box::new(decrypt::Decrypt::new(t)),
         Effect::LaserEtch => Box::new(laseretch::LaserEtch::new(t)),
         Effect::Pour => Box::new(pour::Pour::new(t)),
@@ -66,6 +68,11 @@ pub(crate) mod tests {
     #[test]
     fn beams_finishes() {
         finishes_on_logo(Effect::Beams, 20_000);
+    }
+
+    #[test]
+    fn colorshift_finishes() {
+        finishes_on_logo(Effect::ColorShift, 5_000);
     }
 
     #[test]
