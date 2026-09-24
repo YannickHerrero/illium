@@ -3,6 +3,7 @@
 use crate::engine::{Effect as Run, Terminal};
 use winarchy_config::screensaver::Effect;
 
+mod burn;
 mod decrypt;
 
 /// The Winarchy logo in Omarchy's `logo.txt` style ("ARCHY" is theirs).
@@ -10,6 +11,7 @@ pub const LOGO: &str = include_str!("../logo.txt");
 
 pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
     match effect {
+        Effect::Burn => Box::new(burn::Burn::new(t)),
         Effect::Decrypt => Box::new(decrypt::Decrypt::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
@@ -46,5 +48,10 @@ pub(crate) mod tests {
     #[test]
     fn decrypt_finishes() {
         finishes_on_logo(Effect::Decrypt, 20_000);
+    }
+
+    #[test]
+    fn burn_finishes() {
+        finishes_on_logo(Effect::Burn, 20_000);
     }
 }
