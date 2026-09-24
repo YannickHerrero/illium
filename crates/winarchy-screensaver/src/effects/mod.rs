@@ -6,6 +6,7 @@ use winarchy_config::screensaver::Effect;
 mod burn;
 mod beams;
 mod colorshift;
+mod bouncyballs;
 mod decrypt;
 mod laseretch;
 mod pour;
@@ -45,6 +46,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::Wipe => Box::new(wipe::Wipe::new(t)),
         Effect::Expand => Box::new(expand::Expand::new(t)),
         Effect::MiddleOut => Box::new(middleout::MiddleOut::new(t)),
+        Effect::BouncyBalls => Box::new(bouncyballs::BouncyBalls::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -165,5 +167,10 @@ pub(crate) mod tests {
     #[test]
     fn middleout_finishes() {
         finishes_on_logo(Effect::MiddleOut, 20_000);
+    }
+
+    #[test]
+    fn bouncyballs_finishes() {
+        finishes_on_logo(Effect::BouncyBalls, 20_000);
     }
 }
