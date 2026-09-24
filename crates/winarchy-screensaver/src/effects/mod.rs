@@ -31,6 +31,7 @@ mod orbittingvolley;
 mod fireworks;
 mod rings;
 mod spotlights;
+mod randomsequence;
 
 /// The Winarchy logo in Omarchy's `logo.txt` style ("ARCHY" is theirs).
 pub const LOGO: &str = include_str!("../logo.txt");
@@ -65,6 +66,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::Fireworks => Box::new(fireworks::Fireworks::new(t)),
         Effect::Rings => Box::new(rings::Rings::new(t)),
         Effect::Spotlights => Box::new(spotlights::Spotlights::new(t)),
+        Effect::RandomSequence => Box::new(randomsequence::RandomSequence::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -235,5 +237,10 @@ pub(crate) mod tests {
     #[test]
     fn spotlights_finishes() {
         finishes_on_logo(Effect::Spotlights, 20_000);
+    }
+
+    #[test]
+    fn randomsequence_finishes() {
+        finishes_on_logo(Effect::RandomSequence, 20_000);
     }
 }
