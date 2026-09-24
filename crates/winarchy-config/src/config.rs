@@ -52,6 +52,9 @@ fn default_border() -> i32 {
 #[serde(deny_unknown_fields)]
 pub struct Bar {
     pub enabled: bool,
+    /// Display workspace numbers as Japanese kanji in the bar.
+    #[serde(default)]
+    pub japanese_workspace_numbers: bool,
     pub position: String,
     pub height: i32,
     pub left: Vec<String>,
@@ -540,6 +543,35 @@ mod tests {
         assert!(Config::load(&p).is_err());
         assert_eq!(c.wm.gap, 16);
         std::fs::remove_dir_all(p).unwrap();
+    }
+    #[test]
+    fn japanese_workspace_numbers_are_optional() {
+        let original = include_str!("../../../config/defaults/bar.toml");
+        let legacy = original.replace("japanese_workspace_numbers = true\n", "");
+        assert!(
+            !toml::from_str::<Bar>(&legacy)
+                .unwrap()
+                .japanese_workspace_numbers
+        );
+        assert!(
+            toml::from_str::<Bar>(original)
+                .unwrap()
+                .japanese_workspace_numbers
+        );
+        let disabled = original.replace(
+            "japanese_workspace_numbers = true",
+            "japanese_workspace_numbers = false",
+        );
+        assert!(
+            !toml::from_str::<Bar>(&disabled)
+                .unwrap()
+                .japanese_workspace_numbers
+        );
+        let invalid = original.replace(
+            "japanese_workspace_numbers = true",
+            "japanese_workspace_numbers = \"true\"",
+        );
+        assert!(toml::from_str::<Bar>(&invalid).is_err());
     }
     #[test]
     fn secondary_clock_date_is_optional_and_validated() {

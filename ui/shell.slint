@@ -142,6 +142,8 @@ export component Bar inherits Window {
     in property <int> active;
     /// Workspace numbers to show: the occupied ones and the active one.
     in property <[int]> workspaces;
+    in property <bool> japanese-workspace-numbers: false;
+    private property <[string]> japanese-numbers: ["一", "二", "三", "四", "五", "六", "七", "八", "九"];
     in property <[StatusItem]> before-workspace-items;
     in property <[StatusItem]> left-items;
     in property <[StatusItem]> center-items;
@@ -197,7 +199,7 @@ export component Bar inherits Window {
                 // Keep the active indicator opaque even on a transparent surface.
                 background: root.active == n ? root.accent : workspace-touch.has-hover ? root.fg.with-alpha(0.08) : Colors.transparent;
                 Text {
-                    text: "\{n}";
+                    text: root.japanese-workspace-numbers ? root.japanese-numbers[n - 1] : "\{n}";
                     color: root.active == n ? root.bg : root.muted;
                     font-weight: root.active == n ? 700 : 400;
                     horizontal-alignment: center; vertical-alignment: center;

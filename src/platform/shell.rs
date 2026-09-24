@@ -1241,6 +1241,7 @@ impl Shell {
         }
         for (b, models) in self.bars.iter().zip(&self.models) {
             b.set_active(m.active as i32);
+            b.set_japanese_workspace_numbers(c.bar.japanese_workspace_numbers);
             sync(&models.workspaces, &workspaces);
             sync(&models.before_workspaces, &before_workspaces);
             sync(&models.left, &left);

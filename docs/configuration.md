@@ -120,6 +120,7 @@ does not restart shell applets.
 
 ```toml
 enabled = true
+japanese_workspace_numbers = true
 position = "top"
 height = 28
 left = ["workspaces"]
@@ -127,6 +128,11 @@ center = ["clock"]
 right = ["battery", "cpu", "memory", "wifi"]
 clock_format = "%H:%M"
 ```
+
+`japanese_workspace_numbers = true` displays workspace numbers as Japanese kanji
+(`一 二 三 四 五 六 七 八 九`). Set it to `false` for Arabic numerals (`1`–`9`);
+omitting it also keeps Arabic numerals. Only the labels change: clicks and shortcuts
+still use the same workspace numbers.
 
 Positions: top/bottom. Height: 16–100 logical pixels. Each section lists built-in modules and applet names in display order; an applet name must match a folder under `applets/` with an `applet.toml` (see [applets](applets.md)). Built-in modules: window-title, volume, battery, clock, cpu (overall load in percent since the previous refresh), memory (available RAM in GB with one decimal), drawer (see [below](#drawer)) and separator, a fine vertical divider in the subtext color that widens the gap between its neighbours, has no module action when clicked and may be listed as many times as wanted. Workspaces are supported on the left, at their listed position: for example, `left = ["winagotchi", "workspaces"]` places an installed `winagotchi` applet before the workspace buttons. The center is centered on the screen regardless of the side groups' widths. battery, cpu and memory show a monochrome icon in the theme's subtext color next to their value. Battery disappears when unavailable; audio is read from the default render endpoint. Clock substitutions, in English: `%A` weekday, `%a` short weekday, `%d` day, `%B` month, `%b` short month (Jan, Feb, Mar, Apr, May, June, July, Aug, Sept, Oct, Nov, Dec), `%H`, `%M`, `%S`. A bar is created on every monitor; its reservation is calculated directly, never from Explorer's taskbar work area. The bar's surface uses the theme's shared `background_opacity`, including live opacity shortcuts, while text, icons and the active workspace indicator stay opaque. Clicking an empty area of the bar toggles its background between that translucent surface color and fully transparent (the wallpaper shows through); a click that closes an open popup does not toggle. The toggle is not persisted across daemon restarts. The bar uses bundled JetBrains Mono,
 rounded workspace indicators and subtle hover feedback. A fine border faces the desktop

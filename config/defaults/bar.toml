@@ -1,4 +1,5 @@
 enabled = true
+japanese_workspace_numbers = true
 position = "top"
 height = 28
 left = ["workspaces"]
