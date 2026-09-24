@@ -33,6 +33,7 @@ mod rings;
 mod spotlights;
 mod randomsequence;
 mod scattered;
+mod slice;
 mod slide;
 
 /// The Winarchy logo in Omarchy's `logo.txt` style ("ARCHY" is theirs).
@@ -71,6 +72,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::RandomSequence => Box::new(randomsequence::RandomSequence::new(t)),
         Effect::Scattered => Box::new(scattered::Scattered::new(t)),
         Effect::Slide => Box::new(slide::Slide::new(t)),
+        Effect::Slice => Box::new(slice::Slice::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -256,5 +258,10 @@ pub(crate) mod tests {
     #[test]
     fn slide_finishes() {
         finishes_on_logo(Effect::Slide, 20_000);
+    }
+
+    #[test]
+    fn slice_finishes() {
+        finishes_on_logo(Effect::Slice, 20_000);
     }
 }
