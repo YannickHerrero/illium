@@ -1,6 +1,9 @@
 //! Lock surfaces: one topmost full-monitor window per display over the blurred
 //! wallpaper. Only the surface of the active monitor takes the password; the
 //! others cannot be activated.
+#[cfg(test)]
+#[path = "lockscreen_tests.rs"]
+mod tests;
 use super::{LockView, SaverRow, color, id, prepare, tool};
 use crate::{
     config::Config,
@@ -24,6 +27,8 @@ fn show_saver(view: &LockView, saving: bool) {
 #[derive(Clone, Debug)]
 pub enum Input {
     Submit(String),
+    /// Focused Slint surface fallback when Windows drops the keyboard hook.
+    Wake,
     /// The Windows lock took over: the surfaces can go.
     Release,
 }
@@ -80,6 +85,8 @@ impl Lock {
         };
         let f = send(&self.epoch);
         ui.on_submit(move |text| f(Input::Submit(text.into())));
+        let f = send(&self.epoch);
+        ui.on_wake(move || f(Input::Wake));
         ui.window()
             .on_close_requested(|| slint::CloseRequestResponse::KeepWindowShown);
         Ok(ui)
@@ -170,7 +177,9 @@ impl Lock {
         }
         if let Some(view) = shown.get(self.primary) {
             native::focus(id(view.window()), false);
-            if !view.get_saving() {
+            if view.get_saving() {
+                view.invoke_focus_saver();
+            } else {
                 view.invoke_focus_field();
             }
         }
@@ -247,11 +256,14 @@ impl Lock {
                     view.set_saver_rows(Default::default());
                 }
             }
-            if !saving {
-                if let Some(view) = self.views.get(self.primary) {
-                    native::focus(id(view.window()), false);
+            if let Some(view) = self.views.get(self.primary) {
+                if saving {
+                    view.invoke_focus_saver();
+                } else {
                     view.invoke_focus_field();
                 }
+            }
+            if !saving {
                 input::SAVING.store(false, Ordering::SeqCst);
             }
             self.next_frame = now;
@@ -272,12 +284,30 @@ impl Lock {
             }
         }
     }
+    fn wake(&mut self) {
+        let Some(saver) = &mut self.saver else {
+            return;
+        };
+        if saver.effect.is_none() {
+            return;
+        }
+        saver.reset(Instant::now(), input::LOCK_ACTIVITY.load(Ordering::SeqCst));
+        for view in &self.views {
+            view.invoke_clear_field();
+            show_saver(view, false);
+            view.set_saver_rows(Default::default());
+        }
+        if let Some(view) = self.views.get(self.primary) {
+            view.invoke_focus_field();
+        }
+        input::SAVING.store(false, Ordering::SeqCst);
+    }
     fn stop_saver(&mut self) {
         self.saver = None;
         for view in &self.views {
             show_saver(view, false);
             view.set_saver_rows(Default::default());
-            view.invoke_clear_field();
+            view.invoke_reset_input();
         }
         input::SAVING.store(false, Ordering::SeqCst);
     }
@@ -297,7 +327,12 @@ impl Lock {
         }
         match input {
             Input::Release => Outcome::Unlock,
-            _ if self.released || input::SAVING.load(Ordering::SeqCst) => Outcome::None,
+            _ if self.released => Outcome::None,
+            Input::Wake => {
+                self.wake();
+                Outcome::None
+            }
+            _ if input::SAVING.load(Ordering::SeqCst) => Outcome::None,
             Input::Submit(password) => match self.attempts.check(&self.hash, &password) {
                 Verdict::Unlock => Outcome::Unlock,
                 Verdict::Wrong { remaining } => {

@@ -27,6 +27,11 @@ export component LockView inherits Window {
     /// Bumped by the daemon to repaint the whole surface.
     in-out property <int> repaint-nonce;
     callback submit(string);
+    callback wake();
+    // Keep a fallback waking key focused here until release so auto-repeat
+    // cannot type into the password field if the global hook was lost.
+    private property <bool> wake-held;
+    private property <string> wake-key;
     background: root.repaint-nonce < 0 ? transparent : root.bg;
     forward-focus: field;
     if root.has-backdrop && root.ready: Image {
@@ -83,7 +88,7 @@ export component LockView inherits Window {
             single-line: true;
             color: root.fg;
             font-size: 15px;
-            enabled: root.primary && !root.saving;
+            enabled: root.primary && !root.saving && !root.wake-held;
             accepted => {
                 root.submit(self.text);
                 self.text = "";
@@ -105,6 +110,33 @@ export component LockView inherits Window {
         accent: root.accent;
         foreground: root.fg;
     }
+    saver-keys := FocusScope {
+        key-pressed(event) => {
+            if root.saving {
+                if !root.wake-held {
+                    root.wake-held = true;
+                    root.wake-key = event.text;
+                    root.wake();
+                }
+                return accept;
+            }
+            if root.wake-held { return accept; }
+            return reject;
+        }
+        key-released(event) => {
+            if root.wake-held && event.text == root.wake-key {
+                root.wake-held = false;
+                if !root.saving { field.focus(); }
+                return accept;
+            }
+            if root.saving || root.wake-held { return accept; }
+            return reject;
+        }
+    }
     public function clear-field() { field.text = ""; }
-    public function focus-field() { field.focus(); }
+    public function reset-input() { root.wake-held = false; root.wake-key = ""; field.text = ""; }
+    public function focus-saver() { saver-keys.focus(); }
+    public function focus-field() {
+        if root.wake-held { saver-keys.focus(); } else { field.focus(); }
+    }
 }

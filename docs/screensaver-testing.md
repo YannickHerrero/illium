@@ -36,6 +36,12 @@ Use a disposable session with a known Winarchy password and a recovery console a
 - Formatting, Clippy with warnings denied on Linux, and Windows GNU cross-target Clippy for all targets passed (including Slint compilation).
 - The interactive Windows checklist above remains **unverified** on this Linux host. In particular, compilation alone does not prove cursor, input-hook, multi-monitor or secure-desktop behavior.
 
+## Keyboard wake regression
+
+The focused saver owns a Slint `FocusScope` as a fallback if Windows removes the low-level keyboard hook. Any delivered key press requests an epoch-tagged wake, without submitting a password. The fallback retains keyboard focus until the waking key is released to consume auto-repeat; only then does the password field accept text again.
+
+`focused_key_wakes_without_hook_and_cannot_type_or_submit` runs the real lock view with a headless software window. It verifies letters, Enter and Escape, held-key repeats, stale wake rejection, retention of the lock, and password-field focus after release. This test was executed successfully as an MSVC Windows test executable without altering the live desktop. The merged Linux suite (168 tests) and MSVC Clippy with warnings denied also passed.
+
 ## Commands
 
 ```sh
