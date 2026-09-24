@@ -465,9 +465,13 @@ impl Config {
             return Err("bar: invalid height or position".into());
         }
         if !(6..=48).contains(&c.bar.workspace_font_size)
-            || c.bar.workspace_font_weight.is_some_and(|weight| !(100..=900).contains(&weight))
+            || c.bar
+                .workspace_font_weight
+                .is_some_and(|weight| !(100..=900).contains(&weight))
         {
-            return Err("bar: workspace_font_size must be 6..48 and workspace_font_weight 100..900".into());
+            return Err(
+                "bar: workspace_font_size must be 6..48 and workspace_font_weight 100..900".into(),
+            );
         }
         if !(200..=2000).contains(&c.launcher.width) || !(1..=30).contains(&c.launcher.max_results)
         {
@@ -591,20 +595,25 @@ mod tests {
     }
     #[test]
     fn workspace_typography_defaults_and_validation() {
-        let home = std::env::temp_dir().join(format!("winarchy-workspace-font-{}", std::process::id()));
+        let home =
+            std::env::temp_dir().join(format!("winarchy-workspace-font-{}", std::process::id()));
         Config::install(&home).unwrap();
         let original = std::fs::read_to_string(home.join("bar.toml")).unwrap();
-        let legacy = original.lines()
+        let legacy = original
+            .lines()
             .filter(|line| !line.starts_with("workspace_font_"))
-            .collect::<Vec<_>>().join("\n");
+            .collect::<Vec<_>>()
+            .join("\n");
         std::fs::write(home.join("bar.toml"), &legacy).unwrap();
         let bar = Config::load(&home).unwrap().bar;
         assert!(bar.workspace_font_family.is_empty());
         assert_eq!(bar.workspace_font_size, 13);
         assert_eq!(bar.workspace_font_weight, None);
         for settings in [
-            "workspace_font_size = 0", "workspace_font_size = 49",
-            "workspace_font_weight = 99", "workspace_font_weight = 901",
+            "workspace_font_size = 0",
+            "workspace_font_size = 49",
+            "workspace_font_weight = 99",
+            "workspace_font_weight = 901",
             "workspace_font_weight = \"bold\"",
         ] {
             std::fs::write(home.join("bar.toml"), format!("{legacy}\n{settings}\n")).unwrap();

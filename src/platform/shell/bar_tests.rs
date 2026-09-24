@@ -133,11 +133,20 @@ fn bar_fades_only_its_background_and_honors_shared_override() {
     bar.set_workspace_font_weight(700);
     let bold = pixels();
     let ink = |image: &[PremultipliedRgbaColor]| {
-        (10..30).flat_map(|y| (14..32).map(move |x| image[y * 500 + x].alpha as u32)).sum::<u32>()
+        (10..30)
+            .flat_map(|y| (14..32).map(move |x| image[y * 500 + x].alpha as u32))
+            .sum::<u32>()
     };
-    assert!(ink(&bold) > ink(&light), "configured bold weight adds no ink");
+    assert!(
+        ink(&bold) > ink(&light),
+        "configured bold weight adds no ink"
+    );
     bar.set_workspace_font_size(18.);
-    assert_ne!(ink(&pixels()), ink(&bold), "configured font size has no effect");
+    assert_ne!(
+        ink(&pixels()),
+        ink(&bold),
+        "configured font size has no effect"
+    );
     bar.set_workspace_font_family("".into());
     bar.set_workspace_font_size(13.);
     bar.set_workspace_font_weight(0);
