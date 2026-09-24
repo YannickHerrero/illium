@@ -6,6 +6,7 @@ use winarchy_config::screensaver::Effect;
 mod burn;
 mod beams;
 mod colorshift;
+mod binarypath;
 mod bouncyballs;
 mod decrypt;
 mod laseretch;
@@ -47,6 +48,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::Expand => Box::new(expand::Expand::new(t)),
         Effect::MiddleOut => Box::new(middleout::MiddleOut::new(t)),
         Effect::BouncyBalls => Box::new(bouncyballs::BouncyBalls::new(t)),
+        Effect::BinaryPath => Box::new(binarypath::BinaryPath::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -172,5 +174,10 @@ pub(crate) mod tests {
     #[test]
     fn bouncyballs_finishes() {
         finishes_on_logo(Effect::BouncyBalls, 20_000);
+    }
+
+    #[test]
+    fn binarypath_finishes() {
+        finishes_on_logo(Effect::BinaryPath, 20_000);
     }
 }
