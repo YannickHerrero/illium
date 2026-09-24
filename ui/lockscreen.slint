@@ -1,7 +1,11 @@
 // Winarchy lock screen: one surface per monitor over the blurred wallpaper.
 // Only the surface on the active monitor (`primary`) takes the password; the
 // daemon checks it and decides when to fall back to the Windows lock.
+import { ScreensaverView, SaverRow } from "screensaver.slint";
+export { SaverRow } from "screensaver.slint";
 export component LockView inherits Window {
+    in property <bool> saving;
+    in property <[SaverRow]> saver-rows;
     title: "Winarchy Lock";
     no-frame: true;
     default-font-family: "JetBrains Mono";
@@ -79,7 +83,7 @@ export component LockView inherits Window {
             single-line: true;
             color: root.fg;
             font-size: 15px;
-            enabled: root.primary;
+            enabled: root.primary && !root.saving;
             accepted => {
                 root.submit(self.text);
                 self.text = "";
@@ -95,5 +99,12 @@ export component LockView inherits Window {
         color: #d08770;
         font-size: 12px;
     }
+    if root.saving: ScreensaverView {
+        width: root.width; height: root.height;
+        rows: root.saver-rows;
+        accent: root.accent;
+        foreground: root.fg;
+    }
+    public function clear-field() { field.text = ""; }
     public function focus-field() { field.focus(); }
 }

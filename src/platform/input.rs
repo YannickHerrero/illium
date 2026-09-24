@@ -74,6 +74,13 @@ enum Consumed {
     Binding,
     Modal,
 }
+/// Monotonic activity sequence; hooks do no rendering or queue flooding.
+pub static LOCK_ACTIVITY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// Remains set until the UI acknowledges wakeup, swallowing the whole burst.
+pub static SAVING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub static MOUSE_AVAILABLE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+static SAVER_BUTTONS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static CONSUMED: std::sync::Mutex<[Consumed; 256]> = std::sync::Mutex::new([Consumed::No; 256]);
 /// Virtual key plus one of the `dictate` binding currently held, 0 otherwise:
 /// its repeats are swallowed and its release is reported instead of consumed.
@@ -124,6 +131,14 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                     }
                     state.mask() | u8::from(k.flags.0 & LLKHF_ALTDOWN.0 != 0)
                 };
+                if LOCKED.load(std::sync::atomic::Ordering::Relaxed) && (down || up) {
+                    LOCK_ACTIVITY.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    if SAVING.load(std::sync::atomic::Ordering::SeqCst) {
+                        CONSUMED.lock().unwrap_or_else(|e| e.into_inner())[k.vkCode as usize] =
+                            if down { Consumed::Modal } else { Consumed::No };
+                        return LRESULT(1);
+                    }
+                }
                 if CAPTURE.load(std::sync::atomic::Ordering::Relaxed)
                     && let Some((tx, _)) = STATE.get()
                 {
@@ -152,6 +167,9 @@ unsafe extern "system" fn keyboard(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
                 if LOCKED.load(std::sync::atomic::Ordering::Relaxed) {
                     if down
                         && (!LOCK_FOCUSED.load(std::sync::atomic::Ordering::Relaxed)
+                            || CONSUMED.lock().unwrap_or_else(|e| e.into_inner())
+                                [k.vkCode as usize]
+                                == Consumed::Modal
                             || crate::lockscreen::blocked(k.vkCode, modifiers))
                     {
                         CONSUMED.lock().unwrap_or_else(|e| e.into_inner())[k.vkCode as usize] =
@@ -262,6 +280,46 @@ unsafe extern "system" fn window_event(
 }
 unsafe extern "system" fn mouse(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
     unsafe {
+        if code >= 0 {
+            use std::sync::atomic::Ordering::SeqCst;
+            let message = w.0 as u32;
+            let event = *(l.0 as *const MSLLHOOKSTRUCT);
+            let (bit, up) = match message {
+                WM_LBUTTONDOWN => (1, false),
+                WM_LBUTTONUP => (1, true),
+                WM_RBUTTONDOWN => (2, false),
+                WM_RBUTTONUP => (2, true),
+                WM_MBUTTONDOWN => (4, false),
+                WM_MBUTTONUP => (4, true),
+                WM_XBUTTONDOWN => (
+                    8 << ((event.mouseData >> 16).saturating_sub(1).min(1)),
+                    false,
+                ),
+                WM_XBUTTONUP => (
+                    8 << ((event.mouseData >> 16).saturating_sub(1).min(1)),
+                    true,
+                ),
+                _ => (0, false),
+            };
+            // Drain swallowed button pairs even if the lock has since closed.
+            let paired = if up {
+                SAVER_BUTTONS.fetch_and(!bit, SeqCst) & bit != 0
+            } else {
+                false
+            };
+            if LOCKED.load(SeqCst) {
+                LOCK_ACTIVITY.fetch_add(1, SeqCst);
+                if SAVING.load(SeqCst) {
+                    if !up {
+                        SAVER_BUTTONS.fetch_or(bit, SeqCst);
+                    }
+                    return LRESULT(1);
+                }
+            }
+            if paired {
+                return LRESULT(1);
+            }
+        }
         if code >= 0 && w.0 as u32 == WM_MOUSEMOVE {
             static LAST: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
             let event = *(l.0 as *const MSLLHOOKSTRUCT);
@@ -311,6 +369,7 @@ pub fn start(tx: EventSender, bindings: Vec<Binding>) -> Result<(), String> {
             }
             Ok(mut hook) => {
                 let mouse_hook = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse), None, 0).ok();
+                MOUSE_AVAILABLE.store(mouse_hook.is_some(), std::sync::atomic::Ordering::Relaxed);
                 let hooks = [
                     SetWinEventHook(
                         EVENT_OBJECT_CREATE,

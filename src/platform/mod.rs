@@ -2163,6 +2163,7 @@ pub fn run(replace: bool) -> Result<(), String> {
             m.finish_workspace_switcher(outcome);
             m.poll_demo();
             m.shell.poll_wallpaper();
+            m.shell.lock.poll();
             m.sync_wallpaper_palette();
             let Manager {
                 shell,
