@@ -713,6 +713,7 @@ impl Shell {
             4 => self.expose.prewarm(),
             5 => self.hints.prewarm(),
             6 => self.spaces.prewarm(),
+            7 => self.workspace_switcher.prewarm(),
             _ => return false,
         }
         self.prewarm_stage += 1;

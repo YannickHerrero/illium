@@ -108,6 +108,11 @@ impl Switcher {
             closing: Outcome::None,
         })
     }
+    pub fn prewarm(&self) {
+        if !self.opened {
+            super::prewarm(&self.ui);
+        }
+    }
     pub fn lost_focus(&mut self, foreground: isize) {
         if self.opened && !self.pending && foreground != 0 && foreground != id(self.ui.window()) {
             // An external activation wins; do not restore the old focus over it.
