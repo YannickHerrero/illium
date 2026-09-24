@@ -9,6 +9,7 @@ mod laseretch;
 mod pour;
 mod print;
 mod smoke;
+mod rain;
 
 /// The Winarchy logo in Omarchy's `logo.txt` style ("ARCHY" is theirs).
 pub const LOGO: &str = include_str!("../logo.txt");
@@ -21,6 +22,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::Pour => Box::new(pour::Pour::new(t)),
         Effect::Print => Box::new(print::Print::new(t)),
         Effect::Smoke => Box::new(smoke::Smoke::new(t)),
+        Effect::Rain => Box::new(rain::Rain::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -81,5 +83,10 @@ pub(crate) mod tests {
     #[test]
     fn pour_finishes() {
         finishes_on_logo(Effect::Pour, 20_000);
+    }
+
+    #[test]
+    fn rain_finishes() {
+        finishes_on_logo(Effect::Rain, 20_000);
     }
 }
