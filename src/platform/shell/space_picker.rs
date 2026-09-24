@@ -44,7 +44,7 @@ fn action(text: &str, control: bool, shift: bool, alt: bool, meta: bool) -> Opti
         return None;
     })
 }
-const HINT: &str = "↑ ↓ select   Enter switch   N new   E rename   D delete   Esc close";
+const HINT: &str = "Tab select · Enter switch · N new · E rename · D delete";
 pub struct SpacePicker {
     ui: SpacePickerView,
     rows: Rc<VecModel<SpaceRow>>,
@@ -105,7 +105,6 @@ impl SpacePicker {
     }
     pub fn apply_theme(&mut self, c: &Config) {
         self.ui.set_bg(color(&c.theme.background));
-        self.ui.set_surface(color(&c.theme.surface));
         self.ui.set_fg(color(&c.theme.text));
         self.ui.set_muted(color(&c.theme.subtext));
         self.ui.set_accent(color(&c.theme.accent));
@@ -115,7 +114,7 @@ impl SpacePicker {
         c: &Config,
         monitor: Rect,
         restore: Option<isize>,
-        backdrop: slint::Image,
+        wallpaper: slint::Image,
         rows: Vec<Row>,
         selected: usize,
     ) {
@@ -129,9 +128,9 @@ impl SpacePicker {
         self.ui.set_surface_width(dpi::logical(monitor, monitor.w));
         self.ui.set_surface_height(dpi::logical(monitor, monitor.h));
         self.ui.set_ready(false);
-        let has_backdrop = backdrop.size().width > 0;
-        self.ui.set_backdrop(backdrop);
-        self.ui.set_has_backdrop(has_backdrop);
+        let has_wallpaper = wallpaper.size().width > 0;
+        self.ui.set_wallpaper(wallpaper);
+        self.ui.set_has_wallpaper(has_wallpaper);
         self.model = Model::new(rows, selected);
         self.render();
         super::prepare(self.ui.window(), monitor, false);
@@ -195,7 +194,7 @@ impl SpacePicker {
             .iter()
             .map(|r| SpaceRow {
                 name: r.name.clone().into(),
-                apps: r.apps.join(", ").into(),
+                detail: r.detail().into(),
                 current: r.current,
             })
             .collect();
@@ -217,7 +216,7 @@ impl SpacePicker {
             .set_error(self.model.error.clone().unwrap_or_default().into());
         let hint = match self.model.mode {
             Mode::Browse => HINT,
-            Mode::Create(_) | Mode::Rename(_) => "Enter confirm   Esc cancel",
+            Mode::Create(_) | Mode::Rename(_) => "Enter confirm · Esc cancel",
             Mode::Delete => "Any other key cancels",
         };
         self.ui.set_hint(hint.into());

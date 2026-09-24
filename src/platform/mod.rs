@@ -1041,11 +1041,11 @@ impl Manager {
         let monitor = self.full_area();
         let index = self.model.monitors[(self.model.active - 1) as usize]
             .min(self.monitors.len().saturating_sub(1));
-        let backdrop = self.shell.backdrop(index);
+        let wallpaper = self.shell.wallpaper_image(index);
         let rows = self.space_rows();
         self.shell
             .spaces
-            .open(&self.config, monitor, restore, backdrop, rows, selected);
+            .open(&self.config, monitor, restore, wallpaper, rows, selected);
     }
     fn space_rows(&self) -> Vec<crate::space_picker::Row> {
         self.model
@@ -1053,12 +1053,25 @@ impl Manager {
             .iter()
             .map(|s| {
                 let mut apps: Vec<String> = Vec::new();
-                for c in self.model.clients.iter().filter(|c| c.space == s.id) {
-                    let app = native::process(c.id)
+                let clients: Vec<_> = self
+                    .model
+                    .clients
+                    .iter()
+                    .filter(|c| c.space == s.id)
+                    .collect();
+                for c in &clients {
+                    let app: String = native::process(c.id)
                         .and_then(|(_, exe)| {
                             std::path::Path::new(&exe)
                                 .file_stem()
                                 .map(|stem| stem.to_string_lossy().into_owned())
+                        })
+                        .map(|app| {
+                            let mut chars = app.chars();
+                            chars
+                                .next()
+                                .map(|first| first.to_uppercase().chain(chars).collect())
+                                .unwrap_or_default()
                         })
                         .unwrap_or_default();
                     if !app.is_empty() && !apps.contains(&app) {
@@ -1069,6 +1082,7 @@ impl Manager {
                     name: s.name.clone(),
                     current: s.id == self.model.space,
                     apps,
+                    windows: clients.len(),
                 }
             })
             .collect()

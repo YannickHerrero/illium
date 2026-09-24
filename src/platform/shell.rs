@@ -420,6 +420,12 @@ impl Shell {
         })
     }
     /// Blurred wallpaper of monitor `index`, or an empty image on a solid background.
+    pub fn wallpaper_image(&self, index: usize) -> slint::Image {
+        self.wallpaper_images
+            .get(index)
+            .cloned()
+            .unwrap_or_default()
+    }
     pub fn backdrop(&self, index: usize) -> slint::Image {
         self.wallpaper_blur.get(index).cloned().unwrap_or_default()
     }

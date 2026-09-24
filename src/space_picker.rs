@@ -9,6 +9,21 @@ pub struct Row {
     pub current: bool,
     /// Application names of its windows, without duplicates.
     pub apps: Vec<String>,
+    pub windows: usize,
+}
+impl Row {
+    pub fn detail(&self) -> String {
+        let count = match self.windows {
+            0 => return "No windows".into(),
+            1 => "1 window".to_owned(),
+            n => format!("{n} windows"),
+        };
+        if self.apps.is_empty() {
+            count
+        } else {
+            format!("{}  ·  {count}", self.apps.join(" · "))
+        }
+    }
 }
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum Mode {
@@ -141,6 +156,7 @@ mod tests {
                 name: (*name).into(),
                 current: i == 0,
                 apps: vec![],
+                windows: 0,
             })
             .collect()
     }
@@ -195,6 +211,14 @@ mod tests {
         renamed[1].name = "perso2".into();
         m.set_rows(renamed);
         assert_eq!((m.mode.clone(), m.selected), (Mode::Browse, 1));
+    }
+    #[test]
+    fn detail_lists_apps_and_counts_windows() {
+        let mut row = rows().remove(0);
+        assert_eq!(row.detail(), "No windows");
+        row.apps = vec!["Firefox".into(), "Code".into()];
+        row.windows = 3;
+        assert_eq!(row.detail(), "Firefox · Code  ·  3 windows");
     }
     #[test]
     fn deleting_needs_a_second_d() {
