@@ -33,6 +33,27 @@ winarchyctl workspace recent
 
 The bar lists the occupied workspaces plus the active one and highlights the active one; empty workspaces are not shown. Workspaces have a monitor association; focusing a client on a monitor updates that association. Switching workspaces is global, not independently per monitor.
 
+## Spaces
+
+A space is a named set of the nine workspaces, for example one per project or activity. Switching space swaps every workspace at once: the windows of the other spaces keep running, parked like those of an inactive workspace, and each space remembers its active workspace, recent workspace, monitor associations, split ratios and focused window. Winarchy always has at least one space; the first is called `dev`. Spaces, their names and the windows' memberships survive daemon restarts through `state.json`.
+
+**Ctrl+Alt+Tab** (or `winarchyctl space picker`) opens the space picker over the blurred wallpaper. It lists every space with the applications of its windows and preselects the most recent one, so Enter goes back and forth. **Up/Down**, **Tab/Shift+Tab**, Ctrl+Alt+Tab again or hovering move the selection; **Enter** or a click switches. **N** creates a space (type its name, Enter) and switches to it, empty. **E** renames the selected space. **D** then **D** again deletes it: no window is closed, its windows join the current space on the same workspace numbers (deleting the current space first switches to the recent one). **Escape** cancels a prompt, then closes the picker.
+
+Names are 1 to 24 characters without spaces or quotes, and must be unique.
+
+```powershell
+winarchyctl space create perso               # and switch to it
+winarchyctl space switch dev
+winarchyctl space next                       # creation order, wrapping
+winarchyctl space recent
+winarchyctl space rename perso maison
+winarchyctl space delete maison
+winarchyctl window move-space dev            # keeps its workspace number
+winarchyctl window move-space dev --follow
+```
+
+The `space` bar module shows the current space's name once there are at least two spaces; clicking it opens the picker. The exposé only shows the windows of the current space.
+
 ## Exposé
 
 **Alt+Tab** (or `winarchyctl expose toggle`) shows every managed window of every workspace as a card over the blurred wallpaper of the active monitor, grouped by workspace in tiling order, with a workspace badge, the application's icon and the window title. Each card is a live preview composed by the Desktop Window Manager: video keeps playing and terminals keep scrolling, on every workspace, because inactive windows are parked off screen rather than hidden. Minimized windows show their last frame dimmed; with `conceal = "hide"` the windows of inactive workspaces have no surface and their cards show icon and title only. The focused window is selected on opening and outlined in the accent color.

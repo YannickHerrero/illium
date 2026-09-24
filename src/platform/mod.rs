@@ -22,7 +22,7 @@ mod status;
 mod terminal;
 mod thumbnails;
 use crate::{
-    command::Command,
+    command::{Command, SpaceCommand},
     config::Config,
     layout::{Rect, neighbor},
     model::{Client, Model},
@@ -87,6 +87,8 @@ pub enum Event {
     Expose(u64, shell::expose::Input),
     /// Lock screen input, tagged with its opening generation.
     Lock(u64, shell::lockscreen::Input),
+    /// Space picker input, tagged with its opening generation.
+    SpacePicker(u64, shell::space_picker::Input),
 }
 struct Manager {
     config: Config,
@@ -126,7 +128,7 @@ impl Manager {
                 .model
                 .clients
                 .iter()
-                .any(|c| c.id == id && c.workspace == self.model.active && !native::minimized(c.id))
+                .any(|c| c.id == id && self.model.shown(c) && !native::minimized(c.id))
         }) {
             self.model.focused = None;
         }
@@ -140,7 +142,7 @@ impl Manager {
                 .model
                 .clients
                 .iter()
-                .any(|c| c.id == id && c.workspace == self.model.active)
+                .any(|c| c.id == id && self.model.shown(c))
         {
             self.model.focused = Some(id);
             self.pending_browser_focus = Some(id);
@@ -154,8 +156,9 @@ impl Manager {
             self.layout();
         }
         let park = self.config.wm.park();
+        let (space, active) = (self.model.space, self.model.active);
         if let Some(c) = self.model.clients.iter_mut().find(|c| c.id == id) {
-            if c.workspace != self.model.active && !native::concealed(id) {
+            if !c.on(space, active) && !native::concealed(id) {
                 c.hidden = true;
                 Self::conceal(c, park);
             }
@@ -168,7 +171,7 @@ impl Manager {
             return false;
         };
         let title = native::title(id);
-        let mut workspace = self.model.active;
+        let (mut space, mut workspace) = (self.model.space, self.model.active);
         let demo_workspace = self
             .demo
             .as_ref()
@@ -188,6 +191,7 @@ impl Manager {
         }
         let (mut fullscreen, mut restore) = (false, native::rect(id));
         if let Some(p) = saved {
+            space = p.space;
             workspace = p.workspace;
             floating = p.floating;
             fullscreen = p.fullscreen;
@@ -206,6 +210,7 @@ impl Manager {
         self.model.clients.push(Client {
             id,
             generation,
+            space,
             workspace,
             floating,
             fullscreen,
@@ -213,7 +218,7 @@ impl Manager {
             parked: None,
             restore,
         });
-        tracing::info!(id, workspace, "window added");
+        tracing::info!(id, space, workspace, "window added");
         if apps::wants_focus(&exe) || terminal::wants_focus(&exe) {
             self.model.focused = Some(id);
             native::focus(id, false);
@@ -225,6 +230,23 @@ impl Manager {
             active: self.model.active,
             recent: self.model.recent,
             monitors: self.model.monitors,
+            space: self.model.space,
+            recent_space: self.model.recent_space,
+            spaces: self
+                .model
+                .spaces
+                .iter()
+                .map(|s| {
+                    let (active, recent, monitors) = self.model.context(s);
+                    crate::state::SavedSpace {
+                        id: s.id,
+                        name: s.name.clone(),
+                        active,
+                        recent,
+                        monitors,
+                    }
+                })
+                .collect(),
             clients: self
                 .model
                 .clients
@@ -235,6 +257,7 @@ impl Manager {
                         id: c.id,
                         pid,
                         exe,
+                        space: c.space,
                         workspace: c.workspace,
                         floating: c.floating,
                         fullscreen: c.fullscreen,
@@ -274,7 +297,7 @@ impl Manager {
                 .clients
                 .iter()
                 .filter(|c| {
-                    c.workspace == workspace
+                    c.on(self.model.space, workspace)
                         && !c.floating
                         && !c.fullscreen
                         && !native::minimized(c.id)
@@ -310,8 +333,9 @@ impl Manager {
             .collect();
         let mut show = Vec::new();
         let mut concealed_foreground = false;
+        let (space, workspace) = (self.model.space, self.model.active);
         for c in &mut self.model.clients {
-            let active = c.workspace == self.model.active;
+            let active = c.on(space, workspace);
             if active && !native::minimized(c.id) {
                 let parked = native::parked(c.id);
                 if c.fullscreen {
@@ -352,7 +376,7 @@ impl Manager {
             native::show(id, true);
         }
         for c in &self.model.clients {
-            if c.workspace == self.model.active && c.fullscreen && !native::minimized(c.id) {
+            if self.model.shown(c) && c.fullscreen && !native::minimized(c.id) {
                 native::position(c.id, native::framed(c.id, area), Some(HWND_TOP));
             }
         }
@@ -361,7 +385,7 @@ impl Manager {
                 .model
                 .clients
                 .iter()
-                .any(|c| c.id == id && c.workspace == self.model.active && !c.hidden)
+                .any(|c| c.id == id && self.model.shown(c) && !c.hidden)
         {
             // Warp only once, after tiling, not during subsequent page resizes.
             native::focus(id, true);
@@ -387,7 +411,7 @@ impl Manager {
         self.borders
             .retain(|id, _| self.model.clients.iter().any(|c| c.id == *id));
         for c in &self.model.clients {
-            let shown = c.workspace == self.model.active
+            let shown = self.model.shown(c)
                 && !c.hidden
                 && !c.fullscreen
                 && !native::minimized(c.id)
@@ -434,15 +458,16 @@ impl Manager {
             .model
             .focused
             .filter(|id| {
-                self.model.clients.iter().any(|c| {
-                    c.id == *id && c.workspace == self.model.active && !native::minimized(c.id)
-                })
+                self.model
+                    .clients
+                    .iter()
+                    .any(|c| c.id == *id && self.model.shown(c) && !native::minimized(c.id))
             })
             .or_else(|| {
                 self.model
                     .clients
                     .iter()
-                    .find(|c| c.workspace == self.model.active && !native::minimized(c.id))
+                    .find(|c| self.model.shown(c) && !native::minimized(c.id))
                     .map(|c| c.id)
             });
         self.model.focused = id;
@@ -581,6 +606,11 @@ impl Manager {
         if self.shell.expose.opened && !matches!(c, Command::Expose | Command::Status) {
             self.finish_expose(crate::expose::Outcome::Close);
         }
+        if self.shell.spaces.opened
+            && !matches!(c, Command::Space(SpaceCommand::Picker) | Command::Status)
+        {
+            self.finish_space_picker(crate::space_picker::Outcome::Close);
+        }
         if self.prune() {
             self.layout();
         }
@@ -591,45 +621,59 @@ impl Manager {
             _ => tracing::debug!(?c, "command"),
         }
         let foreground = unsafe { GetForegroundWindow().0 as isize };
-        if self.model.clients.iter().any(|w| {
-            w.id == foreground && w.workspace == self.model.active && !native::minimized(w.id)
-        }) {
+        if self
+            .model
+            .clients
+            .iter()
+            .any(|w| w.id == foreground && self.model.shown(w) && !native::minimized(w.id))
+        {
             self.model.focused = Some(foreground);
         }
         match c {
-            Command::Status => return Ok(serde_json::json!({
-                "workspace": self.model.active, "recent": self.model.recent,
-                "demo_pending": self.demo.is_some(), "demo_error": self.demo_error,
-                "focused": self.model.focused, "theme": self.config.global.theme,
-                "wallpaper": self.shell.wallpaper,
-                "wallpaper_pending": self.shell.pending_wallpaper(),
-                "wallpaper_error": self.shell.wallpaper_error,
-                "gap": self.config.wm.gap, "launcher": self.shell.visible,
-                "bar_hints": self.shell.hints.opened,
-                "expose": self.shell.expose.opened,
-                "locked": self.shell.lock.opened,
-                "bar_applet": self.applets.open.as_ref().or(self.shell.popup_open.as_ref()),
-                "bar_background_opacity": self.shell.bars.first().map(|bar| bar.get_background_opacity()),
-                "theme_picker": self.shell.picker.opened && self.shell.picker.wallpaper_theme.is_none(),
-                "wallpaper_picker": self.shell.picker.opened && self.shell.picker.wallpaper_theme.is_some(),
-                "wallpaper_picker_theme": self.shell.picker.wallpaper_theme,
-                "wallpaper_picker_selected": self.shell.picker.wallpaper_theme.as_ref().and(self.shell.picker.selected_id()),
-                "wallpaper_picker_loading": self.shell.picker.wallpaper_theme.is_some() && self.shell.picker.loading(),
-                "wallpaper_picker_filter": self.shell.picker.wallpaper_theme.as_ref().map(|_| self.shell.picker.filter()),
-                "wallpaper_picker_error": self.shell.picker.wallpaper_theme.as_ref().and(self.shell.picker.error.as_ref()),
-                "theme_picker_selected": self.shell.picker.wallpaper_theme.is_none().then(|| self.shell.picker.selected_id()).flatten(),
-                "theme_picker_filter": if self.shell.picker.wallpaper_theme.is_none() { self.shell.picker.filter() } else { "" },
-                "theme_picker_loading": self.shell.picker.wallpaper_theme.is_none() && self.shell.picker.loading(),
-                "theme_picker_error": self.shell.picker.wallpaper_theme.is_none().then_some(self.shell.picker.error.as_ref()).flatten(),
-                "monitors": self.monitors, "bar_count": self.shell.bars.len(), "bar_transparent": self.shell.bar_transparent,
-                "clients": self.model.clients.iter().map(|c| serde_json::json!({"id":c.id,"workspace":c.workspace,"floating":c.floating,"fullscreen":c.fullscreen,"title":native::title(c.id),"rect":native::rect(c.id)})).collect::<Vec<_>>()
-            }).to_string()),
+            Command::Status => {
+                let mut status = serde_json::json!({
+                    "workspace": self.model.active, "recent": self.model.recent,
+                    "demo_pending": self.demo.is_some(), "demo_error": self.demo_error,
+                    "focused": self.model.focused, "theme": self.config.global.theme,
+                    "wallpaper": self.shell.wallpaper,
+                    "wallpaper_pending": self.shell.pending_wallpaper(),
+                    "wallpaper_error": self.shell.wallpaper_error,
+                    "gap": self.config.wm.gap, "launcher": self.shell.visible,
+                    "bar_hints": self.shell.hints.opened,
+                    "expose": self.shell.expose.opened,
+                    "locked": self.shell.lock.opened,
+                    "bar_applet": self.applets.open.as_ref().or(self.shell.popup_open.as_ref()),
+                    "bar_background_opacity": self.shell.bars.first().map(|bar| bar.get_background_opacity()),
+                    "theme_picker": self.shell.picker.opened && self.shell.picker.wallpaper_theme.is_none(),
+                    "wallpaper_picker": self.shell.picker.opened && self.shell.picker.wallpaper_theme.is_some(),
+                    "wallpaper_picker_theme": self.shell.picker.wallpaper_theme,
+                    "wallpaper_picker_selected": self.shell.picker.wallpaper_theme.as_ref().and(self.shell.picker.selected_id()),
+                    "wallpaper_picker_loading": self.shell.picker.wallpaper_theme.is_some() && self.shell.picker.loading(),
+                    "wallpaper_picker_filter": self.shell.picker.wallpaper_theme.as_ref().map(|_| self.shell.picker.filter()),
+                    "wallpaper_picker_error": self.shell.picker.wallpaper_theme.as_ref().and(self.shell.picker.error.as_ref()),
+                    "theme_picker_selected": self.shell.picker.wallpaper_theme.is_none().then(|| self.shell.picker.selected_id()).flatten(),
+                    "theme_picker_filter": if self.shell.picker.wallpaper_theme.is_none() { self.shell.picker.filter() } else { "" },
+                    "theme_picker_loading": self.shell.picker.wallpaper_theme.is_none() && self.shell.picker.loading(),
+                    "theme_picker_error": self.shell.picker.wallpaper_theme.is_none().then_some(self.shell.picker.error.as_ref()).flatten(),
+                    "monitors": self.monitors, "bar_count": self.shell.bars.len(), "bar_transparent": self.shell.bar_transparent,
+                    "clients": self.model.clients.iter().map(|c| serde_json::json!({"id":c.id,"space":c.space,"workspace":c.workspace,"floating":c.floating,"fullscreen":c.fullscreen,"title":native::title(c.id),"rect":native::rect(c.id)})).collect::<Vec<_>>()
+                });
+                // Separate from the literal above, which is at serde_json's macro recursion limit.
+                status["space"] = self.model.space_name().into();
+                status["spaces"] = self.model.spaces.iter().map(|s| s.name.as_str()).collect();
+                status["space_picker"] = self.shell.spaces.opened.into();
+                return Ok(status.to_string());
+            }
             Command::Workspace(n) => {
                 let started = std::time::Instant::now();
                 self.model.switch(n);
                 self.layout();
                 self.focus_visible();
-                tracing::debug!(workspace = n, elapsed_us = started.elapsed().as_micros(), "workspace placement and focus submitted");
+                tracing::debug!(
+                    workspace = n,
+                    elapsed_us = started.elapsed().as_micros(),
+                    "workspace placement and focus submitted"
+                );
             }
             Command::Next => {
                 self.model.switch(self.model.next());
@@ -648,6 +692,15 @@ impl Manager {
                     self.focus_visible();
                 }
             }
+            Command::Space(command) => self.space(command)?,
+            Command::MoveSpace(name, follow) => {
+                let space = self.model.space_id(&name)?;
+                if let Some(id) = self.model.focused {
+                    self.model.move_to_space(id, space, follow);
+                    self.layout();
+                    self.focus_visible();
+                }
+            }
             Command::Close => {
                 if let Some(id) = self.model.focused {
                     native::close(id);
@@ -660,7 +713,7 @@ impl Manager {
                         .clients
                         .iter()
                         .filter(|w| {
-                            w.workspace == self.model.active
+                            self.model.shown(w)
                                 && !native::minimized(w.id)
                                 && (!matches!(c, Command::Move(_)) || !w.floating)
                         })
@@ -695,9 +748,11 @@ impl Manager {
                         let after = candidate.layout(area, ids.len(), gap, outer);
                         // Protect every descendant, not just the focused leaf. Existing
                         // tiny tiles may grow, but cannot be shrunk further by a resize.
-                        if before.iter().zip(&after).all(|(a, b)| {
-                            b.w >= a.w.min(minimum) && b.h >= a.h.min(minimum)
-                        }) {
+                        if before
+                            .iter()
+                            .zip(&after)
+                            .all(|(a, b)| b.w >= a.w.min(minimum) && b.h >= a.h.min(minimum))
+                        {
                             *splits = candidate;
                             self.layout();
                         }
@@ -751,14 +806,23 @@ impl Manager {
                     .apps
                     .apps
                     .get(&app)
-                    .ok_or_else(|| format!("unknown application: {app}"))?.clone();
-                return self.execute(Command::LaunchTarget { target, shortcut: false });
+                    .ok_or_else(|| format!("unknown application: {app}"))?
+                    .clone();
+                return self.execute(Command::LaunchTarget {
+                    target,
+                    shortcut: false,
+                });
             }
             Command::LaunchTarget { target, shortcut } => {
-                if shortcut { native::shortcut(&target)?; }
-                else if terminal::bundled(&target) { terminal::open(); }
-                else if browser::bundled(&target) { browser::open(); }
-                else { native::spawn(&target)?; }
+                if shortcut {
+                    native::shortcut(&target)?;
+                } else if terminal::bundled(&target) {
+                    terminal::open();
+                } else if browser::bundled(&target) {
+                    browser::open();
+                } else {
+                    native::spawn(&target)?;
+                }
             }
             Command::Launcher => {
                 self.shell.picker.close();
@@ -789,7 +853,8 @@ impl Manager {
                     self.shell.drawer_hints = false;
                     let monitor = self.model.monitors[(self.model.active - 1) as usize]
                         .min(self.monitors.len().saturating_sub(1));
-                    self.shell.open_hints(&self.config, self.full_area(), monitor);
+                    self.shell
+                        .open_hints(&self.config, self.full_area(), monitor);
                     if !self.shell.hints.opened {
                         self.shell.refresh(&self.model, &self.config, &self.applets);
                     }
@@ -842,7 +907,9 @@ impl Manager {
                         close_chords,
                         backdrop: self.shell.backdrop(index),
                     };
-                    self.shell.expose.open(&self.config, monitor, restore, scene);
+                    self.shell
+                        .expose
+                        .open(&self.config, monitor, restore, scene);
                 }
             }
             Command::Lock => {
@@ -861,10 +928,21 @@ impl Manager {
                     self.shell.close_popup();
                     self.applets.close();
                     if matches!(c, Command::WallpaperPicker) {
-                        let selected = self.shell.pending_wallpaper().or(self.shell.wallpaper.as_deref()).map(str::to_owned);
-                        self.shell.picker.open_wallpapers(&self.config, self.full_area(), restore, selected.as_deref())?;
+                        let selected = self
+                            .shell
+                            .pending_wallpaper()
+                            .or(self.shell.wallpaper.as_deref())
+                            .map(str::to_owned);
+                        self.shell.picker.open_wallpapers(
+                            &self.config,
+                            self.full_area(),
+                            restore,
+                            selected.as_deref(),
+                        )?;
                     } else {
-                        self.shell.picker.open(&self.config, self.full_area(), restore)?;
+                        self.shell
+                            .picker
+                            .open(&self.config, self.full_area(), restore)?;
                     }
                 }
             }
@@ -873,11 +951,15 @@ impl Manager {
             Command::BackgroundOpacity(increase) => {
                 let mut theme = self.config.theme.clone();
                 winarchy_theme::opacity::apply(
-                    &self.config.home, &self.config.global.theme, &mut theme,
+                    &self.config.home,
+                    &self.config.global.theme,
+                    &mut theme,
                 );
                 let opacity = winarchy_theme::opacity::step(theme.background_opacity, increase);
                 winarchy_theme::opacity::set(
-                    &self.config.home, &self.config.global.theme, opacity,
+                    &self.config.home,
+                    &self.config.global.theme,
+                    opacity,
                 )?;
                 self.shell.apply_opacity(&self.config);
                 return Ok(format!("background opacity: {:.0}%", opacity * 100.0));
@@ -890,13 +972,14 @@ impl Manager {
                     self.config.theme.background_opacity * 100.0
                 ));
             }
-            Command::Theme(name) => {
-                self.set_global("theme", toml_edit::value(name.as_str()))?
-            }
+            Command::Theme(name) => self.set_global("theme", toml_edit::value(name.as_str()))?,
             Command::ToggleBlur => {
                 let blur = !self.config.global.background_blur;
                 self.set_global("background_blur", toml_edit::value(blur))?;
-                return Ok(format!("background blur: {}", if blur { "on" } else { "off" }));
+                return Ok(format!(
+                    "background blur: {}",
+                    if blur { "on" } else { "off" }
+                ));
             }
             Command::Explorer(start) => session::explorer(start)?,
             Command::Quit => {
@@ -909,6 +992,124 @@ impl Manager {
         }
         self.sync_wallpaper_palette();
         Ok("ok".into())
+    }
+    fn space(&mut self, command: SpaceCommand) -> Result<(), String> {
+        match command {
+            SpaceCommand::Switch(name) => {
+                let id = self.model.space_id(&name)?;
+                self.model.switch_space(id);
+            }
+            SpaceCommand::Next => self.model.switch_space(self.model.next_space()),
+            SpaceCommand::Recent => self.model.switch_space(self.model.recent_space),
+            SpaceCommand::Create(name) => self.model.create_space(&name)?,
+            SpaceCommand::Rename(old, new) => {
+                self.model.rename_space(&old, &new)?;
+                self.dirty = true;
+                self.shell.refresh(&self.model, &self.config, &self.applets);
+                return Ok(());
+            }
+            SpaceCommand::Delete(name) => self.model.delete_space(&name)?,
+            SpaceCommand::Picker => {
+                if self.shell.spaces.opened {
+                    self.shell.spaces.next();
+                } else {
+                    self.open_space_picker();
+                }
+                return Ok(());
+            }
+        }
+        self.layout();
+        self.focus_visible();
+        Ok(())
+    }
+    fn open_space_picker(&mut self) {
+        let foreground = unsafe { GetForegroundWindow().0 as isize };
+        let restore = self.restore_target(foreground);
+        self.shell.dismiss();
+        self.shell.close_popup();
+        self.applets.close();
+        self.finish_picker(crate::theme_picker::Outcome::Cancel);
+        self.finish_editor(shell::keybindings::Outcome::Close);
+        self.finish_expose(crate::expose::Outcome::Close);
+        // Preselect the recent space, so Enter goes back and forth.
+        let spaces = &self.model.spaces;
+        let selected = spaces
+            .iter()
+            .position(|s| s.id == self.model.recent_space && s.id != self.model.space)
+            .or_else(|| spaces.iter().position(|s| s.id == self.model.space))
+            .unwrap_or(0);
+        let monitor = self.full_area();
+        let index = self.model.monitors[(self.model.active - 1) as usize]
+            .min(self.monitors.len().saturating_sub(1));
+        let wallpaper = self.shell.wallpaper_image(index);
+        let rows = self.space_rows();
+        self.shell
+            .spaces
+            .open(&self.config, monitor, restore, wallpaper, rows, selected);
+    }
+    fn space_rows(&self) -> Vec<crate::space_picker::Row> {
+        self.model
+            .spaces
+            .iter()
+            .map(|s| {
+                let mut apps: Vec<String> = Vec::new();
+                let clients: Vec<_> = self
+                    .model
+                    .clients
+                    .iter()
+                    .filter(|c| c.space == s.id)
+                    .collect();
+                for c in &clients {
+                    let app: String = native::process(c.id)
+                        .and_then(|(_, exe)| {
+                            std::path::Path::new(&exe)
+                                .file_stem()
+                                .map(|stem| stem.to_string_lossy().into_owned())
+                        })
+                        .map(|app| {
+                            let mut chars = app.chars();
+                            chars
+                                .next()
+                                .map(|first| first.to_uppercase().chain(chars).collect())
+                                .unwrap_or_default()
+                        })
+                        .unwrap_or_default();
+                    if !app.is_empty() && !apps.contains(&app) {
+                        apps.push(app);
+                    }
+                }
+                crate::space_picker::Row {
+                    name: s.name.clone(),
+                    current: s.id == self.model.space,
+                    apps,
+                    windows: clients.len(),
+                }
+            })
+            .collect()
+    }
+    fn finish_space_picker(&mut self, outcome: crate::space_picker::Outcome) {
+        use crate::space_picker::Outcome;
+        match outcome {
+            Outcome::None => {}
+            Outcome::Close => {
+                let restore = self.shell.spaces.close();
+                self.restore_focus(restore);
+            }
+            Outcome::Run(command) => {
+                let closes = matches!(command, SpaceCommand::Switch(_) | SpaceCommand::Create(_));
+                match self.space(command) {
+                    Err(error) => self.shell.spaces.fail(error),
+                    Ok(()) if closes => {
+                        self.shell.spaces.close();
+                        self.focus_visible();
+                    }
+                    Ok(()) => {
+                        let rows = self.space_rows();
+                        self.shell.spaces.set_rows(rows);
+                    }
+                }
+            }
+        }
     }
     /// Window to refocus when a full-screen surface closes: the foreground
     /// window unless it belongs to Winarchy itself.
@@ -948,7 +1149,8 @@ impl Manager {
         }
         self.restore_focus(restore);
     }
-    /// One card per managed window, grouped by workspace in tiling order.
+    /// One card per managed window of the current space, grouped by workspace
+    /// in tiling order.
     fn expose_entries(
         &self,
     ) -> (
@@ -956,7 +1158,12 @@ impl Manager {
         std::collections::HashMap<isize, String>,
         std::collections::HashMap<isize, Rect>,
     ) {
-        let mut clients: Vec<&Client> = self.model.clients.iter().collect();
+        let mut clients: Vec<&Client> = self
+            .model
+            .clients
+            .iter()
+            .filter(|c| c.space == self.model.space)
+            .collect();
         clients.sort_by_key(|c| c.workspace);
         let mut exes = std::collections::HashMap::new();
         let mut sources = std::collections::HashMap::new();
@@ -1037,6 +1244,7 @@ impl Manager {
         self.shell.picker.close();
         self.shell.editor.close();
         self.shell.expose.close();
+        self.shell.spaces.close();
         // Without a usable password the user still asked to lock: Windows does it.
         let hash = match crate::lockscreen::load(&self.config.home) {
             Ok(hash) => hash,
@@ -1214,7 +1422,7 @@ impl Manager {
                         }
                     }
                     if let Some(c) = self.model.clients.iter().find(|c| c.id == id)
-                        && c.workspace == self.model.active
+                        && self.model.shown(c)
                         && !native::minimized(c.id)
                     {
                         self.model.focused = Some(id);
@@ -1261,6 +1469,10 @@ impl Manager {
             Event::Expose(epoch, input) => {
                 let outcome = self.shell.expose.input(epoch, input);
                 self.finish_expose(outcome);
+            }
+            Event::SpacePicker(epoch, input) => {
+                let outcome = self.shell.spaces.input(epoch, input);
+                self.finish_space_picker(outcome);
             }
             Event::Lock(epoch, input) => {
                 let outcome = self.shell.lock.input(epoch, input);
@@ -1335,6 +1547,12 @@ impl Manager {
                 }
                 self.finish_editor(shell::keybindings::Outcome::Close);
                 self.finish_expose(crate::expose::Outcome::Close);
+                if kind == "space" {
+                    if !self.shell.spaces.opened {
+                        self.open_space_picker();
+                    }
+                    return;
+                }
                 if kind == "drawer" {
                     self.shell.drawer_pinned = !self.shell.drawer_pinned;
                     self.shell.refresh(&self.model, &self.config, &self.applets);
@@ -1452,7 +1670,7 @@ impl Manager {
                         .model
                         .clients
                         .iter()
-                        .any(|c| c.id == id && c.workspace == self.model.active)
+                        .any(|c| c.id == id && self.model.shown(c))
                 {
                     self.model.focused = Some(id);
                     native::focus(id, false);
@@ -1464,8 +1682,13 @@ impl Manager {
                 if !monitors.is_empty() && monitors != self.monitors {
                     tracing::info!(count = monitors.len(), "display configuration changed");
                     self.monitors = monitors;
-                    for index in &mut self.model.monitors {
-                        *index = (*index).min(self.monitors.len() - 1);
+                    let last = self.monitors.len() - 1;
+                    let stored = self.model.spaces.iter_mut().map(|s| &mut s.monitors);
+                    for index in std::iter::once(&mut self.model.monitors)
+                        .chain(stored)
+                        .flatten()
+                    {
+                        *index = (*index).min(last);
                     }
                     let _ = self.shell.configure(&self.config, &self.monitors);
                     self.layout();
@@ -1475,6 +1698,7 @@ impl Manager {
                 self.shell.picker.display_changed(monitor);
                 self.shell.editor.display_changed(monitor);
                 self.shell.expose.display_changed(monitor);
+                self.shell.spaces.display_changed(monitor);
                 if self.shell.lock.opened {
                     let (monitors, primary, backdrops) = self.lock_scene();
                     if let Err(error) =
@@ -1711,6 +1935,21 @@ pub fn run(replace: bool) -> Result<(), String> {
                     *index = (*index).min(monitors.len().saturating_sub(1));
                 }
             }
+            if !state.spaces.is_empty() {
+                let last = monitors.len().saturating_sub(1);
+                m.model.spaces = state
+                    .spaces
+                    .iter()
+                    .map(|s| crate::model::Space {
+                        active: s.active,
+                        recent: s.recent,
+                        monitors: s.monitors.map(|index| index.min(last)),
+                        ..crate::model::Space::new(s.id, s.name.clone())
+                    })
+                    .collect();
+                m.model.space = state.space;
+                m.model.recent_space = state.recent_space;
+            }
             for id in native::enumerate() {
                 m.enroll(id, state.placement(id));
             }
@@ -1835,9 +2074,9 @@ pub fn run(replace: bool) -> Result<(), String> {
             if maintenance.take_overflow() {
                 tracing::warn!("event queue overflow; reconciling windows and configuration");
                 m.event(Event::Display);
-                let active = m.model.active;
+                let (space, active) = (m.model.space, m.model.active);
                 m.model.clients.retain(|c| {
-                    let keep = c.workspace != active
+                    let keep = !c.on(space, active)
                         || unsafe { IsWindowVisible(native::hwnd(c.id)).as_bool() };
                     if !keep {
                         session::untag(c.id);

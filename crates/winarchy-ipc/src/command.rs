@@ -27,6 +27,9 @@ pub enum Command {
         delta: i32,
     },
     MoveWorkspace(u8, bool),
+    /// Named sets of the nine workspaces.
+    Space(SpaceCommand),
+    MoveSpace(String, bool),
     Tile,
     Float,
     Fullscreen,
@@ -73,6 +76,29 @@ pub enum Command {
     Explorer(bool),
     Quit,
     Status,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SpaceCommand {
+    Switch(String),
+    Next,
+    Recent,
+    Create(String),
+    Rename(String, String),
+    Delete(String),
+    Picker,
+}
+/// Names travel as single command-line tokens.
+pub fn space_name(name: &str) -> Result<String, String> {
+    let count = name.chars().count();
+    if count == 0
+        || count > 24
+        || name
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || c == '"')
+    {
+        return Err("space name must be 1 to 24 characters without spaces or quotes".into());
+    }
+    Ok(name.into())
 }
 impl FromStr for Command {
     type Err = String;
@@ -129,6 +155,17 @@ impl FromStr for Command {
             }
             ["window", "move-workspace", n] => Self::MoveWorkspace(ws(n)?, false),
             ["window", "move-workspace", n, "--follow"] => Self::MoveWorkspace(ws(n)?, true),
+            ["window", "move-space", name] => Self::MoveSpace(space_name(name)?, false),
+            ["window", "move-space", name, "--follow"] => Self::MoveSpace(space_name(name)?, true),
+            ["space", "next"] => Self::Space(SpaceCommand::Next),
+            ["space", "recent"] => Self::Space(SpaceCommand::Recent),
+            ["space", "picker"] => Self::Space(SpaceCommand::Picker),
+            ["space", "switch", name] => Self::Space(SpaceCommand::Switch(space_name(name)?)),
+            ["space", "create", name] => Self::Space(SpaceCommand::Create(space_name(name)?)),
+            ["space", "delete", name] => Self::Space(SpaceCommand::Delete(space_name(name)?)),
+            ["space", "rename", old, new] => {
+                Self::Space(SpaceCommand::Rename(space_name(old)?, space_name(new)?))
+            }
             ["window", "set-tiling"] => Self::Tile,
             ["window", "toggle-float"] => Self::Float,
             ["window", "toggle-fullscreen"] => Self::Fullscreen,
@@ -223,6 +260,36 @@ mod tests {
             "app",
             "app ../x",
             "app Shot",
+        ] {
+            assert!(s.parse::<Command>().is_err(), "{s}");
+        }
+    }
+    #[test]
+    fn spaces() {
+        assert_eq!(
+            "space switch dev".parse(),
+            Ok(Command::Space(SpaceCommand::Switch("dev".into())))
+        );
+        assert_eq!(
+            "space rename dev 開発".parse(),
+            Ok(Command::Space(SpaceCommand::Rename(
+                "dev".into(),
+                "開発".into()
+            )))
+        );
+        assert_eq!("space next".parse(), Ok(Command::Space(SpaceCommand::Next)));
+        assert_eq!(
+            "window move-space perso --follow".parse(),
+            Ok(Command::MoveSpace("perso".into(), true))
+        );
+        for s in [
+            "space",
+            "space switch",
+            "space create a b",
+            "space create \"x\"",
+            "space create abcdefghijklmnopqrstuvwxy",
+            "space rename dev",
+            "window move-space",
         ] {
             assert!(s.parse::<Command>().is_err(), "{s}");
         }

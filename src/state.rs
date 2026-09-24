@@ -9,6 +9,9 @@ pub struct Placement {
     pub id: isize,
     pub pid: u32,
     pub exe: String,
+    /// Files written before spaces existed load into the default space 0.
+    #[serde(default)]
+    pub space: u32,
     pub workspace: u8,
     pub floating: bool,
     pub fullscreen: bool,
@@ -21,6 +24,21 @@ pub struct State {
     pub monitors: [usize; 9],
     /// Tile order is the vector order.
     pub clients: Vec<Placement>,
+    /// The top-level workspace fields belong to this space.
+    #[serde(default)]
+    pub space: u32,
+    #[serde(default)]
+    pub recent_space: u32,
+    #[serde(default)]
+    pub spaces: Vec<SavedSpace>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SavedSpace {
+    pub id: u32,
+    pub name: String,
+    pub active: u8,
+    pub recent: u8,
+    pub monitors: [usize; 9],
 }
 impl State {
     /// A missing or unreadable file is not an error: the desktop starts fresh.
@@ -34,6 +52,36 @@ impl State {
             state.recent = state.active;
         }
         state.clients.retain(|c| (1..=9).contains(&c.workspace));
+        let mut names = std::collections::HashSet::new();
+        let mut ids = std::collections::HashSet::new();
+        state.spaces.retain(|s| {
+            crate::command::space_name(&s.name).is_ok()
+                && ids.insert(s.id)
+                && names.insert(s.name.clone())
+        });
+        state.spaces.truncate(crate::model::MAX_SPACES);
+        for s in &mut state.spaces {
+            if !(1..=9).contains(&s.active) {
+                s.active = 1;
+            }
+            if !(1..=9).contains(&s.recent) {
+                s.recent = s.active;
+            }
+        }
+        if !state.spaces.iter().any(|s| s.id == state.space) {
+            state.spaces.clear();
+            state.space = 0;
+        }
+        if !state.spaces.iter().any(|s| s.id == state.recent_space) {
+            state.recent_space = state.space;
+        }
+        let space = state.space;
+        let known: Vec<u32> = state.spaces.iter().map(|s| s.id).collect();
+        for c in &mut state.clients {
+            if !known.contains(&c.space) {
+                c.space = space;
+            }
+        }
         Some(state)
     }
     /// Keeps only the entries whose window still belongs to the same process.
@@ -69,6 +117,7 @@ mod tests {
             id,
             pid: 40 + id as u32,
             exe: format!("C:\\app{id}.exe"),
+            space: 0,
             workspace,
             floating: id == 2,
             fullscreen: false,
@@ -93,6 +142,9 @@ mod tests {
             recent: 1,
             monitors: [0; 9],
             clients: vec![placement(1, 3), placement(2, 5)],
+            space: 1,
+            recent_space: 0,
+            spaces: vec![saved(0, "dev"), saved(1, "perso")],
         };
         State::save(&state.to_json(), &path).unwrap();
         assert_eq!(State::load(&path).unwrap(), state);
@@ -113,11 +165,64 @@ mod tests {
             recent: 0,
             monitors: [0; 9],
             clients: vec![placement(1, 3), placement(2, 0)],
+            ..Default::default()
         };
         State::save(&state.to_json(), &path).unwrap();
         state = State::load(&path).unwrap();
         assert_eq!((state.active, state.recent), (1, 1));
         assert_eq!(state.clients.len(), 1);
+    }
+    fn saved(id: u32, name: &str) -> SavedSpace {
+        SavedSpace {
+            id,
+            name: name.into(),
+            active: 2,
+            recent: 1,
+            monitors: [0; 9],
+        }
+    }
+    #[test]
+    fn files_without_spaces_load_into_the_default_space() {
+        let path = temp("legacy.json");
+        std::fs::write(
+            &path,
+            r#"{"active":2,"recent":1,"monitors":[0,0,0,0,0,0,0,0,0],"clients":[{"id":1,"pid":41,"exe":"a","workspace":2,"floating":false,"fullscreen":false,"restore":{"x":0,"y":0,"w":1,"h":1}}]}"#,
+        )
+        .unwrap();
+        let state = State::load(&path).unwrap();
+        assert!(state.spaces.is_empty());
+        assert_eq!((state.space, state.clients[0].space), (0, 0));
+    }
+    #[test]
+    fn invalid_spaces_are_dropped() {
+        let path = temp("spaces.json");
+        let mut perso = saved(4, "perso");
+        perso.active = 0;
+        let mut state = State {
+            active: 1,
+            recent: 1,
+            clients: vec![Placement {
+                space: 9,
+                ..placement(1, 3)
+            }],
+            space: 4,
+            recent_space: 7,
+            spaces: vec![saved(0, "dev"), saved(3, "dev"), saved(5, "a b"), perso],
+            ..Default::default()
+        };
+        State::save(&state.to_json(), &path).unwrap();
+        state = State::load(&path).unwrap();
+        assert_eq!(
+            state.spaces.iter().map(|s| s.id).collect::<Vec<_>>(),
+            vec![0, 4]
+        );
+        assert_eq!((state.spaces[1].active, state.recent_space), (1, 4));
+        assert_eq!(state.clients[0].space, 4);
+        state.space = 8;
+        State::save(&state.to_json(), &path).unwrap();
+        state = State::load(&path).unwrap();
+        assert!(state.spaces.is_empty());
+        assert_eq!((state.space, state.clients[0].space), (0, 0));
     }
     #[test]
     fn retains_only_windows_of_the_same_process() {

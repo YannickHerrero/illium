@@ -163,6 +163,7 @@ fn restores_remembered_placement_and_drops_stale_entries() {
         id,
         pid,
         exe: std::env::current_exe().unwrap().display().to_string(),
+        space: 0,
         workspace,
         floating: false,
         fullscreen: false,
@@ -178,6 +179,7 @@ fn restores_remembered_placement_and_drops_stale_entries() {
             placement(ids[2], std::process::id() + 1, 5),
             placement(0x7fff_0001, std::process::id(), 7),
         ],
+        ..Default::default()
     };
     let path = winarchy::config::Config::home().join("state.json");
     winarchy::state::State::save(&saved.to_json(), &path).unwrap();
