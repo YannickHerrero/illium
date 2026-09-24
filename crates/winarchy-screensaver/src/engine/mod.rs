@@ -8,6 +8,7 @@ pub mod geometry;
 pub mod graphics;
 pub mod motion;
 pub mod rng;
+pub mod spanningtree;
 pub mod terminal;
 
 pub use animation::{SceneId, SyncMetric, Visual};
