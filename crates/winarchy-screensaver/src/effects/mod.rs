@@ -8,6 +8,7 @@ mod beams;
 mod colorshift;
 mod binarypath;
 mod bouncyballs;
+mod crumble;
 mod decrypt;
 mod laseretch;
 mod pour;
@@ -49,6 +50,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::MiddleOut => Box::new(middleout::MiddleOut::new(t)),
         Effect::BouncyBalls => Box::new(bouncyballs::BouncyBalls::new(t)),
         Effect::BinaryPath => Box::new(binarypath::BinaryPath::new(t)),
+        Effect::Crumble => Box::new(crumble::Crumble::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -179,5 +181,10 @@ pub(crate) mod tests {
     #[test]
     fn binarypath_finishes() {
         finishes_on_logo(Effect::BinaryPath, 20_000);
+    }
+
+    #[test]
+    fn crumble_finishes() {
+        finishes_on_logo(Effect::Crumble, 20_000);
     }
 }
