@@ -18,6 +18,7 @@ mod vhstape;
 mod highlight;
 mod matrix;
 mod sweep;
+mod wipe;
 
 /// The Winarchy logo in Omarchy's `logo.txt` style ("ARCHY" is theirs).
 pub const LOGO: &str = include_str!("../logo.txt");
@@ -39,6 +40,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::Matrix => Box::new(matrix::Matrix::new(t)),
         Effect::Highlight => Box::new(highlight::Highlight::new(t)),
         Effect::Sweep => Box::new(sweep::Sweep::new(t)),
+        Effect::Wipe => Box::new(wipe::Wipe::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -144,5 +146,10 @@ pub(crate) mod tests {
     #[test]
     fn sweep_finishes() {
         finishes_on_logo(Effect::Sweep, 5_000);
+    }
+
+    #[test]
+    fn wipe_finishes() {
+        finishes_on_logo(Effect::Wipe, 5_000);
     }
 }
