@@ -37,6 +37,7 @@ mod scattered;
 mod slice;
 mod slide;
 mod spray;
+mod swarm;
 mod unstable;
 mod waves;
 
@@ -81,6 +82,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::Spray => Box::new(spray::Spray::new(t)),
         Effect::Waves => Box::new(waves::Waves::new(t)),
         Effect::Unstable => Box::new(unstable::Unstable::new(t)),
+        Effect::Swarm => Box::new(swarm::Swarm::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -291,5 +293,10 @@ pub(crate) mod tests {
     #[test]
     fn unstable_finishes() {
         finishes_on_logo(Effect::Unstable, 20_000);
+    }
+
+    #[test]
+    fn swarm_finishes() {
+        finishes_on_logo(Effect::Swarm, 20_000);
     }
 }
