@@ -1,7 +1,7 @@
 //! Keybindings editor model: what the list shows and how the file is rewritten.
 //! Windowing and key capture live in the platform layer.
 use crate::{
-    command::{Command, Direction},
+    command::{Command, Direction, SpaceCommand},
     keyboard,
 };
 use toml_edit::{DocumentMut, Item, Table, Value};
@@ -86,6 +86,17 @@ pub fn describe(command: &str) -> String {
         ),
         Command::MoveWorkspace(n, true) => format!("Move window to workspace {n} and follow"),
         Command::MoveWorkspace(n, false) => format!("Move window to workspace {n}"),
+        Command::Space(space) => match space {
+            SpaceCommand::Switch(name) => format!("Space {name}"),
+            SpaceCommand::Next => "Next space".into(),
+            SpaceCommand::Recent => "Recent space".into(),
+            SpaceCommand::Create(name) => format!("Create space {name}"),
+            SpaceCommand::Rename(old, new) => format!("Rename space {old} to {new}"),
+            SpaceCommand::Delete(name) => format!("Delete space {name}"),
+            SpaceCommand::Picker => "Space picker".into(),
+        },
+        Command::MoveSpace(name, true) => format!("Move window to space {name} and follow"),
+        Command::MoveSpace(name, false) => format!("Move window to space {name}"),
         Command::Tile => "Set tiling".into(),
         Command::Float => "Toggle floating".into(),
         Command::Fullscreen => "Toggle fullscreen".into(),
@@ -254,13 +265,14 @@ mod tests {
     #[test]
     fn defaults_are_unchanged_and_ordered() {
         let rows = rows(DEFAULTS, DEFAULTS);
-        assert_eq!(rows.len(), 60);
+        assert_eq!(rows.len(), 61);
         assert!(rows.iter().all(|r| !r.changed()));
         assert_eq!(rows[0].description, "Launcher");
         assert_eq!(rows[0].label(), "Alt + Space");
         assert_eq!(rows[2].command, "keybindings toggle");
         assert_eq!(rows[2].label(), "Alt + Shift + ?");
         assert_eq!(pretty("shift+alt+q"), "Alt + Shift + Q");
+        assert!(rows.iter().any(|r| r.description == "Space picker"));
         assert!(
             rows.iter()
                 .any(|r| r.description == "Move window to workspace 3 and follow")

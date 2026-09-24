@@ -139,8 +139,9 @@ pub struct Config {
     pub theme: Theme,
 }
 /// Bar module names handled by the daemon itself; anything else is an applet.
-pub const BUILTIN_MODULES: [&str; 10] = [
+pub const BUILTIN_MODULES: [&str; 11] = [
     "workspaces",
+    "space",
     "window-title",
     "volume",
     "battery",
@@ -536,7 +537,7 @@ mod tests {
         Config::install(&p).unwrap();
         let c = Config::load(&p).unwrap();
         assert_eq!(c.global.theme, "catppuccin-mocha");
-        assert_eq!(c.keys.keybindings.len(), 60);
+        assert_eq!(c.keys.keybindings.len(), 61);
         assert_eq!(c.keys.keybindings["Alt+B"], "spawn browser");
         assert_eq!(c.apps.apps["browser"], "winarchy-browser.exe");
         for file in [

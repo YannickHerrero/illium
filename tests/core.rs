@@ -94,6 +94,7 @@ fn direction_reorder_changes_geometry() {
         m.clients.push(Client {
             id,
             generation: id as usize,
+            space: 0,
             workspace: 1,
             floating: false,
             fullscreen: false,
@@ -142,6 +143,7 @@ fn workspace_move_preserves_uniqueness() {
     m.clients.push(Client {
         id: 42,
         generation: 42,
+        space: 0,
         workspace: 1,
         floating: true,
         fullscreen: false,
@@ -163,6 +165,7 @@ fn occupied_wraps() {
     m.clients.push(Client {
         id: 1,
         generation: 1,
+        space: 0,
         workspace: 2,
         floating: false,
         fullscreen: false,

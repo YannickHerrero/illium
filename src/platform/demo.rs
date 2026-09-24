@@ -125,12 +125,7 @@ impl super::Manager {
         for id in native::enumerate() {
             self.add(id);
         }
-        if self
-            .model
-            .clients
-            .iter()
-            .any(|c| c.workspace == self.model.active)
-        {
+        if self.model.clients.iter().any(|c| self.model.shown(c)) {
             return Err("Demo requires an empty workspace (including minimized windows)".into());
         }
         self.demo_error = None;
@@ -161,7 +156,7 @@ impl super::Manager {
             .model
             .clients
             .iter()
-            .any(|c| c.workspace == pending.workspace && pending.role(c.id).is_none())
+            .any(|c| c.on(self.model.space, pending.workspace) && pending.role(c.id).is_none())
         {
             Err("Demo cancelled: another window entered the workspace".into())
         } else {

@@ -179,6 +179,7 @@ pub(super) mod bar_hints;
 pub(super) mod expose;
 pub(super) mod keybindings;
 pub(super) mod lockscreen;
+pub(super) mod space_picker;
 pub(super) mod theme_picker;
 mod wallpaper;
 #[cfg(test)]
@@ -244,6 +245,7 @@ pub struct Shell {
     pub picker: theme_picker::Picker,
     pub editor: keybindings::Editor,
     pub expose: expose::Expose,
+    pub spaces: space_picker::SpacePicker,
     pub lock: lockscreen::Lock,
     surface_key: Option<(Vec<Rect>, bool, String, i32)>,
     pub backgrounds: Vec<Background>,
@@ -358,6 +360,7 @@ impl Shell {
             picker: theme_picker::Picker::new(tx.clone())?,
             editor: keybindings::Editor::new(tx.clone())?,
             expose: expose::Expose::new(tx.clone())?,
+            spaces: space_picker::SpacePicker::new(tx.clone())?,
             lock: lockscreen::Lock::new(tx.clone()),
             surface_key: None,
             backgrounds: vec![],
@@ -457,6 +460,7 @@ impl Shell {
         self.picker.apply_theme(c);
         self.editor.apply_theme(c);
         self.expose.apply_theme(c);
+        self.spaces.apply_theme(c);
         self.home = c.home.clone();
         self.theme = c.global.theme.clone();
         self.popup.set_bg(color(&c.theme.background));
@@ -484,6 +488,7 @@ impl Shell {
         self.picker.apply_theme(c);
         self.editor.apply_theme(c);
         self.expose.apply_theme(c);
+        self.spaces.apply_theme(c);
         self.descriptions = c.launcher.show_descriptions;
         self.home = c.home.clone();
         self.theme = c.global.theme.clone();
@@ -696,6 +701,7 @@ impl Shell {
             3 => self.editor.prewarm(),
             4 => self.expose.prewarm(),
             5 => self.hints.prewarm(),
+            6 => self.spaces.prewarm(),
             _ => return false,
         }
         self.prewarm_stage += 1;
@@ -773,6 +779,7 @@ impl Shell {
         self.picker.arrange();
         self.editor.arrange();
         self.expose.arrange();
+        self.spaces.arrange();
         self.lock.arrange();
         true
     }
@@ -896,6 +903,7 @@ impl Shell {
             || self.picker.opened
             || self.editor.opened
             || self.expose.opened
+            || self.spaces.opened
             || self.lock.opened
     }
     pub fn dismiss(&mut self) {
@@ -1124,7 +1132,7 @@ impl Shell {
         }
         let workspaces: Vec<i32> = if c.bar.left.iter().any(|s| s == "workspaces") {
             (1..=9u8)
-                .filter(|n| *n == m.active || m.clients.iter().any(|w| w.workspace == *n))
+                .filter(|n| *n == m.active || m.occupied(*n))
                 .map(i32::from)
                 .collect()
         } else {
@@ -1186,6 +1194,16 @@ impl Shell {
                         charging: false,
                         ..Default::default()
                     }
+                } else if name == "space" {
+                    // A single space is the plain desktop: nothing to tell apart.
+                    if m.spaces.len() < 2 {
+                        continue;
+                    }
+                    StatusItem {
+                        kind: "space".into(),
+                        value: m.space_name().into(),
+                        ..Default::default()
+                    }
                 } else if name == "clock" {
                     let (time, date) = super::status::clock_labels(c);
                     out.push(StatusItem {
@@ -1231,7 +1249,7 @@ impl Shell {
             .chain(&mut right)
         {
             let kind = item.kind.as_str();
-            let interactive = matches!(kind, "clock" | "battery" | "cpu" | "memory")
+            let interactive = matches!(kind, "clock" | "battery" | "cpu" | "memory" | "space")
                 || applets.is_applet(kind)
                 || applets.attached(kind).is_some();
             if interactive && hint_id < crate::bar_hints::LABELS.len() as i32 {

@@ -1,0 +1,128 @@
+// Space picker: the named spaces as a keyboard-driven list over the blurred
+// wallpaper. State lives in the daemon (src/space_picker.rs); the view draws
+// the rows it is given and reports keys, clicks and hovers.
+export struct SpaceRow {
+    name: string,
+    /// Application names of the space's windows, already joined.
+    apps: string,
+    current: bool,
+}
+
+export component SpacePickerView inherits Window {
+    title: "Winarchy Spaces";
+    no-frame: true;
+    default-font-family: "JetBrains Mono";
+    in property <length> surface-width;
+    in property <length> surface-height;
+    width: surface-width; height: surface-height;
+    in property <color> bg;
+    in property <color> surface;
+    in property <color> fg;
+    in property <color> muted;
+    in property <color> accent;
+    in property <[SpaceRow]> rows;
+    in property <int> selected: 0;
+    /// Name prompt or deletion confirmation; empty while browsing.
+    in property <string> prompt;
+    in property <string> error;
+    in property <string> hint;
+    in property <image> backdrop;
+    in property <bool> has-backdrop;
+    in property <bool> ready;
+    callback key(string, bool, bool, bool, bool);
+    callback activate(int);
+    callback hover(int);
+    callback dismiss();
+    background: root.bg;
+    forward-focus: keys;
+    if root.has-backdrop && root.ready: Image {
+        width: root.width; height: root.height;
+        source: root.backdrop;
+        image-fit: cover;
+        image-rendering: smooth;
+    }
+    Rectangle {
+        width: root.width; height: root.height;
+        background: root.bg.with-alpha(root.has-backdrop ? 0.55 : 0.0);
+    }
+    keys := FocusScope {
+        width: root.width; height: root.height;
+        key-pressed(event) => {
+            root.key(event.text, event.modifiers.control, event.modifiers.shift, event.modifiers.alt, event.modifiers.meta);
+            return accept;
+        }
+        key-released(event) => { return accept; }
+        // Declared first so the rows' own touch areas stay above it.
+        TouchArea { clicked => { root.dismiss(); } }
+        card := Rectangle {
+            visible: root.ready;
+            width: min(560px, root.width - 64px);
+            height: self.preferred-height;
+            x: (root.width - self.width) / 2;
+            y: (root.height - self.height) / 2;
+            background: root.surface.with-alpha(0.95);
+            border-width: 1px; border-color: root.fg.with-alpha(0.25);
+            border-radius: 6px;
+            // Swallow clicks between rows so they do not dismiss the picker.
+            TouchArea { }
+            VerticalLayout {
+                padding: 20px; spacing: 6px;
+                Text {
+                    text: "Spaces"; color: root.muted; font-size: 12px; font-weight: 700;
+                }
+                for row[index] in root.rows: Rectangle {
+                    height: 52px;
+                    border-radius: 4px;
+                    background: root.selected == index ? root.accent.with-alpha(0.18) : Colors.transparent;
+                    border-width: root.selected == index ? 1px : 0px;
+                    border-color: root.accent;
+                    HorizontalLayout {
+                        padding-left: 14px; padding-right: 14px; spacing: 12px;
+                        Rectangle {
+                            width: 8px; height: 8px;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: 4px;
+                            background: row.current ? root.accent : Colors.transparent;
+                        }
+                        VerticalLayout {
+                            alignment: center; spacing: 2px;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: row.name; color: root.fg;
+                                font-size: 15px; font-weight: root.selected == index ? 700 : 400;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: row.apps == "" ? "No windows" : row.apps;
+                                color: root.muted; font-size: 11px;
+                                overflow: elide;
+                            }
+                        }
+                    }
+                    TouchArea {
+                        clicked => { root.activate(index); }
+                        moved => { if (self.has-hover) { root.hover(index); } }
+                    }
+                }
+                if root.prompt != "": Rectangle {
+                    height: 40px;
+                    border-radius: 3px; border-width: 1px; border-color: root.accent;
+                    background: root.bg.with-alpha(0.85);
+                    Text {
+                        x: 12px; width: parent.width - 24px;
+                        text: root.prompt; color: root.fg; font-size: 14px;
+                        vertical-alignment: center; overflow: elide;
+                    }
+                }
+                if root.error != "": Text {
+                    text: root.error; color: root.accent; font-size: 12px; wrap: word-wrap;
+                }
+                Text {
+                    text: root.hint; color: root.muted; font-size: 11px;
+                    horizontal-alignment: center; wrap: word-wrap;
+                }
+            }
+        }
+    }
+    public function focus-view() { keys.focus(); }
+}
