@@ -25,6 +25,7 @@ mod wipe;
 mod errorcorrect;
 mod expand;
 mod middleout;
+mod orbittingvolley;
 
 /// The Winarchy logo in Omarchy's `logo.txt` style ("ARCHY" is theirs).
 pub const LOGO: &str = include_str!("../logo.txt");
@@ -53,6 +54,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::BinaryPath => Box::new(binarypath::BinaryPath::new(t)),
         Effect::Crumble => Box::new(crumble::Crumble::new(t)),
         Effect::ErrorCorrect => Box::new(errorcorrect::ErrorCorrect::new(t)),
+        Effect::OrbittingVolley => Box::new(orbittingvolley::OrbittingVolley::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -193,5 +195,10 @@ pub(crate) mod tests {
     #[test]
     fn errorcorrect_finishes() {
         finishes_on_logo(Effect::ErrorCorrect, 20_000);
+    }
+
+    #[test]
+    fn orbittingvolley_finishes() {
+        finishes_on_logo(Effect::OrbittingVolley, 20_000);
     }
 }
