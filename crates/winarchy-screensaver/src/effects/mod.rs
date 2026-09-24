@@ -11,6 +11,7 @@ mod print;
 mod smoke;
 mod rain;
 mod synthgrid;
+mod thunderstorm;
 mod vhstape;
 
 /// The Winarchy logo in Omarchy's `logo.txt` style ("ARCHY" is theirs).
@@ -27,6 +28,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::Rain => Box::new(rain::Rain::new(t)),
         Effect::SynthGrid => Box::new(synthgrid::SynthGrid::new(t)),
         Effect::VhsTape => Box::new(vhstape::VhsTape::new(t)),
+        Effect::Thunderstorm => Box::new(thunderstorm::Thunderstorm::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -102,5 +104,10 @@ pub(crate) mod tests {
     #[test]
     fn vhstape_finishes() {
         finishes_on_logo(Effect::VhsTape, 20_000);
+    }
+
+    #[test]
+    fn thunderstorm_finishes() {
+        finishes_on_logo(Effect::Thunderstorm, 20_000);
     }
 }
