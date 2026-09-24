@@ -6123,6 +6123,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "winarchy-screensaver"
+version = "0.1.0"
+dependencies = [
+ "fontdue",
+ "png 0.17.16",
+ "winarchy-config",
+]
+
+[[package]]
 name = "winarchy-terminal"
 version = "0.1.0"
 dependencies = [

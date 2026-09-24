@@ -1,6 +1,6 @@
 [workspace]
-members = ["crates/winarchy-ipc", "crates/winarchy-theme", "crates/winarchy-config", "crates/winarchyctl", "crates/winarchy-apps", "crates/winarchy-terminal", "crates/winarchy-dictate", "crates/winarchy-browser"]
-default-members = [".", "crates/winarchy-ipc", "crates/winarchy-theme", "crates/winarchy-config", "crates/winarchyctl", "crates/winarchy-apps", "crates/winarchy-terminal", "crates/winarchy-dictate", "crates/winarchy-browser"]
+members = ["crates/winarchy-ipc", "crates/winarchy-theme", "crates/winarchy-config", "crates/winarchy-screensaver", "crates/winarchyctl", "crates/winarchy-apps", "crates/winarchy-terminal", "crates/winarchy-dictate", "crates/winarchy-browser"]
+default-members = [".", "crates/winarchy-ipc", "crates/winarchy-theme", "crates/winarchy-config", "crates/winarchy-screensaver", "crates/winarchyctl", "crates/winarchy-apps", "crates/winarchy-terminal", "crates/winarchy-dictate", "crates/winarchy-browser"]
 resolver = "3"
 
 [package]
