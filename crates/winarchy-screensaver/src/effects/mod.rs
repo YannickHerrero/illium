@@ -15,6 +15,7 @@ mod rain;
 mod synthgrid;
 mod thunderstorm;
 mod vhstape;
+mod highlight;
 mod matrix;
 
 /// The Winarchy logo in Omarchy's `logo.txt` style ("ARCHY" is theirs).
@@ -35,6 +36,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::VhsTape => Box::new(vhstape::VhsTape::new(t)),
         Effect::Thunderstorm => Box::new(thunderstorm::Thunderstorm::new(t)),
         Effect::Matrix => Box::new(matrix::Matrix::new(t)),
+        Effect::Highlight => Box::new(highlight::Highlight::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -130,5 +132,10 @@ pub(crate) mod tests {
     #[test]
     fn matrix_finishes() {
         finishes_on_logo(Effect::Matrix, 20_000);
+    }
+
+    #[test]
+    fn highlight_finishes() {
+        finishes_on_logo(Effect::Highlight, 5_000);
     }
 }
