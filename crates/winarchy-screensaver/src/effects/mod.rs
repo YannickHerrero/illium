@@ -9,6 +9,7 @@ mod colorshift;
 mod binarypath;
 mod bouncyballs;
 mod crumble;
+mod blackhole;
 mod decrypt;
 mod laseretch;
 mod pour;
@@ -35,6 +36,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::Burn => Box::new(burn::Burn::new(t)),
         Effect::Beams => Box::new(beams::Beams::new(t)),
         Effect::ColorShift => Box::new(colorshift::ColorShift::new(t)),
+        Effect::Blackhole => Box::new(blackhole::Blackhole::new(t)),
         Effect::Decrypt => Box::new(decrypt::Decrypt::new(t)),
         Effect::LaserEtch => Box::new(laseretch::LaserEtch::new(t)),
         Effect::Pour => Box::new(pour::Pour::new(t)),
@@ -95,6 +97,11 @@ pub(crate) mod tests {
     #[test]
     fn colorshift_finishes() {
         finishes_on_logo(Effect::ColorShift, 5_000);
+    }
+
+    #[test]
+    fn blackhole_finishes() {
+        finishes_on_logo(Effect::Blackhole, 20_000);
     }
 
     #[test]
