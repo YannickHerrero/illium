@@ -24,10 +24,12 @@ export component ScreensaverDemoView inherits Window {
     in property <length> preview-height;
     in property <length> list-width;
     in property <length> margin;
+    /// Bumped by the daemon to repaint the whole surface.
+    in-out property <int> repaint-nonce;
     callback key(string, bool);
     callback choose(int);
     property <length> row-height: 30px;
-    background: root.bg;
+    background: root.repaint-nonce < 0 ? transparent : root.bg;
     if !root.playing: Rectangle {
         Flickable {
             x: root.margin; y: root.margin;

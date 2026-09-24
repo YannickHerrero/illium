@@ -200,6 +200,10 @@ impl SaverDemo {
         native::position(id(self.ui.window()), self.monitor, Some(HWND_TOPMOST));
         native::focus(id(self.ui.window()), false);
         self.ui.invoke_focus_view();
+        // A window shown again starts from an empty surface and Slint only
+        // repaints what changed, which is just the preview image here.
+        self.ui
+            .set_repaint_nonce(self.ui.get_repaint_nonce().wrapping_add(1));
         self.pending_window = false;
     }
     /// Draws the next frame; closes once another window takes the foreground,
