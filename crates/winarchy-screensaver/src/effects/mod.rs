@@ -10,6 +10,7 @@ mod pour;
 mod print;
 mod smoke;
 mod rain;
+mod synthgrid;
 
 /// The Winarchy logo in Omarchy's `logo.txt` style ("ARCHY" is theirs).
 pub const LOGO: &str = include_str!("../logo.txt");
@@ -23,6 +24,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::Print => Box::new(print::Print::new(t)),
         Effect::Smoke => Box::new(smoke::Smoke::new(t)),
         Effect::Rain => Box::new(rain::Rain::new(t)),
+        Effect::SynthGrid => Box::new(synthgrid::SynthGrid::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -88,5 +90,10 @@ pub(crate) mod tests {
     #[test]
     fn rain_finishes() {
         finishes_on_logo(Effect::Rain, 20_000);
+    }
+
+    #[test]
+    fn synthgrid_finishes() {
+        finishes_on_logo(Effect::SynthGrid, 20_000);
     }
 }
