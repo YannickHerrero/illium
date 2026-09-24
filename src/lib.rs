@@ -12,6 +12,7 @@ pub mod modifiers;
 pub mod platform;
 pub mod queue;
 pub mod request;
+pub mod screensaver;
 pub mod space_picker;
 pub mod state;
 pub mod theme_picker;
