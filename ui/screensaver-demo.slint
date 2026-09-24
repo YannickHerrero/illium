@@ -1,0 +1,99 @@
+// Screensaver demo from the menu: the effects listed on the left with the
+// selected one playing on the right, or one effect full screen. The daemon
+// draws the frames, owns the selection and lays out the preview.
+import { ScreensaverView } from "screensaver.slint";
+
+export component ScreensaverDemoView inherits Window {
+    title: "Winarchy Screensavers";
+    no-frame: true;
+    default-font-family: "JetBrains Mono";
+    in property <length> surface-width;
+    in property <length> surface-height;
+    width: surface-width; height: surface-height;
+    in property <color> bg;
+    in property <color> fg;
+    in property <color> muted;
+    in property <color> accent;
+    in property <[string]> names;
+    in property <int> selected;
+    in property <bool> playing;
+    in property <image> frame;
+    in property <length> preview-x;
+    in property <length> preview-y;
+    in property <length> preview-width;
+    in property <length> preview-height;
+    in property <length> list-width;
+    in property <length> margin;
+    callback key(string, bool);
+    callback choose(int);
+    property <length> row-height: 30px;
+    background: root.bg;
+    if !root.playing: Rectangle {
+        Flickable {
+            x: root.margin; y: root.margin;
+            width: root.list-width;
+            height: root.height - 2 * root.margin - 32px;
+            viewport-height: root.names.length * root.row-height;
+            // Keep the selected row in view as it moves.
+            viewport-y: min(0px, max(self.height - self.viewport-height,
+                self.height / 2 - (root.selected + 0.5) * root.row-height));
+            for name[index] in root.names: Rectangle {
+                y: index * root.row-height;
+                width: root.list-width; height: root.row-height;
+                border-radius: 6px;
+                background: index == root.selected ? root.accent.with-alpha(0.18) : transparent;
+                Text {
+                    x: 12px;
+                    text: name;
+                    color: index == root.selected ? root.accent : root.fg;
+                    font-size: 15px;
+                    vertical-alignment: center;
+                }
+                TouchArea { clicked => { root.choose(index); } }
+            }
+        }
+        Rectangle {
+            x: root.preview-x - 1px; y: root.preview-y - 1px;
+            width: root.preview-width + 2px; height: root.preview-height + 2px;
+            border-width: 1px;
+            border-color: root.muted.with-alpha(0.5);
+            background: #000;
+        }
+        Image {
+            x: root.preview-x; y: root.preview-y;
+            width: root.preview-width; height: root.preview-height;
+            source: root.frame;
+            image-fit: fill;
+            image-rendering: pixelated;
+        }
+        Text {
+            x: root.margin;
+            y: root.height - root.margin - self.height;
+            text: "↑↓ select · Enter full screen · Esc close";
+            color: root.muted;
+            font-size: 12px;
+        }
+    }
+    if root.playing: Rectangle {
+        ScreensaverView {
+            width: root.width; height: root.height;
+            frame: root.frame;
+        }
+        Text {
+            x: 16px;
+            y: root.height - self.height - 12px;
+            text: root.names[root.selected] + "  ·  Ctrl+N next · Ctrl+P previous · Esc back";
+            color: #6c6c6c;
+            font-size: 12px;
+        }
+    }
+    keys := FocusScope {
+        width: 0; height: 0;
+        key-pressed(event) => {
+            root.key(event.text, event.modifiers.control);
+            return accept;
+        }
+        key-released(event) => { return accept; }
+    }
+    public function focus-view() { keys.focus(); }
+}
