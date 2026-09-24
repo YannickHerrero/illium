@@ -1,4 +1,7 @@
 //! Live miniature desktops. Slint and DWM consume the same interpolated geometry.
+#[cfg(test)]
+#[path = "workspace_switcher_tests.rs"]
+mod tests;
 use super::{WorkspaceCard, WorkspacePlaceholder, WorkspaceSwitcherView, color, id, tool};
 use crate::{
     config::Config,

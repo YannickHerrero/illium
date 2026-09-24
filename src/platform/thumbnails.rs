@@ -1,6 +1,9 @@
 //! Live DWM thumbnails of client windows, composed by the Desktop Window
 //! Manager into rectangles of a shell surface. Parked windows keep their
 //! surface alive, so their thumbnails animate like the visible ones.
+#[cfg(test)]
+#[path = "thumbnails_tests.rs"]
+mod tests;
 use super::native;
 use crate::layout::Rect;
 use std::collections::HashMap;
