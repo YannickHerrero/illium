@@ -7,6 +7,8 @@ use std::{
 #[serde(deny_unknown_fields)]
 pub struct Global {
     pub theme: String,
+    #[serde(default)]
+    pub screensaver: crate::screensaver::Screensaver,
     /// Read by the applications through `winarchy_theme`, not by the daemon.
     #[serde(default)]
     pub background_blur: bool,

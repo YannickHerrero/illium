@@ -7,3 +7,4 @@ pub mod config;
 pub mod files;
 pub mod keyboard;
 pub mod plugins;
+pub mod screensaver;
