@@ -83,7 +83,6 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::Waves => Box::new(waves::Waves::new(t)),
         Effect::Unstable => Box::new(unstable::Unstable::new(t)),
         Effect::Swarm => Box::new(swarm::Swarm::new(t)),
-        other => unimplemented!("{other:?} is not ported yet"),
     }
 }
 
