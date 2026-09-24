@@ -31,6 +31,7 @@ mod orbittingvolley;
 mod fireworks;
 mod rings;
 mod spotlights;
+mod overflow;
 mod randomsequence;
 mod scattered;
 mod slice;
@@ -73,6 +74,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::Scattered => Box::new(scattered::Scattered::new(t)),
         Effect::Slide => Box::new(slide::Slide::new(t)),
         Effect::Slice => Box::new(slice::Slice::new(t)),
+        Effect::Overflow => Box::new(overflow::Overflow::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -263,5 +265,10 @@ pub(crate) mod tests {
     #[test]
     fn slice_finishes() {
         finishes_on_logo(Effect::Slice, 20_000);
+    }
+
+    #[test]
+    fn overflow_finishes() {
+        finishes_on_logo(Effect::Overflow, 20_000);
     }
 }
