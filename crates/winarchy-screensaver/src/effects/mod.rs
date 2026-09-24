@@ -4,6 +4,7 @@ use crate::engine::{Effect as Run, Terminal};
 use winarchy_config::screensaver::Effect;
 
 mod burn;
+mod beams;
 mod decrypt;
 mod laseretch;
 mod pour;
@@ -20,6 +21,7 @@ pub const LOGO: &str = include_str!("../logo.txt");
 pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
     match effect {
         Effect::Burn => Box::new(burn::Burn::new(t)),
+        Effect::Beams => Box::new(beams::Beams::new(t)),
         Effect::Decrypt => Box::new(decrypt::Decrypt::new(t)),
         Effect::LaserEtch => Box::new(laseretch::LaserEtch::new(t)),
         Effect::Pour => Box::new(pour::Pour::new(t)),
@@ -59,6 +61,11 @@ pub(crate) mod tests {
             assert_eq!(cell.symbol, c.input_symbol, "{effect:?} left {at:?} wrong");
         }
         frames
+    }
+
+    #[test]
+    fn beams_finishes() {
+        finishes_on_logo(Effect::Beams, 20_000);
     }
 
     #[test]
