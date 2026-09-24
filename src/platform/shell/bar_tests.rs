@@ -114,6 +114,23 @@ fn bar_fades_only_its_background_and_honors_shared_override() {
     bar.set_transparent(false);
     assert!((i32::from(pixels()[250].alpha) - 217).abs() <= 1);
 
+    // Every kanji must produce visible ink, not just an empty workspace pill.
+    bar.set_japanese_workspace_numbers(true);
+    bar.set_transparent(true);
+    bar.set_active(0);
+    for n in 1..=9 {
+        bar.set_workspaces(ModelRc::new(VecModel::from(vec![n])));
+        let image = pixels();
+        assert!(
+            (10..30).any(|y| (14..32).any(|x| image[y * 500 + x].alpha > 0)),
+            "Japanese workspace {n} has no visible glyph"
+        );
+    }
+    bar.set_japanese_workspace_numbers(false);
+    bar.set_transparent(false);
+    bar.set_active(1);
+    bar.set_workspaces(ModelRc::new(VecModel::from(vec![1, 2])));
+
     // Modules before and after the workspace group keep their positions and
     // report the correct anchors. The active workspace is no longer at the left inset.
     bar.set_before_workspace_items(ModelRc::new(VecModel::from(vec![StatusItem {

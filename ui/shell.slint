@@ -200,6 +200,8 @@ export component Bar inherits Window {
                 background: root.active == n ? root.accent : workspace-touch.has-hover ? root.fg.with-alpha(0.08) : Colors.transparent;
                 Text {
                     text: root.japanese-workspace-numbers ? root.japanese-numbers[n - 1] : "\{n}";
+                    // JetBrains Mono has no kanji; software-renderer fallback is not reliable.
+                    font-family: root.japanese-workspace-numbers ? "Yu Gothic UI" : "JetBrains Mono";
                     color: root.active == n ? root.bg : root.muted;
                     font-weight: root.active == n ? 700 : 400;
                     horizontal-alignment: center; vertical-alignment: center;
