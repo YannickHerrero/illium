@@ -20,6 +20,7 @@ mod matrix;
 mod sweep;
 mod wipe;
 mod expand;
+mod middleout;
 
 /// The Winarchy logo in Omarchy's `logo.txt` style ("ARCHY" is theirs).
 pub const LOGO: &str = include_str!("../logo.txt");
@@ -43,6 +44,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::Sweep => Box::new(sweep::Sweep::new(t)),
         Effect::Wipe => Box::new(wipe::Wipe::new(t)),
         Effect::Expand => Box::new(expand::Expand::new(t)),
+        Effect::MiddleOut => Box::new(middleout::MiddleOut::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -158,5 +160,10 @@ pub(crate) mod tests {
     #[test]
     fn expand_finishes() {
         finishes_on_logo(Effect::Expand, 20_000);
+    }
+
+    #[test]
+    fn middleout_finishes() {
+        finishes_on_logo(Effect::MiddleOut, 20_000);
     }
 }
