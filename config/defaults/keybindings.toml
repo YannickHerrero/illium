@@ -3,6 +3,7 @@
 "Alt+Shift+Space" = "meta toggle"
 "Alt+Shift+?" = "keybindings toggle"
 "Alt+Tab" = "expose toggle"
+"Alt+Shift+S" = "workspace switcher toggle"
 "Ctrl+Alt+Tab" = "space picker"
 "Ctrl+Alt+B" = "bar hints"
 "Ctrl+Alt+L" = "lock"

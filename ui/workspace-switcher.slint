@@ -1,0 +1,102 @@
+// Card coordinates and DWM rectangles share the daemon's animation clock.
+export struct WorkspaceCard {
+    x: length, y: length, width: length, height: length,
+    desktop-x: length, desktop-y: length, desktop-width: length, desktop-height: length,
+    wallpaper: image,
+    label: string,
+    detail: string,
+    strength: float,
+}
+export struct WorkspacePlaceholder {
+    x: length, y: length, width: length, height: length,
+    title: string,
+}
+export component WorkspaceSwitcherView inherits Window {
+    title: "Winarchy Workspace Switcher";
+    no-frame: true;
+    default-font-family: "JetBrains Mono";
+    in property <length> surface-width;
+    in property <length> surface-height;
+    width: surface-width; height: surface-height;
+    in property <color> bg;
+    in property <color> fg;
+    in property <color> accent;
+    in property <image> backdrop;
+    in property <bool> ready;
+    in property <float> reveal;
+    in property <int> selected;
+    in property <[WorkspaceCard]> cards;
+    in property <[WorkspacePlaceholder]> placeholders;
+    callback key(string);
+    callback select(int);
+    callback dismiss();
+    background: root.bg;
+    forward-focus: keys;
+    Image {
+        width: root.width; height: root.height;
+        source: root.backdrop; image-fit: cover;
+    }
+    Rectangle {
+        width: root.width; height: root.height;
+        background: root.bg.with-alpha(0.55 * root.reveal);
+    }
+    keys := FocusScope {
+        width: root.width; height: root.height;
+        key-pressed(event) => {
+            if (!event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta) {
+                root.key(event.text);
+            }
+            return accept;
+        }
+        key-released(event) => { return accept; }
+        TouchArea { clicked => { root.dismiss(); } }
+    }
+    for card[index] in root.cards: Rectangle {
+        visible: root.ready;
+        x: card.x; y: card.y; width: card.width; height: card.height;
+        background: root.bg;
+        opacity: root.reveal * card.strength;
+        border-width: 2px;
+        border-color: root.selected == index + 1 ? root.accent : root.fg.with-alpha(0.25);
+        Image {
+            x: card.desktop-x - card.x; y: card.desktop-y - card.y;
+            width: card.desktop-width; height: card.desktop-height;
+            source: card.wallpaper; image-fit: fill;
+        }
+        Text {
+            y: parent.height + 12px; width: parent.width; height: 22px;
+            text: card.label;
+            color: root.selected == index + 1 ? root.accent : root.fg;
+            horizontal-alignment: center; font-size: 15px;
+        }
+        Text {
+            y: parent.height + 38px; width: parent.width; height: 20px;
+            text: card.detail; color: root.fg.with-alpha(0.65);
+            horizontal-alignment: center; font-size: 12px; overflow: elide;
+        }
+        TouchArea { clicked => { root.select(index + 1); } }
+    }
+    for placeholder in root.placeholders: Rectangle {
+        visible: root.ready;
+        x: placeholder.x; y: placeholder.y;
+        width: placeholder.width; height: placeholder.height;
+        background: root.bg; opacity: root.reveal;
+        border-width: 1px; border-color: root.fg.with-alpha(0.25);
+        clip: true;
+        Text {
+            x: 4px; width: max(0px, parent.width - 8px); height: parent.height;
+            text: placeholder.title; color: root.fg.with-alpha(0.6);
+            font-size: 11px; overflow: elide; vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+    Text {
+        visible: root.ready;
+        x: 16px; y: root.height * 0.47 + min(min(root.width * 0.26, 520px) * 0.625, root.height * 0.46) / 2 + 88px;
+        width: root.width - 32px; height: 22px;
+        text: "← ↑ ↓ → / hjkl select    Enter switch    1–9 jump    Esc close";
+        color: root.fg.with-alpha(0.6); opacity: root.reveal;
+        horizontal-alignment: center; font-size: 12px;
+    }
+    public function focus-view() { keys.focus(); }
+}

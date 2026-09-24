@@ -184,6 +184,7 @@ pub(super) mod theme_picker;
 mod wallpaper;
 #[cfg(test)]
 mod wallpaper_tests;
+pub(super) mod workspace_switcher;
 /// Public Slint positioning also updates winit's attributes before a HWND
 /// exists, avoiding a first frame at the backend's default position.
 pub(super) fn prepare(window: &slint::Window, r: Rect, passive: bool) {
@@ -245,6 +246,7 @@ pub struct Shell {
     pub picker: theme_picker::Picker,
     pub editor: keybindings::Editor,
     pub expose: expose::Expose,
+    pub workspace_switcher: workspace_switcher::Switcher,
     pub spaces: space_picker::SpacePicker,
     pub lock: lockscreen::Lock,
     surface_key: Option<(Vec<Rect>, bool, String, i32)>,
@@ -360,6 +362,7 @@ impl Shell {
             picker: theme_picker::Picker::new(tx.clone())?,
             editor: keybindings::Editor::new(tx.clone())?,
             expose: expose::Expose::new(tx.clone())?,
+            workspace_switcher: workspace_switcher::Switcher::new(tx.clone())?,
             spaces: space_picker::SpacePicker::new(tx.clone())?,
             lock: lockscreen::Lock::new(tx.clone()),
             surface_key: None,
@@ -466,6 +469,7 @@ impl Shell {
         self.picker.apply_theme(c);
         self.editor.apply_theme(c);
         self.expose.apply_theme(c);
+        self.workspace_switcher.apply_theme(c);
         self.spaces.apply_theme(c);
         self.home = c.home.clone();
         self.theme = c.global.theme.clone();
@@ -494,6 +498,7 @@ impl Shell {
         self.picker.apply_theme(c);
         self.editor.apply_theme(c);
         self.expose.apply_theme(c);
+        self.workspace_switcher.apply_theme(c);
         self.spaces.apply_theme(c);
         self.descriptions = c.launcher.show_descriptions;
         self.home = c.home.clone();
@@ -909,6 +914,7 @@ impl Shell {
             || self.picker.opened
             || self.editor.opened
             || self.expose.opened
+            || self.workspace_switcher.opened
             || self.spaces.opened
             || self.lock.opened
     }

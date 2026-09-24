@@ -85,6 +85,7 @@ pub enum Event {
     Dictate(bool),
     /// Exposé input and worker results, tagged with its opening generation.
     Expose(u64, shell::expose::Input),
+    WorkspaceSwitcher(u64, shell::workspace_switcher::Input),
     /// Lock screen input, tagged with its opening generation.
     Lock(u64, shell::lockscreen::Input),
     /// Space picker input, tagged with its opening generation.
@@ -219,7 +220,9 @@ impl Manager {
             restore,
         });
         tracing::info!(id, space, workspace, "window added");
-        if apps::wants_focus(&exe) || terminal::wants_focus(&exe) {
+        if !self.shell.workspace_switcher.opened
+            && (apps::wants_focus(&exe) || terminal::wants_focus(&exe))
+        {
             self.model.focused = Some(id);
             native::focus(id, false);
         }
@@ -381,6 +384,7 @@ impl Manager {
             }
         }
         if let Some(id) = self.pending_browser_focus.take()
+            && !self.shell.workspace_switcher.opened
             && self
                 .model
                 .clients
@@ -394,6 +398,10 @@ impl Manager {
         self.borders();
         if concealed_foreground {
             self.focus_visible();
+        }
+        if self.shell.workspace_switcher.opened {
+            let scene = self.workspace_scene();
+            self.shell.workspace_switcher.update(scene);
         }
     }
     fn conceal(c: &mut Client, park: bool) {
@@ -448,7 +456,10 @@ impl Manager {
         }
     }
     fn focus_visible(&mut self) {
-        if self.shell.picker.opened || self.shell.lock.opened {
+        if self.shell.picker.opened
+            || self.shell.lock.opened
+            || self.shell.workspace_switcher.opened
+        {
             return;
         }
         if self.prune() {
@@ -603,6 +614,11 @@ impl Manager {
             let restore = self.bar_restore.take();
             self.restore_focus(restore);
         }
+        if self.shell.workspace_switcher.opened
+            && !matches!(c, Command::WorkspaceSwitcher | Command::Status)
+        {
+            self.finish_workspace_switcher(shell::workspace_switcher::Outcome::Close);
+        }
         if self.shell.expose.opened && !matches!(c, Command::Expose | Command::Status) {
             self.finish_expose(crate::expose::Outcome::Close);
         }
@@ -659,6 +675,9 @@ impl Manager {
                     "clients": self.model.clients.iter().map(|c| serde_json::json!({"id":c.id,"space":c.space,"workspace":c.workspace,"floating":c.floating,"fullscreen":c.fullscreen,"title":native::title(c.id),"rect":native::rect(c.id)})).collect::<Vec<_>>()
                 });
                 // Separate from the literal above, which is at serde_json's macro recursion limit.
+                status["workspace_switcher"] = self.shell.workspace_switcher.opened.into();
+                status["workspace_switcher_selected"] =
+                    self.shell.workspace_switcher.selected().into();
                 status["space"] = self.model.space_name().into();
                 status["spaces"] = self.model.spaces.iter().map(|s| s.name.as_str()).collect();
                 status["space_picker"] = self.shell.spaces.opened.into();
@@ -878,6 +897,24 @@ impl Manager {
                     self.shell.editor.open(&self.config, monitor, restore);
                 }
             }
+            Command::WorkspaceSwitcher => {
+                if self.shell.workspace_switcher.opened {
+                    self.finish_workspace_switcher(shell::workspace_switcher::Outcome::Close);
+                } else {
+                    let restore = self.restore_target(foreground);
+                    self.shell.dismiss();
+                    self.shell.close_popup();
+                    self.applets.close();
+                    self.finish_picker(crate::theme_picker::Outcome::Cancel);
+                    self.finish_editor(shell::keybindings::Outcome::Close);
+                    self.sync_splits();
+                    let scene = self.workspace_scene();
+                    let monitor = self.full_area();
+                    self.shell
+                        .workspace_switcher
+                        .open(&self.config, monitor, restore, scene);
+                }
+            }
             Command::Expose => {
                 if self.shell.expose.opened {
                     self.finish_expose(crate::expose::Outcome::Close);
@@ -1031,6 +1068,7 @@ impl Manager {
         self.finish_picker(crate::theme_picker::Outcome::Cancel);
         self.finish_editor(shell::keybindings::Outcome::Close);
         self.finish_expose(crate::expose::Outcome::Close);
+        self.finish_workspace_switcher(shell::workspace_switcher::Outcome::Close);
         // Preselect the recent space, so Enter goes back and forth.
         let spaces = &self.model.spaces;
         let selected = spaces
@@ -1149,6 +1187,131 @@ impl Manager {
         }
         self.restore_focus(restore);
     }
+    fn finish_workspace_switcher(&mut self, outcome: shell::workspace_switcher::Outcome) {
+        use shell::workspace_switcher::Outcome;
+        if outcome == Outcome::None || !self.shell.workspace_switcher.opened {
+            return;
+        }
+        let restore = self.shell.workspace_switcher.close();
+        match outcome {
+            Outcome::Activate(n) => {
+                self.model.switch(n);
+                self.layout();
+                self.focus_visible();
+            }
+            Outcome::Close => self.restore_focus(restore),
+            Outcome::None => {}
+        }
+    }
+    fn workspace_scene(&self) -> shell::workspace_switcher::Scene {
+        use shell::workspace_switcher::{Desktop, Scene, Window};
+        let stacking = native::enumerate();
+        let desktops = (1..=9)
+            .map(|workspace| {
+                let index = self.model.monitors[(workspace - 1) as usize]
+                    .min(self.monitors.len().saturating_sub(1));
+                let monitor = self
+                    .monitors
+                    .get(index)
+                    .copied()
+                    .unwrap_or_else(|| self.full_area());
+                let mut area = monitor;
+                if self.config.bar.enabled {
+                    let height = dpi::scale(monitor, self.config.bar.height);
+                    area.h -= height;
+                    if self.config.bar.position == "top" {
+                        area.y += height;
+                    }
+                }
+                let clients: Vec<_> = self
+                    .model
+                    .clients
+                    .iter()
+                    .filter(|c| c.on(self.model.space, workspace))
+                    .collect();
+                let tiled: Vec<_> = clients
+                    .iter()
+                    .filter(|c| !c.floating && !c.fullscreen && !native::minimized(c.id))
+                    .collect();
+                let rectangles = self.model.splits[(workspace - 1) as usize].layout(
+                    area,
+                    tiled.len(),
+                    dpi::scale(monitor, self.config.wm.gap),
+                    dpi::scale(monitor, self.config.wm.outer_gap),
+                );
+                let mut windows: Vec<_> = clients
+                    .iter()
+                    .map(|c| {
+                        let window = native::rect(c.id);
+                        let visible = native::frame(c.id);
+                        let source = Rect {
+                            x: visible.x - window.x,
+                            y: visible.y - window.y,
+                            w: visible.w,
+                            h: visible.h,
+                        };
+                        let saved = c.parked.unwrap_or(window);
+                        let minimized = native::minimized(c.id);
+                        let frame = if c.fullscreen {
+                            area
+                        } else if let Some(i) = tiled.iter().position(|w| w.id == c.id) {
+                            rectangles[i]
+                        } else if minimized {
+                            c.restore
+                        } else {
+                            Rect {
+                                x: saved.x + source.x,
+                                y: saved.y + source.y,
+                                w: visible.w,
+                                h: visible.h,
+                            }
+                        };
+                        Window {
+                            id: c.id,
+                            frame,
+                            source: if minimized {
+                                Rect {
+                                    x: 0,
+                                    y: 0,
+                                    w: frame.w.max(1),
+                                    h: frame.h.max(1),
+                                }
+                            } else {
+                                source
+                            },
+                            live: native::visible(c.id) && !minimized,
+                            minimized,
+                            title: if minimized {
+                                format!("{} (minimized)", native::title(c.id))
+                            } else {
+                                native::title(c.id)
+                            },
+                        }
+                    })
+                    .collect();
+                windows.sort_by_key(|w| {
+                    std::cmp::Reverse(
+                        stacking
+                            .iter()
+                            .position(|id| *id == w.id)
+                            .unwrap_or(usize::MAX),
+                    )
+                });
+                Desktop {
+                    monitor,
+                    wallpaper: self.shell.wallpaper_image(index),
+                    windows,
+                }
+            })
+            .collect();
+        let index = self.model.monitors[(self.model.active - 1) as usize]
+            .min(self.monitors.len().saturating_sub(1));
+        Scene {
+            active: self.model.active,
+            desktops,
+            backdrop: self.shell.wallpaper_image(index),
+        }
+    }
     /// One card per managed window of the current space, grouped by workspace
     /// in tiling order.
     fn expose_entries(
@@ -1244,6 +1407,7 @@ impl Manager {
         self.shell.picker.close();
         self.shell.editor.close();
         self.shell.expose.close();
+        self.shell.workspace_switcher.close();
         self.shell.spaces.close();
         // Without a usable password the user still asked to lock: Windows does it.
         let hash = match crate::lockscreen::load(&self.config.home) {
@@ -1384,6 +1548,7 @@ impl Manager {
             Event::Window(event, id) => match event {
                 EVENT_OBJECT_DESTROY => {
                     self.shell.expose.remove(id);
+                    self.shell.workspace_switcher.remove(id);
                     if self.model.clients.iter().any(|c| c.id == id) {
                         // A delayed destroy event must not remove a new window
                         // that has reused the same numeric HWND.
@@ -1400,6 +1565,7 @@ impl Manager {
                     }
                 }
                 EVENT_SYSTEM_FOREGROUND => {
+                    self.shell.workspace_switcher.lost_focus(id);
                     if self.shell.lock.opened && !self.shell.lock.owns(id) {
                         let mut pid = 0;
                         unsafe {
@@ -1465,6 +1631,9 @@ impl Manager {
             Event::Keybindings(epoch, input) => {
                 let outcome = self.shell.editor.input(epoch, input);
                 self.finish_editor(outcome);
+            }
+            Event::WorkspaceSwitcher(epoch, input) => {
+                self.shell.workspace_switcher.input(epoch, input);
             }
             Event::Expose(epoch, input) => {
                 let outcome = self.shell.expose.input(epoch, input);
@@ -1547,6 +1716,7 @@ impl Manager {
                 }
                 self.finish_editor(shell::keybindings::Outcome::Close);
                 self.finish_expose(crate::expose::Outcome::Close);
+                self.finish_workspace_switcher(shell::workspace_switcher::Outcome::Close);
                 if kind == "space" {
                     if !self.shell.spaces.opened {
                         self.open_space_picker();
@@ -1697,6 +1867,7 @@ impl Manager {
                 let monitor = self.full_area();
                 self.shell.picker.display_changed(monitor);
                 self.shell.editor.display_changed(monitor);
+                self.finish_workspace_switcher(shell::workspace_switcher::Outcome::Close);
                 self.shell.expose.display_changed(monitor);
                 self.shell.spaces.display_changed(monitor);
                 if self.shell.lock.opened {
@@ -1988,6 +2159,8 @@ pub fn run(replace: bool) -> Result<(), String> {
         move || {
             drain(); // Safety net; normal input is handled by the immediate callback.
             let mut m = m.borrow_mut();
+            let outcome = m.shell.workspace_switcher.poll();
+            m.finish_workspace_switcher(outcome);
             m.poll_demo();
             m.shell.poll_wallpaper();
             m.sync_wallpaper_palette();

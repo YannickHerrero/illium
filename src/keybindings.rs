@@ -123,6 +123,7 @@ pub fn describe(command: &str) -> String {
         Command::WallpaperNext => "Next wallpaper".into(),
         Command::Keybindings => "Keybindings".into(),
         Command::Expose => "Exposé: all windows".into(),
+        Command::WorkspaceSwitcher => "Workspace switcher: live desktops".into(),
         Command::BarHints => "Bar applet hints".into(),
         Command::Dictate => "Dictate while held".into(),
         Command::Lock => "Lock screen".into(),
@@ -265,7 +266,7 @@ mod tests {
     #[test]
     fn defaults_are_unchanged_and_ordered() {
         let rows = rows(DEFAULTS, DEFAULTS);
-        assert_eq!(rows.len(), 61);
+        assert_eq!(rows.len(), 62);
         assert!(rows.iter().all(|r| !r.changed()));
         assert_eq!(rows[0].description, "Launcher");
         assert_eq!(rows[0].label(), "Alt + Space");
@@ -273,6 +274,7 @@ mod tests {
         assert_eq!(rows[2].label(), "Alt + Shift + ?");
         assert_eq!(pretty("shift+alt+q"), "Alt + Shift + Q");
         assert!(rows.iter().any(|r| r.description == "Space picker"));
+        assert!(rows.iter().any(|r| r.command == "workspace switcher toggle" && r.label() == "Alt + Shift + S"));
         assert!(
             rows.iter()
                 .any(|r| r.description == "Move window to workspace 3 and follow")

@@ -1,5 +1,5 @@
 //! Live DWM thumbnails of client windows, composed by the Desktop Window
-//! Manager into rectangles of the exposé surface. Parked windows keep their
+//! Manager into rectangles of a shell surface. Parked windows keep their
 //! surface alive, so their thumbnails animate like the visible ones.
 use super::native;
 use crate::layout::Rect;
@@ -8,7 +8,7 @@ use windows::Win32::{Foundation::RECT, Graphics::Dwm::*};
 
 pub struct Thumbnails {
     destination: isize,
-    handles: HashMap<isize, isize>,
+    handles: HashMap<(isize, usize), isize>,
 }
 fn rect(r: Rect) -> RECT {
     RECT {
@@ -30,15 +30,28 @@ impl Thumbnails {
     /// destination). `region` selects a part of the source window, relative
     /// to its own top-left corner; None shows the whole window.
     pub fn place(&mut self, source: isize, dest: Rect, region: Option<Rect>, opacity: u8) {
-        let handle = match self.handles.get(&source) {
+        self.place_part(source, 0, dest, region, opacity);
+    }
+    /// Multiple cropped pieces let a miniature desktop reproduce occlusion
+    /// without relying on DWM thumbnail registration order or Slint's Z order.
+    pub fn place_part(
+        &mut self,
+        source: isize,
+        part: usize,
+        dest: Rect,
+        region: Option<Rect>,
+        opacity: u8,
+    ) -> bool {
+        let key = (source, part);
+        let handle = match self.handles.get(&key) {
             Some(handle) => *handle,
             None => {
                 let Ok(handle) = (unsafe {
                     DwmRegisterThumbnail(native::hwnd(self.destination), native::hwnd(source))
                 }) else {
-                    return;
+                    return false;
                 };
-                self.handles.insert(source, handle);
+                self.handles.insert(key, handle);
                 handle
             }
         };
@@ -53,11 +66,14 @@ impl Thumbnails {
             properties.dwFlags |= DWM_TNP_RECTSOURCE;
             properties.rcSource = rect(region);
         }
-        let _ = unsafe { DwmUpdateThumbnailProperties(handle, &properties) };
+        unsafe { DwmUpdateThumbnailProperties(handle, &properties) }.is_ok()
     }
     /// Keeps the registration but draws nothing, for a card filtered out.
     pub fn hide(&mut self, source: isize) {
-        if let Some(handle) = self.handles.get(&source) {
+        for ((id, _), handle) in &self.handles {
+            if *id != source {
+                continue;
+            }
             let properties = DWM_THUMBNAIL_PROPERTIES {
                 dwFlags: DWM_TNP_VISIBLE,
                 fVisible: false.into(),
@@ -67,17 +83,32 @@ impl Thumbnails {
         }
     }
     pub fn remove(&mut self, source: isize) {
-        if let Some(handle) = self.handles.remove(&source) {
-            let _ = unsafe { DwmUnregisterThumbnail(handle) };
-        }
+        self.handles.retain(|(id, _), handle| {
+            if *id != source {
+                return true;
+            }
+            let _ = unsafe { DwmUnregisterThumbnail(*handle) };
+            false
+        });
+    }
+    /// Release obsolete fragments so repeated occlusion changes do not grow
+    /// the registration cache indefinitely. Exposé still uses hide_others.
+    pub fn retain_parts(&mut self, shown: &[(isize, usize)]) {
+        self.handles.retain(|key, handle| {
+            if shown.contains(key) {
+                return true;
+            }
+            let _ = unsafe { DwmUnregisterThumbnail(*handle) };
+            false
+        });
     }
     /// Windows without a card any more: hidden, so a later card reuses them.
     pub fn hide_others(&mut self, shown: &[isize]) {
         let hidden: Vec<isize> = self
             .handles
             .keys()
-            .filter(|id| !shown.contains(id))
-            .copied()
+            .filter(|(id, _)| !shown.contains(id))
+            .map(|(id, _)| *id)
             .collect();
         for id in hidden {
             self.hide(id);

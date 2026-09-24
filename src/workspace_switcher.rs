@@ -18,6 +18,41 @@ impl BoxRect {
         let h = (self.y + self.h).min(other.y + other.h) - y;
         (w > 0.0 && h > 0.0).then_some(Self { x, y, w, h })
     }
+    /// The non-overlapping pieces left after an opaque window covers this one.
+    pub fn subtract(self, cover: Self) -> Vec<Self> {
+        let Some(hit) = self.intersection(cover) else {
+            return vec![self];
+        };
+        [
+            Self {
+                x: self.x,
+                y: self.y,
+                w: self.w,
+                h: hit.y - self.y,
+            },
+            Self {
+                x: self.x,
+                y: hit.y + hit.h,
+                w: self.w,
+                h: self.y + self.h - hit.y - hit.h,
+            },
+            Self {
+                x: self.x,
+                y: hit.y,
+                w: hit.x - self.x,
+                h: hit.h,
+            },
+            Self {
+                x: hit.x + hit.w,
+                y: hit.y,
+                w: self.x + self.w - hit.x - hit.w,
+                h: hit.h,
+            },
+        ]
+        .into_iter()
+        .filter(|r| r.w > 0.0 && r.h > 0.0)
+        .collect()
+    }
     /// Fit a monitor into a card without changing its aspect ratio.
     pub fn fit(self, monitor: Rect) -> Self {
         let scale = (self.w / monitor.w.max(1) as f32).min(self.h / monitor.h.max(1) as f32);
@@ -211,6 +246,34 @@ mod tests {
             )
             .is_none()
         );
+    }
+    #[test]
+    fn occlusion_pieces_do_not_overlap_and_preserve_uncovered_area() {
+        let rect = BoxRect {
+            x: 0.0,
+            y: 0.0,
+            w: 100.0,
+            h: 80.0,
+        };
+        let cover = BoxRect {
+            x: 20.0,
+            y: 10.0,
+            w: 40.0,
+            h: 30.0,
+        };
+        let pieces = rect.subtract(cover);
+        assert_eq!(pieces.len(), 4);
+        assert_eq!(pieces.iter().map(|r| r.w * r.h).sum::<f32>(), 6800.0);
+        for (i, piece) in pieces.iter().enumerate() {
+            assert!(piece.intersection(cover).is_none());
+            assert!(
+                pieces[i + 1..]
+                    .iter()
+                    .all(|other| piece.intersection(*other).is_none())
+            );
+        }
+        assert!(rect.subtract(rect).is_empty());
+        assert_eq!(rect.subtract(BoxRect { x: 200.0, ..cover }), vec![rect]);
     }
     #[test]
     fn portrait_monitors_are_letterboxed() {

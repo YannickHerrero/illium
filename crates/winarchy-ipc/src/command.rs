@@ -63,6 +63,8 @@ pub enum Command {
     Keybindings,
     /// Toggle the exposé: every managed window of every workspace as a card.
     Expose,
+    /// Browse live miniature workspaces without switching until confirmation.
+    WorkspaceSwitcher,
     /// Toggle keyboard hints for status bar applets.
     BarHints,
     /// Push-to-talk dictation through `winarchy-dictate.exe`: bound to a held
@@ -136,6 +138,7 @@ impl FromStr for Command {
         Ok(match parts.as_slice() {
             ["workspace", "next" | "next-active"] => Self::Next,
             ["workspace", "recent"] => Self::Recent,
+            ["workspace", "switcher", "toggle"] => Self::WorkspaceSwitcher,
             ["workspace", n] => Self::Workspace(ws(n)?),
             ["window", "close"] => Self::Close,
             ["window", "focus", d] => Self::Focus(dir(d)?),
@@ -236,6 +239,11 @@ mod tests {
         assert!("opacity set nan".parse::<Command>().is_err());
         assert_eq!("keybindings toggle".parse(), Ok(Command::Keybindings));
         assert_eq!("expose toggle".parse(), Ok(Command::Expose));
+        assert_eq!(
+            "workspace switcher toggle".parse(),
+            Ok(Command::WorkspaceSwitcher)
+        );
+        assert!("workspace switcher".parse::<Command>().is_err());
         assert!("expose".parse::<Command>().is_err());
         assert_eq!("bar hints".parse(), Ok(Command::BarHints));
         assert_eq!("dictate".parse(), Ok(Command::Dictate));
