@@ -118,10 +118,10 @@ impl Player {
         &self.terminal
     }
     /// One effect frame without the wall clock (previews and tests).
+    /// Returns whether that frame was one the effect produced.
     pub fn step_frame(&mut self) -> bool {
-        let running = self.finished_for.is_none();
         self.step();
         self.renderer.draw(&self.terminal.render());
-        running
+        self.finished_for.is_none()
     }
 }
