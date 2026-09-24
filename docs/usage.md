@@ -110,6 +110,27 @@ While locked, no Winarchy binding or command runs (except `status`), and the Win
 
 This screen is a window over the open session, not a Windows security boundary: Ctrl+Alt+Del cannot be intercepted. Winarchy therefore calls the Windows lock as soon as it may be bypassed: another application takes the foreground (for example Task Manager opened from Ctrl+Alt+Del), five wrong passwords, or the daemon exits while locked (the recovery watchdog locks Windows). For a long absence, Win+L remains the safer choice.
 
+### Lock screensaver
+
+After **30 seconds without keyboard or mouse activity while locked**, the same lock surfaces show a native ASCII Winarchy animation. Matrix, Decrypt, Beams and Color shift are chosen randomly, with a new effect every 12 seconds and no immediate repeat (unless only one effect is enabled). Every monitor uses the same effect, with local color/particle variations and colors from the active theme.
+
+A key, mouse movement, button or wheel returns to the password screen **without unlocking**. The waking input is swallowed; a held waking key does not type repeats into the password field. Partial password text is cleared when entering the animation, but failed attempts are not reset. The cursor is hidden only during the animation and restored on exit.
+
+Optional settings in `winarchy.toml` (omitting the table uses these defaults):
+
+```toml
+[screensaver]
+enabled = true
+timeout = 30 # seconds, 1..86400
+effects = ["matrix", "decrypt", "beams", "color-shift"]
+```
+
+The effects list must be nonempty; duplicates are removed and unknown names are rejected. Settings are captured when locking, so reload configuration before the next lock to apply changes. Set `enabled = false` to keep the static password screen. This does not configure desktop auto-lock or Windows' own screensaver.
+
+The renderer uses a bounded character canvas and targets at most 30 FPS, with no animation work while idle, unlocked or after handing over to the Windows lock. If the mouse hook cannot be installed, animation stays disabled rather than risk swallowing only part of a wake gesture. These are original native effects inspired by [Omarchy](https://github.com/basecamp/omarchy/blob/dev/bin/omarchy-screensaver) and [TerminalTextEffects](https://github.com/ChrisBuilds/terminaltexteffects), not a bundled TTE/Python runtime. Unlike Omarchy's pre-lock screensaver, this runs **inside the existing Winarchy lock surface** and adds no security boundary.
+
+See [the Windows validation checklist](screensaver-testing.md) for interactive checks.
+
 Existing keybinding files are not overwritten on upgrade. Add this line under `[keybindings]`, then reload with Alt+Shift+R:
 
 ```toml
