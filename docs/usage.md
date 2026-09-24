@@ -150,7 +150,7 @@ This screen is a window over the open session, not a Windows security boundary: 
 
 ### Lock screensaver
 
-After **30 seconds without keyboard or mouse activity while locked**, the same lock surfaces show a native ASCII Winarchy animation. Matrix, Decrypt, Beams and Color shift are chosen randomly, with a new effect every 12 seconds and no immediate repeat (unless only one effect is enabled). Every monitor uses the same effect, with local color/particle variations and colors from the active theme.
+After **30 seconds without keyboard or mouse activity while locked**, the lock surfaces play Omarchy's screensaver: the [TerminalTextEffects](https://github.com/ChrisBuilds/terminaltexteffects) effects over the Winarchy logo, drawn like Omarchy's full-screen terminal (JetBrains Mono at 18 pt, black background). Like `tte --random-effect`, each monitor plays a random effect to its end, then starts another one (never the same twice in a row unless only one is enabled). All 37 effects of TTE 0.15.0 are ported natively with their default options, colors and timing (120 frames per second); no Python runtime is involved.
 
 A key, mouse movement, button or wheel returns to the password screen **without unlocking**. The waking input is swallowed; a held waking key does not type repeats into the password field. Partial password text is cleared when entering the animation, but failed attempts are not reset. The cursor is hidden only during the animation and restored on exit.
 
@@ -160,12 +160,14 @@ Optional settings in `winarchy.toml` (omitting the table uses these defaults):
 [screensaver]
 enabled = true
 timeout = 30 # seconds, 1..86400
-effects = ["matrix", "decrypt", "beams", "color-shift"]
+effects = ["beams", "binarypath", "blackhole", "bouncyballs", "bubbles", "burn", "colorshift", "crumble", "decrypt", "errorcorrect", "expand", "fireworks", "highlight", "laseretch", "matrix", "middleout", "orbittingvolley", "overflow", "pour", "print", "rain", "randomsequence", "rings", "scattered", "slice", "slide", "smoke", "spotlights", "spray", "swarm", "sweep", "synthgrid", "thunderstorm", "unstable", "vhstape", "waves", "wipe"]
 ```
 
-The effects list must be nonempty; duplicates are removed and unknown names are rejected. Settings are captured when locking, so reload configuration before the next lock to apply changes. Set `enabled = false` to keep the static password screen. This does not configure desktop auto-lock or Windows' own screensaver.
+Effect names are `tte`'s (`color-shift` is still accepted for `colorshift`). The effects list must be nonempty; duplicates are removed and unknown names are rejected. Settings are captured when locking, so reload configuration before the next lock to apply changes. Set `enabled = false` to keep the static password screen. This does not configure desktop auto-lock or Windows' own screensaver.
 
-The renderer uses a bounded character canvas and targets at most 30 FPS, with no animation work while idle, unlocked or after handing over to the Windows lock. If the mouse hook cannot be installed, animation stays disabled rather than risk swallowing only part of a wake gesture. These are original native effects inspired by [Omarchy](https://github.com/basecamp/omarchy/blob/dev/bin/omarchy-screensaver) and [TerminalTextEffects](https://github.com/ChrisBuilds/terminaltexteffects), not a bundled TTE/Python runtime. Unlike Omarchy's pre-lock screensaver, this runs **inside the existing Winarchy lock surface** and adds no security boundary.
+To browse the effects without locking, open **Alt+Shift+Space → Screen savers**: the list on the left, the selected effect playing on the right. ↑/↓ (or Ctrl+N / Ctrl+P) select, Enter plays it full screen, where Ctrl+N / Ctrl+P switch effects and Escape returns to the list; Escape in the list closes it. `winarchyctl screensaver demo [effect]` opens the same list, or one effect full screen.
+
+Frames are drawn at each monitor's physical resolution with no animation work while idle, unlocked or after handing over to the Windows lock. If the mouse hook cannot be installed, animation stays disabled rather than risk swallowing only part of a wake gesture. Unlike Omarchy's pre-lock screensaver, this runs **inside the existing Winarchy lock surface** and adds no security boundary.
 
 See [the Windows validation checklist](screensaver-testing.md) for interactive checks.
 

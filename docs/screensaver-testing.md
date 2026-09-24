@@ -8,7 +8,7 @@ Use a disposable session with a known Winarchy password and a recovery console a
 
 - Lock with Ctrl+Alt+L. At 29 seconds the password UI remains; at about 30 seconds animation covers every monitor without a desktop flash.
 - Before timeout, type, move the mouse, click, and scroll. Each restarts the idle interval, including movement within one window and on a secondary monitor.
-- Verify all four effects using one-element `effects` lists, reloading before each new lock. Check the 12-second cycle and no adjacent repeats with multiple effects.
+- Browse every effect with Alt+Shift+Space → Screen savers (list preview and full screen). In the lock, check that each monitor plays an effect to its end and then starts a different one.
 - Test `enabled = false`, timeout 1, omitted table, and invalid timeout/unknown/empty effects. Invalid reloads must leave the previous valid config intact.
 
 ## Wake and password isolation
@@ -26,7 +26,7 @@ Use a disposable session with a known Winarchy password and a recovery console a
 - Unplug/reconnect a display during animation. Existing lock behavior must continue to cover all attached monitors or fall back to Windows, with no exposed desktop. Wake from the secondary monitor.
 - Check a stationary pointer disappears at activation and reappears at wake, fallback and unlock.
 - Try Win+L, Ctrl+Alt+Del, focus takeover, UAC, suspend/resume, and Windows lock/unlock. No focus stealing from the secure desktop; no animation should run when the lock's password window lacks foreground focus. Upon regaining focus, the idle delay starts again.
-- Observe CPU/GPU before, during and after animation on one and several monitors. Animation has a fixed 64 x 23 character canvas, 23 text rows per monitor and a 33 ms minimum frame interval (the shell polls at 10 ms). No extra animation timer/process should survive exit.
+- Observe CPU/GPU before, during and after animation on one and several monitors. Each monitor's frame is one image at its physical resolution, redrawn only in changed cells, with a 16 ms minimum frame interval (the shell polls at 10 ms). No extra animation timer/process should survive exit.
 - Confirm all effects remain readable on light and dark themes. No external terminal, Python process, image download or network access is used.
 
 ## V1 validation record
