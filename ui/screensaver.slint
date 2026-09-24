@@ -1,0 +1,21 @@
+export struct SaverRow { text: string, intensity: float, blend: float }
+
+// Bounded 64 x 23 character canvas: only 23 text items per monitor.
+export component ScreensaverView inherits Rectangle {
+    in property <[SaverRow]> rows;
+    in property <color> accent;
+    in property <color> foreground;
+    background: #000;
+    property <length> cell: min(root.width / 66, root.height / 42);
+    for row[index] in root.rows: Text {
+        x: 0; width: root.width;
+        y: (root.height - root.cell * 1.65 * 23) / 2 + index * root.cell * 1.65;
+        height: root.cell * 1.65;
+        font-family: "JetBrains Mono";
+        font-size: root.cell;
+        horizontal-alignment: center;
+        text: row.text;
+        color: root.accent.mix(root.foreground, row.blend).with-alpha(row.intensity);
+    }
+    TouchArea { mouse-cursor: none; }
+}

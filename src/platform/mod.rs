@@ -1990,6 +1990,7 @@ pub fn run(replace: bool) -> Result<(), String> {
             let mut m = m.borrow_mut();
             m.poll_demo();
             m.shell.poll_wallpaper();
+            m.shell.lock.poll();
             m.sync_wallpaper_palette();
             let Manager {
                 shell,

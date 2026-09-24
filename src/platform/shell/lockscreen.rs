@@ -1,16 +1,25 @@
 //! Lock surfaces: one topmost full-monitor window per display over the blurred
 //! wallpaper. Only the surface of the active monitor takes the password; the
 //! others cannot be activated.
-use super::{LockView, color, id, prepare, tool};
+use super::{LockView, SaverRow, color, id, prepare, tool};
 use crate::{
     config::Config,
     layout::Rect,
     lockscreen::{Attempts, Verdict},
     platform::{Event, EventSender, dpi, native, status},
 };
-use slint::ComponentHandle;
-use std::{cell::Cell, rc::Rc};
+use crate::{platform::input, screensaver::Saver};
+use slint::{ComponentHandle, winit_030::WinitWindowAccessor};
+use std::{cell::Cell, rc::Rc, sync::atomic::Ordering, time::Instant};
 use windows::Win32::UI::WindowsAndMessaging::HWND_TOPMOST;
+
+fn show_saver(view: &LockView, saving: bool) {
+    view.set_saving(saving);
+    // Also update a stationary cursor, without modifying Windows' global
+    // ShowCursor counter. The Slint overlay maintains this on pointer events.
+    view.window()
+        .with_winit_window(|window| window.set_cursor_visible(!saving));
+}
 
 #[derive(Clone, Debug)]
 pub enum Input {
@@ -38,6 +47,9 @@ pub struct Lock {
     hash: String,
     attempts: Attempts,
     restore: Option<isize>,
+    saver: Option<Saver>,
+    next_frame: Instant,
+    last_poll: Instant,
 }
 impl Lock {
     pub fn new(tx: EventSender) -> Self {
@@ -53,6 +65,9 @@ impl Lock {
             hash: String::new(),
             attempts: Attempts::default(),
             restore: None,
+            saver: None,
+            next_frame: Instant::now(),
+            last_poll: Instant::now(),
         }
     }
     fn view(&self) -> Result<LockView, String> {
@@ -87,6 +102,19 @@ impl Lock {
         self.restore = restore;
         self.released = false;
         self.opened = true;
+        let now = Instant::now();
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64;
+        self.saver = Some(Saver::new(
+            c.global.screensaver.clone(),
+            now,
+            input::LOCK_ACTIVITY.load(Ordering::SeqCst),
+            seed,
+        ));
+        self.next_frame = now;
+        self.last_poll = now;
         self.place(c, monitors, primary, backdrops)
     }
     /// Shows one surface per monitor; also used when the displays change.
@@ -117,6 +145,7 @@ impl Lock {
             view.set_has_backdrop(backdrop.size().width > 0);
             view.set_backdrop(backdrop);
             view.set_primary(index == self.primary);
+            show_saver(view, input::SAVING.load(Ordering::SeqCst));
             view.set_ready(false);
             prepare(view.window(), *monitor, index != self.primary);
             view.show().map_err(|e| e.to_string())?;
@@ -141,7 +170,9 @@ impl Lock {
         }
         if let Some(view) = shown.get(self.primary) {
             native::focus(id(view.window()), false);
-            view.invoke_focus_field();
+            if !view.get_saving() {
+                view.invoke_focus_field();
+            }
         }
         self.pending_window = false;
     }
@@ -167,9 +198,93 @@ impl Lock {
             view.set_date(date.clone().into());
         }
     }
+    /// Called by the existing shell poll; does no frame work while closed/idle.
+    pub fn poll(&mut self) {
+        if !self.opened || self.released || !input::MOUSE_AVAILABLE.load(Ordering::Relaxed) {
+            return;
+        }
+        let now = Instant::now();
+        // Suspend/resume (or a long event-loop stall) starts a fresh idle
+        // interval instead of immediately advancing an old animation.
+        let resumed = now.duration_since(self.last_poll) > std::time::Duration::from_secs(2);
+        self.last_poll = now;
+        // A secure desktop (Windows lock/UAC) or focus handover must not
+        // animate invisibly or bring our password surface back to the front.
+        let foreground =
+            unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() }.0 as isize;
+        let focused = foreground != 0 && foreground == self.primary_hwnd();
+        let Some(saver) = &mut self.saver else {
+            return;
+        };
+        if !focused || resumed {
+            saver.reset(now, input::LOCK_ACTIVITY.load(Ordering::SeqCst));
+            if input::SAVING.swap(false, Ordering::SeqCst) {
+                for view in &self.views {
+                    show_saver(view, false);
+                    view.set_saver_rows(Default::default());
+                    view.invoke_clear_field();
+                    // Restore logical focus only, never activate a window on
+                    // top of the secure desktop or another foreground owner.
+                    if view.get_primary() {
+                        view.invoke_focus_field();
+                    }
+                }
+            }
+            return;
+        }
+        let changed = saver.poll(now, input::LOCK_ACTIVITY.load(Ordering::SeqCst));
+        let saving = saver.effect.is_some();
+        if changed {
+            // Arm input swallowing before displaying the animation. On wake,
+            // leave it armed until the field and focus have been restored.
+            if saving {
+                input::SAVING.store(true, Ordering::SeqCst);
+            }
+            for view in &self.views {
+                view.invoke_clear_field();
+                show_saver(view, saving);
+                if !saving {
+                    view.set_saver_rows(Default::default());
+                }
+            }
+            if !saving {
+                if let Some(view) = self.views.get(self.primary) {
+                    native::focus(id(view.window()), false);
+                    view.invoke_focus_field();
+                }
+                input::SAVING.store(false, Ordering::SeqCst);
+            }
+            self.next_frame = now;
+        }
+        if saving && now >= self.next_frame {
+            self.next_frame = now + std::time::Duration::from_millis(33);
+            for (index, view) in self.views.iter().take(self.monitors.len()).enumerate() {
+                let rows: Vec<_> = saver
+                    .frame(now, index)
+                    .into_iter()
+                    .map(|row| SaverRow {
+                        text: row.text.into(),
+                        intensity: row.intensity,
+                        blend: row.blend,
+                    })
+                    .collect();
+                view.set_saver_rows(Rc::new(slint::VecModel::from(rows)).into());
+            }
+        }
+    }
+    fn stop_saver(&mut self) {
+        self.saver = None;
+        for view in &self.views {
+            show_saver(view, false);
+            view.set_saver_rows(Default::default());
+            view.invoke_clear_field();
+        }
+        input::SAVING.store(false, Ordering::SeqCst);
+    }
     /// The Windows lock was requested; the surfaces close once it covers the
     /// desktop, so nothing shows in between.
     pub fn release_later(&mut self) {
+        self.stop_saver();
         self.released = true;
         let (tx, epoch) = (self.tx.clone(), self.epoch.get());
         slint::Timer::single_shot(std::time::Duration::from_millis(1500), move || {
@@ -182,7 +297,7 @@ impl Lock {
         }
         match input {
             Input::Release => Outcome::Unlock,
-            _ if self.released => Outcome::None,
+            _ if self.released || input::SAVING.load(Ordering::SeqCst) => Outcome::None,
             Input::Submit(password) => match self.attempts.check(&self.hash, &password) {
                 Verdict::Unlock => Outcome::Unlock,
                 Verdict::Wrong { remaining } => {
@@ -209,6 +324,7 @@ impl Lock {
         self.pending_window = false;
         self.released = false;
         self.hash.clear();
+        self.stop_saver();
         for view in &self.views {
             view.set_message("".into());
             let _ = view.hide();
