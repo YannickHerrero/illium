@@ -30,6 +30,7 @@ mod middleout;
 mod orbittingvolley;
 mod fireworks;
 mod rings;
+mod spotlights;
 
 /// The Winarchy logo in Omarchy's `logo.txt` style ("ARCHY" is theirs).
 pub const LOGO: &str = include_str!("../logo.txt");
@@ -63,6 +64,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::OrbittingVolley => Box::new(orbittingvolley::OrbittingVolley::new(t)),
         Effect::Fireworks => Box::new(fireworks::Fireworks::new(t)),
         Effect::Rings => Box::new(rings::Rings::new(t)),
+        Effect::Spotlights => Box::new(spotlights::Spotlights::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -228,5 +230,10 @@ pub(crate) mod tests {
     #[test]
     fn rings_finishes() {
         finishes_on_logo(Effect::Rings, 20_000);
+    }
+
+    #[test]
+    fn spotlights_finishes() {
+        finishes_on_logo(Effect::Spotlights, 20_000);
     }
 }
