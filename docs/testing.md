@@ -14,6 +14,45 @@ python3 scripts/check-cli-dependencies.py
 
 The Linux test suite covers the command grammar, configuration loading and invalid reloads, palettes, rule matching, keyboard chords and modifier tracking, Fibonacci geometry and non-overlap, directional navigation, workspace ordering, IPC framing and timeouts, and the models of the companion applications (process sorting and filtering, file listing, selection, clipboard and prompts against a temporary tree). The dependency check keeps `winarchyctl` free of the daemon and UI toolkit. CI runs the same checks on `windows-latest` and packages the release binaries.
 
+## Workspace switcher
+
+Portable tests cover bounded navigation, animation retargeting, aspect-ratio
+fitting, negative monitor coordinates, proportional source clipping and
+non-overlapping occlusion fragments:
+
+```sh
+cargo test -p winarchy --lib workspace_switcher
+cargo test -p winarchy-ipc
+```
+
+Windows additionally exercises the production Slint view/session with a
+headless software renderer: card labels, fallback stacking, minimized windows,
+stale input, browsing without activation, confirmation during animation,
+removal, cancellation and teardown. Set `WINARCHY_WORKSPACE_RENDER` to a PNG path
+for a rendered fixture. The optional DWM test creates **only offscreen,
+non-activating test windows**; it checks parked-source registration, cropped
+fragments, reuse during movement, disposal and unchanged foreground:
+
+```powershell
+cargo test -p winarchy --lib headless_workspace_switcher -- --test-threads=1
+cargo test -p winarchy --lib native_workspace_thumbnail -- --ignored --test-threads=1
+```
+
+Manual desktop acceptance after upgrading both binaries:
+
+1. Open `winarchyctl workspace switcher toggle`; verify the nine cards and live
+   terminal/video previews, including inactive workspaces with `conceal = "park"`.
+2. Hold arrows/hjkl, reverse direction mid-animation, jump with 1–9; the real
+   active workspace must remain unchanged until Enter. Escape restores focus.
+3. Check empty workspaces, overlapping floating windows/fullscreen, minimized
+   windows and title fallbacks with `conceal = "hide"`.
+4. Close/open/minimize a managed application while browsing; ensure selection
+   survives and no stale thumbnail remains. Exercise repeated open/close,
+   launcher/Exposé exclusivity, lock and external focus changes.
+5. Check portrait/landscape monitors, negative coordinates and 100/125/150/200%
+   DPI. A display change cancels safely. Visually inspect motion at the display's
+   refresh rate: headless tests cannot establish compositor/UI frame synchrony.
+
 ## Dynamic wallpaper themes
 
 Portable tests cover deterministic OKLCH generation, opaque contrast targets,

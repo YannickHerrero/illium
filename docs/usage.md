@@ -66,6 +66,44 @@ Existing keybinding files are not overwritten on upgrade. Add this line under `[
 "Alt+Tab" = "expose toggle"
 ```
 
+## Workspace switcher
+
+**Alt+Shift+S** (or `winarchyctl workspace switcher toggle`) opens a horizontal
+carousel of all nine workspaces in the current space. The active workspace is
+initially selected and marked with a dot. Each card is a miniature desktop:
+wallpaper and live DWM previews in their tiled/floating positions, including
+window overlaps. Empty workspaces remain selectable.
+
+- **Left / Up / h / k**: previous workspace; **Right / Down / l / j**: next.
+- **1–9** or a click: select a workspace without activating it.
+- **Enter**: close and switch to the selected workspace.
+- **Escape**, clicking the background, or the toggle shortcut: cancel and restore focus.
+
+Selection stops at 1 and 9. Browsing never moves the real windows or changes the
+active workspace. The carousel retargets smoothly during key repeat, with a
+slightly enlarged central card and opening/closing fades. Other commands,
+locking, or a display/DPI change dismiss it; an external focus change also closes
+it without taking focus back.
+
+The overlay uses the active workspace's monitor; each miniature fits its own
+workspace's associated monitor, preserving its aspect ratio. Tiled previews use
+the expected layout and floating previews use their pre-parking coordinates.
+With `conceal = "park"`, inactive windows stay live just as in Exposé. Hidden or
+unavailable DWM surfaces get title placeholders. Minimized windows count in the
+label but do not cover the miniature desktop. Opening/closing/minimizing managed
+windows refreshes the scene while keeping the selection.
+
+Existing keybinding files are not overwritten. Add under `[keybindings]` and
+reload with **Alt+Shift+R**:
+
+```toml
+"Alt+Shift+S" = "workspace switcher toggle"
+```
+
+`winarchyctl status` reports `workspace_switcher` and
+`workspace_switcher_selected` (null when closed). The daemon and CLI must both
+be upgraded to recognize the new command.
+
 ## Status bar applets
 
 **Ctrl+Alt+B** (or `winarchyctl bar hints`) toggles keyboard hints on the active
