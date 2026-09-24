@@ -1,5 +1,9 @@
 enabled = true
 japanese_workspace_numbers = true
+# Empty family chooses the appropriate font for Japanese or Arabic numerals.
+workspace_font_family = ""
+workspace_font_size = 13
+workspace_font_weight = 700
 position = "top"
 height = 28
 left = ["workspaces"]

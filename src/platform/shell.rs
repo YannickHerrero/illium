@@ -1242,6 +1242,9 @@ impl Shell {
         for (b, models) in self.bars.iter().zip(&self.models) {
             b.set_active(m.active as i32);
             b.set_japanese_workspace_numbers(c.bar.japanese_workspace_numbers);
+            b.set_workspace_font_family(c.bar.workspace_font_family.as_str().into());
+            b.set_workspace_font_size(c.bar.workspace_font_size as f32);
+            b.set_workspace_font_weight(c.bar.workspace_font_weight.unwrap_or(0));
             sync(&models.workspaces, &workspaces);
             sync(&models.before_workspaces, &before_workspaces);
             sync(&models.left, &left);

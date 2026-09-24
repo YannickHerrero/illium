@@ -126,6 +126,21 @@ fn bar_fades_only_its_background_and_honors_shared_override() {
             "Japanese workspace {n} has no visible glyph"
         );
     }
+    // Typography updates must change pixels on the same live bar.
+    bar.set_workspace_font_family("Yu Gothic UI".into());
+    bar.set_workspace_font_weight(400);
+    let light = pixels();
+    bar.set_workspace_font_weight(700);
+    let bold = pixels();
+    let ink = |image: &[PremultipliedRgbaColor]| {
+        (10..30).flat_map(|y| (14..32).map(move |x| image[y * 500 + x].alpha as u32)).sum::<u32>()
+    };
+    assert!(ink(&bold) > ink(&light), "configured bold weight adds no ink");
+    bar.set_workspace_font_size(18.);
+    assert_ne!(ink(&pixels()), ink(&bold), "configured font size has no effect");
+    bar.set_workspace_font_family("".into());
+    bar.set_workspace_font_size(13.);
+    bar.set_workspace_font_weight(0);
     bar.set_japanese_workspace_numbers(false);
     bar.set_transparent(false);
     bar.set_active(1);

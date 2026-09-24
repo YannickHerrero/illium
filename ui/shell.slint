@@ -143,6 +143,10 @@ export component Bar inherits Window {
     /// Workspace numbers to show: the occupied ones and the active one.
     in property <[int]> workspaces;
     in property <bool> japanese-workspace-numbers: false;
+    in property <string> workspace-font-family;
+    in property <length> workspace-font-size: 13px;
+    // Zero keeps automatic emphasis when no weight is configured.
+    in property <int> workspace-font-weight: 0;
     private property <[string]> japanese-numbers: ["一", "二", "三", "四", "五", "六", "七", "八", "九"];
     in property <[StatusItem]> before-workspace-items;
     in property <[StatusItem]> left-items;
@@ -201,9 +205,10 @@ export component Bar inherits Window {
                 Text {
                     text: root.japanese-workspace-numbers ? root.japanese-numbers[n - 1] : "\{n}";
                     // JetBrains Mono has no kanji; software-renderer fallback is not reliable.
-                    font-family: root.japanese-workspace-numbers ? "Yu Gothic UI" : "JetBrains Mono";
+                    font-family: root.workspace-font-family != "" ? root.workspace-font-family : root.japanese-workspace-numbers ? "Yu Gothic UI" : "JetBrains Mono";
+                    font-size: root.workspace-font-size;
                     color: root.active == n ? root.bg : root.muted;
-                    font-weight: root.japanese-workspace-numbers || root.active == n ? 700 : 400;
+                    font-weight: root.workspace-font-weight > 0 ? root.workspace-font-weight : root.japanese-workspace-numbers || root.active == n ? 700 : 400;
                     horizontal-alignment: center; vertical-alignment: center;
                 }
             }
