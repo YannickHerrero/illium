@@ -203,7 +203,7 @@ export component Bar inherits Window {
                     // JetBrains Mono has no kanji; software-renderer fallback is not reliable.
                     font-family: root.japanese-workspace-numbers ? "Yu Gothic UI" : "JetBrains Mono";
                     color: root.active == n ? root.bg : root.muted;
-                    font-weight: root.active == n ? 700 : 400;
+                    font-weight: root.japanese-workspace-numbers || root.active == n ? 700 : 400;
                     horizontal-alignment: center; vertical-alignment: center;
                 }
             }
