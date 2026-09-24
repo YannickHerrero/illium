@@ -1,13 +1,27 @@
 //! Optional lock-surface animation settings in winarchy.toml.
 use serde::Deserialize;
 
+/// TerminalTextEffects effect names, as `tte` spells them.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "lowercase")]
 pub enum Effect {
-    Matrix,
-    Decrypt,
     Beams,
+    #[serde(alias = "color-shift")]
     ColorShift,
+    Decrypt,
+    Matrix,
+}
+impl Effect {
+    /// Every effect, in `tte` order (the default: Omarchy uses `--random-effect`).
+    pub const ALL: &[Effect] = &[Effect::Beams, Effect::ColorShift, Effect::Decrypt, Effect::Matrix];
+    pub fn name(self) -> &'static str {
+        match self {
+            Effect::Beams => "beams",
+            Effect::ColorShift => "colorshift",
+            Effect::Decrypt => "decrypt",
+            Effect::Matrix => "matrix",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -22,12 +36,7 @@ impl Default for Screensaver {
         Self {
             enabled: true,
             timeout: 30,
-            effects: vec![
-                Effect::Matrix,
-                Effect::Decrypt,
-                Effect::Beams,
-                Effect::ColorShift,
-            ],
+            effects: Effect::ALL.to_vec(),
         }
     }
 }
@@ -86,7 +95,9 @@ mod tests {
         let c: Screensaver = toml::from_str("").unwrap();
         assert!(c.enabled);
         assert_eq!(c.timeout, 30);
-        assert_eq!(c.effects.len(), 4);
+        assert_eq!(c.effects, Effect::ALL);
+        let c: Screensaver = toml::from_str("effects = ['colorshift', 'color-shift']").unwrap();
+        assert_eq!(c.effects, vec![Effect::ColorShift]);
         for bad in [
             "timeout = 0",
             "timeout = -1",
