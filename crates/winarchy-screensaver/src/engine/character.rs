@@ -48,6 +48,10 @@ impl Character {
         );
         self.events.push(entry);
     }
+    /// `event_handler.registered_events.clear()`.
+    pub fn clear_events(&mut self) {
+        self.events.clear();
+    }
     pub fn is_active(&self) -> bool {
         !self.animation.active_scene_is_complete() || !self.motion.movement_is_complete()
     }
