@@ -37,6 +37,7 @@ mod scattered;
 mod slice;
 mod slide;
 mod spray;
+mod waves;
 
 /// The Winarchy logo in Omarchy's `logo.txt` style ("ARCHY" is theirs).
 pub const LOGO: &str = include_str!("../logo.txt");
@@ -77,6 +78,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::Slice => Box::new(slice::Slice::new(t)),
         Effect::Overflow => Box::new(overflow::Overflow::new(t)),
         Effect::Spray => Box::new(spray::Spray::new(t)),
+        Effect::Waves => Box::new(waves::Waves::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -277,5 +279,10 @@ pub(crate) mod tests {
     #[test]
     fn spray_finishes() {
         finishes_on_logo(Effect::Spray, 20_000);
+    }
+
+    #[test]
+    fn waves_finishes() {
+        finishes_on_logo(Effect::Waves, 20_000);
     }
 }
