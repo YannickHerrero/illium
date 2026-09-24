@@ -22,6 +22,7 @@ mod highlight;
 mod matrix;
 mod sweep;
 mod wipe;
+mod errorcorrect;
 mod expand;
 mod middleout;
 
@@ -51,6 +52,7 @@ pub fn build(effect: Effect, t: &mut Terminal) -> Box<dyn Run> {
         Effect::BouncyBalls => Box::new(bouncyballs::BouncyBalls::new(t)),
         Effect::BinaryPath => Box::new(binarypath::BinaryPath::new(t)),
         Effect::Crumble => Box::new(crumble::Crumble::new(t)),
+        Effect::ErrorCorrect => Box::new(errorcorrect::ErrorCorrect::new(t)),
         other => unimplemented!("{other:?} is not ported yet"),
     }
 }
@@ -186,5 +188,10 @@ pub(crate) mod tests {
     #[test]
     fn crumble_finishes() {
         finishes_on_logo(Effect::Crumble, 20_000);
+    }
+
+    #[test]
+    fn errorcorrect_finishes() {
+        finishes_on_logo(Effect::ErrorCorrect, 20_000);
     }
 }
