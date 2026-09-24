@@ -17,3 +17,4 @@ pub mod state;
 pub mod theme_picker;
 pub mod traffic;
 pub mod wallpaper;
+pub mod workspace_switcher;
