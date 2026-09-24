@@ -1,9 +1,51 @@
 //! Renders an effect run to PNG contact sheets for visual review:
-//! `cargo run -p winarchy-screensaver --example preview -- <effect> <out-dir> [width height scale]`
+//! `cargo run -p winarchy-screensaver --example preview -- <effect> <out-dir> [width height scale] [reference.cells]`
+//! With a `.cells` dump of the Python TTE run (same grid), the sheet shows
+//! Winarchy frames on the left and the reference frames on the right.
 use std::fs::File;
 use std::io::BufWriter;
 use winarchy_config::screensaver::Effect;
+use winarchy_screensaver::engine::{Cell, Color, ColorPair};
 use winarchy_screensaver::player::{Player, TICKS_PER_SECOND};
+use winarchy_screensaver::render::Renderer;
+
+/// Parses `tte_ref.py` output: a header then `codepoint fg bg` per cell.
+fn reference(path: &str, width: usize, height: usize, scale: f32) -> (usize, Vec<Vec<u8>>) {
+    let text = std::fs::read_to_string(path).expect("read reference");
+    let mut lines = text.lines();
+    let header: Vec<usize> = lines
+        .next()
+        .unwrap()
+        .split(' ')
+        .map(|n| n.parse().unwrap())
+        .collect();
+    let (total, cols, rows, count) = (header[0], header[1], header[2], header[3]);
+    let mut renderer = Renderer::new(width, height, scale);
+    assert_eq!(
+        (renderer.columns, renderer.rows),
+        (cols, rows),
+        "reference grid differs"
+    );
+    let color = |s: &str| (s != "-").then(|| Color::hex(s));
+    let mut frames = vec![];
+    for _ in 0..count {
+        let cells: Vec<Cell> = (0..cols * rows)
+            .map(|_| {
+                let mut parts = lines.next().unwrap().split(' ');
+                let symbol = char::from_u32(parts.next().unwrap().parse().unwrap()).unwrap();
+                let fg = color(parts.next().unwrap());
+                let bg = color(parts.next().unwrap());
+                Cell {
+                    symbol,
+                    colors: ColorPair::new(fg, bg),
+                }
+            })
+            .collect();
+        renderer.draw(&cells);
+        frames.push(renderer.pixels().to_vec());
+    }
+    (total, frames)
+}
 
 fn save(path: &str, width: usize, height: usize, rgb: &[u8]) {
     let file = BufWriter::new(File::create(path).expect("create png"));
@@ -80,19 +122,39 @@ fn main() {
         }
     }
     let (w, h) = capture.size();
+    let grid = Renderer::new(width, height, scale);
+    println!("grid {}x{}", grid.columns, grid.rows);
     save(
         &format!("{out}/{name}-final.png"),
         w,
         h,
         frames.last().unwrap(),
     );
+    let mut tiles = frames.clone();
+    let mut cols = 3;
+    if let Some(path) = args.get(6) {
+        let (reference_total, reference_frames) = reference(path, width, height, scale);
+        println!(
+            "reference: {reference_total} frames = {:.1} s",
+            reference_total as f64 / TICKS_PER_SECOND
+        );
+        let last = reference_frames.last().unwrap();
+        save(&format!("{out}/{name}-reference-final.png"), w, h, last);
+        let paired = reference_frames.iter().chain(std::iter::repeat(last));
+        tiles = frames
+            .iter()
+            .zip(paired)
+            .flat_map(|(a, b)| [a.clone(), b.clone()])
+            .collect();
+        cols = 2;
+    }
     let factor = 3;
-    let (tw, th, _) = shrink(w, h, &frames[0], factor);
-    let (cols, rows) = (3, picks.div_ceil(3));
-    let mut sheet = vec![40u8; (cols * (tw + 4)) * (rows * (th + 4)) * 3];
+    let (tw, th) = (w / factor, h / factor);
+    let rows = tiles.len().div_ceil(cols);
     let sheet_w = cols * (tw + 4);
-    for i in 0..picks {
-        let (_, _, thumb) = shrink(w, h, &frames[i.min(frames.len() - 1)], factor);
+    let mut sheet = vec![40u8; sheet_w * (rows * (th + 4)) * 3];
+    for (i, tile) in tiles.iter().enumerate() {
+        let (_, _, thumb) = shrink(w, h, tile, factor);
         let (ox, oy) = ((i % cols) * (tw + 4) + 2, (i / cols) * (th + 4) + 2);
         for y in 0..th {
             let dst = ((oy + y) * sheet_w + ox) * 3;
