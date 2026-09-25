@@ -1,8 +1,8 @@
 //! CPU raster cards for Slint's software renderer: centered crops, not shears.
 //! Geometry and compositing follow the pinned Omarchy picker (MIT attribution in docs).
 use super::{EXPANDED_HEIGHT, EXPANDED_WIDTH, SKEW, SLICE_HEIGHT, SLICE_WIDTH};
+use illium_theme::{pack, preview::Entry};
 use tiny_skia::{FillRule, Mask, Paint, PathBuilder, Pixmap, Stroke, Transform};
-use winarchy_theme::{pack, preview::Entry};
 
 /// Two logical pixels reserve the outer half of the selected 3px stroke.
 pub const PAD: f32 = 2.0;
@@ -13,9 +13,9 @@ pub struct Colors {
     pub accent: [u8; 3],
 }
 impl Colors {
-    pub fn from_theme(theme: &winarchy_theme::Theme) -> Self {
+    pub fn from_theme(theme: &illium_theme::Theme) -> Self {
         let rgb = |s: &str| {
-            let (r, g, b) = winarchy_theme::rgb(s).unwrap_or_default();
+            let (r, g, b) = illium_theme::rgb(s).unwrap_or_default();
             [r, g, b]
         };
         Self {

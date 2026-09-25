@@ -7,22 +7,21 @@ fn command() -> Result<String, String> {
         "\"{}\"",
         std::env::current_exe()
             .map_err(|e| e.to_string())?
-            .with_file_name("winarchy-browser.exe")
+            .with_file_name("illium-browser.exe")
             .display()
     ))
 }
 pub fn bundled(target: &str) -> bool {
-    target.trim().eq_ignore_ascii_case("winarchy-browser.exe")
+    target.trim().eq_ignore_ascii_case("illium-browser.exe")
         || command().is_ok_and(|c| {
             target.trim().eq_ignore_ascii_case(&c)
                 || target.trim().eq_ignore_ascii_case(c.trim_matches('"'))
         })
 }
 fn request(command: &str, timeout: Duration) -> Result<String, String> {
-    let pipe = winarchy_ipc::client::pipe_path(&winarchy_ipc::identity::endpoint_named(
-        "winarchy-browser",
-    )?);
-    let reply = winarchy_ipc::client::client_at(&pipe, command, timeout)?;
+    let pipe =
+        illium_ipc::client::pipe_path(&illium_ipc::identity::endpoint_named("illium-browser")?);
+    let reply = illium_ipc::client::client_at(&pipe, command, timeout)?;
     if reply.ok {
         Ok(reply.message)
     } else {
@@ -71,11 +70,11 @@ mod tests {
     use super::*;
     #[test]
     fn only_bundled_argument_free_aliases_use_resident() {
-        assert!(bundled("winarchy-browser.exe"));
+        assert!(bundled("illium-browser.exe"));
         assert!(bundled(&command().unwrap()));
-        assert!(!bundled("winarchy-browser.exe --standalone"));
-        assert!(!bundled("winarchy-browser.exe https://example.com"));
-        assert!(!bundled("C:\\other\\winarchy-browser.exe"));
+        assert!(!bundled("illium-browser.exe --standalone"));
+        assert!(!bundled("illium-browser.exe https://example.com"));
+        assert!(!bundled("C:\\other\\illium-browser.exe"));
         assert!(!bundled("msedge.exe"));
     }
 }

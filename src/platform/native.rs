@@ -103,8 +103,8 @@ pub fn dwm_border(id: isize, color: Option<&str>) {
         );
     }
 }
-const BORDER_CLASS: &str = "WinarchyBorder";
-const BORDER_COLOR: &str = "WinarchyBorderColor";
+const BORDER_CLASS: &str = "IlliumBorder";
+const BORDER_COLOR: &str = "IlliumBorderColor";
 fn colorref(color: &str) -> COLORREF {
     let rgb = u32::from_str_radix(color.trim_start_matches('#'), 16).unwrap_or(0);
     COLORREF((rgb >> 16) | (rgb & 0xff00) | ((rgb & 0xff) << 16))
@@ -449,7 +449,7 @@ pub fn monitors() -> Vec<Rect> {
 /// activation watermark. That watermark has no window of its own, so nothing
 /// can cover it: only a repaint of the region clears it. Explorer provided
 /// that repaint as the shell, which is why the watermark stays on screen once
-/// Winarchy stops it. The drawing process could not be identified: it is
+/// Illium stops it. The drawing process could not be identified: it is
 /// neither Explorer nor sihost, both of which were ruled out with a
 /// DrawTextExW hook, so the region is refreshed rather than the draw blocked.
 pub fn repaint_corners() {
@@ -498,7 +498,7 @@ const PARK_X: i32 = -32000;
 pub fn parking_rect(rect: Rect) -> Rect {
     Rect { x: PARK_X, ..rect }
 }
-/// Parked off screen by Winarchy while its workspace is inactive. Minimized
+/// Parked off screen by Illium while its workspace is inactive. Minimized
 /// windows sit at the same coordinates on their own and are left alone.
 pub fn parked(id: isize) -> bool {
     rect(id).x <= PARK_X + 1000 && !minimized(id)
@@ -542,9 +542,9 @@ pub fn reveal(id: isize, home: Option<Rect>) {
         show(id, true);
     }
 }
-const SINK_CLASS: &str = "WinarchyFocusSink";
+const SINK_CLASS: &str = "IlliumFocusSink";
 /// Creates the zero-size activatable window that takes the foreground when no
-/// client can, so keystrokes never land in a window Winarchy just hid. It must
+/// client can, so keystrokes never land in a window Illium just hid. It must
 /// live in a process without the keyboard hook: Windows does not run a
 /// low-level hook for input aimed at the hooking process's own windows.
 pub fn create_sink() -> Result<isize, String> {

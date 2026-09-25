@@ -1,5 +1,5 @@
-pub use winarchy_config::{applets, clock, config, files, keyboard, plugins};
-pub use winarchy_ipc::{command, protocol};
+pub use illium_config::{applets, clock, config, files, keyboard, plugins};
+pub use illium_ipc::{command, protocol};
 pub mod bar_hints;
 pub mod battery;
 pub mod expose;

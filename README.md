@@ -1,4 +1,4 @@
-# Winarchy
+# Illium
 
 [![Made with Slint](https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-whitebg.png)](https://slint.dev)
 
@@ -8,29 +8,29 @@ A minimal, keyboard-first Windows 11 x64 tiling window manager and experimental 
 
 **Build target:** `x86_64-pc-windows-msvc`, from Windows or cross-compiled from WSL with cargo-xwin (see [installation](docs/installation.md)). The executables embed version information and an `asInvoker` manifest and are unsigned.
 
-> **Recovery:** press **Ctrl+Shift+Esc**, choose **Run new task**, and run `explorer.exe`. To end Winarchy normally, run `winarchyctl quit`. A watchdog also makes a best-effort recovery after crashes. Never rely on it as your only recovery mechanism.
+> **Recovery:** press **Ctrl+Shift+Esc**, choose **Run new task**, and run `explorer.exe`. To end Illium normally, run `illiumctl quit`. A watchdog also makes a best-effort recovery after crashes. Never rely on it as your only recovery mechanism.
 
 ## Quick start
 
 The default terminal alias uses [WezTerm](https://wezterm.org/) (`wezterm.exe` on PATH).
 An experimental, bundled [native WSL terminal](docs/terminal.md) is also available:
-`winarchy-terminal.exe`, with resident fast opening and live Winarchy themes, as is
-[hold-to-talk dictation](docs/dictate.md) through `winarchy-dictate.exe`.
-The experimental [minimal browser](docs/browser.md), `winarchy-browser.exe`, hosts WebView2
+`illium-terminal.exe`, with resident fast opening and live Illium themes, as is
+[hold-to-talk dictation](docs/dictate.md) through `illium-dictate.exe`.
+The experimental [minimal browser](docs/browser.md), `illium-browser.exe`, hosts WebView2
 with native ad filtering and a themed `Ctrl+L` address editor (filter-list setup required).
 Build on Windows with Rust and Visual Studio's **Desktop development with C++** tools:
 
 ```powershell
 cargo build --release
-.\target\release\winarchy.exe
+.\target\release\illium.exe
 ```
 
-This does **not** stop Explorer. Defaults are installed without overwriting existing files in `%USERPROFILE%\.config\winarchy`. Override that location with `WINARCHY_CONFIG_HOME`.
+This does **not** stop Explorer. Defaults are installed without overwriting existing files in `%USERPROFILE%\.config\illium`. Override that location with `ILLIUM_CONFIG_HOME`.
 
 ```powershell
-.\target\release\winarchyctl.exe theme set catppuccin-latte
-.\target\release\winarchyctl.exe workspace 2
-.\target\release\winarchyctl.exe quit
+.\target\release\illiumctl.exe theme set catppuccin-latte
+.\target\release\illiumctl.exe workspace 2
+.\target\release\illiumctl.exe quit
 ```
 
 ## Features
@@ -54,7 +54,7 @@ This does **not** stop Explorer. Defaults are installed without overwriting exis
 | Keys | Action |
 |---|---|
 | Alt+Enter | Configured terminal (WezTerm by default) |
-| Alt+B | Configured browser (Winarchy Browser by default; filter-list setup required) |
+| Alt+B | Configured browser (Illium Browser by default; filter-list setup required) |
 | Alt+Space | Launcher |
 | Alt+Shift+Space | Menu: Apps, System (hibernate, lock, restart, shut down, stop or start Explorer, quit), Keybindings, Theme and Wallpaper |
 | Alt+Shift+? | Keybindings viewer and editor |
@@ -91,4 +91,4 @@ Pending capture on an unlocked interactive Windows desktop. No mockup is present
 
 ## Licensing
 
-Winarchy source is MIT-licensed. Slint is used under its [Royalty-free Desktop, Mobile, and Web Applications License](docs/licenses/slint-royalty-free.md); retain the Slint attribution when distributing this desktop application. Dependencies retain their own licenses.
+Illium source is MIT-licensed. Slint is used under its [Royalty-free Desktop, Mobile, and Web Applications License](docs/licenses/slint-royalty-free.md); retain the Slint attribution when distributing this desktop application. Dependencies retain their own licenses.

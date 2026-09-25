@@ -13,11 +13,11 @@ fn main() {
     )
     .expect("compile shell UI");
     winresource::WindowsResource::new()
-        .set("ProductName", "Winarchy")
-        .set("FileDescription", "Winarchy tiling window manager")
+        .set("ProductName", "Illium")
+        .set("FileDescription", "Illium tiling window manager")
         .set("CompanyName", "Yannick Herrero")
         .set("LegalCopyright", "MIT License")
-        .set_manifest(include_str!("winarchy.manifest"))
+        .set_manifest(include_str!("illium.manifest"))
         .compile()
         .expect("compile Windows resources");
 }

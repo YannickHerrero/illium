@@ -8,7 +8,7 @@ mod dictate;
 mod dispatch;
 mod dpi;
 mod icons;
-use winarchy_ipc::identity;
+use illium_ipc::identity;
 mod input;
 mod instance;
 pub mod ipc;
@@ -116,7 +116,7 @@ struct Manager {
 impl Manager {
     fn prune(&mut self) -> bool {
         let previous = self.model.clients.len();
-        // A client that is invisible without Winarchy having hidden it has left
+        // A client that is invisible without Illium having hidden it has left
         // the desktop on its own; keeping it would make it a dead focus target.
         for c in &self.model.clients {
             if !c.hidden && !native::minimized(c.id) && !native::visible(c.id) {
@@ -140,7 +140,7 @@ impl Manager {
     fn add(&mut self, id: isize) -> bool {
         let added = self.enroll(id, None);
         if added
-            && native::metadata(id).is_some_and(|(_, class, _)| class == "WinarchyBrowser")
+            && native::metadata(id).is_some_and(|(_, class, _)| class == "IlliumBrowser")
             && self
                 .model
                 .clients
@@ -494,12 +494,8 @@ impl Manager {
         }
         let result = (|| {
             let mut theme =
-                winarchy_theme::Theme::load(&self.config.home, &self.config.global.theme)?;
-            winarchy_theme::dynamic::apply(
-                &self.config.home,
-                &self.config.global.theme,
-                &mut theme,
-            )?;
+                illium_theme::Theme::load(&self.config.home, &self.config.global.theme)?;
+            illium_theme::dynamic::apply(&self.config.home, &self.config.global.theme, &mut theme)?;
             Ok::<_, String>(theme)
         })();
         match result {
@@ -516,14 +512,14 @@ impl Manager {
     fn reload(&mut self) -> Result<(), String> {
         self.reload_config(true)
     }
-    /// Edits one `winarchy.toml` key in place, keeping the others, and restores
+    /// Edits one `illium.toml` key in place, keeping the others, and restores
     /// the previous file when the resulting configuration does not load.
     fn set_global(&mut self, key: &str, value: toml_edit::Item) -> Result<(), String> {
-        let path = self.config.home.join("winarchy.toml");
+        let path = self.config.home.join("illium.toml");
         let old = crate::files::read_config(&path)?;
         let mut doc = String::from_utf8_lossy(&old)
             .parse::<toml_edit::DocumentMut>()
-            .map_err(|e| format!("winarchy.toml: {e}"))?;
+            .map_err(|e| format!("illium.toml: {e}"))?;
         doc[key] = value;
         std::fs::write(&path, doc.to_string()).map_err(|e| e.to_string())?;
         if let Err(e) = self.reload_config(false) {
@@ -540,7 +536,7 @@ impl Manager {
         }
         let config = Config::load(&self.config.home)?;
         if config.global.theme != self.config.global.theme {
-            winarchy_theme::opacity::clear(&config.home)?;
+            illium_theme::opacity::clear(&config.home)?;
         }
         if !force && crate::files::same_subsystems(&config.home, &self.config_files, &files) {
             let theme_changed = config.global.theme != self.config.global.theme
@@ -963,7 +959,7 @@ impl Manager {
                 let effect = match name {
                     None => None,
                     Some(name) => Some(
-                        winarchy_config::screensaver::Effect::ALL
+                        illium_config::screensaver::Effect::ALL
                             .iter()
                             .copied()
                             .find(|e| e.name() == name)
@@ -1013,22 +1009,18 @@ impl Manager {
             Command::Wallpaper(name) => self.shell.set_wallpaper(name)?,
             Command::BackgroundOpacity(increase) => {
                 let mut theme = self.config.theme.clone();
-                winarchy_theme::opacity::apply(
+                illium_theme::opacity::apply(
                     &self.config.home,
                     &self.config.global.theme,
                     &mut theme,
                 );
-                let opacity = winarchy_theme::opacity::step(theme.background_opacity, increase);
-                winarchy_theme::opacity::set(
-                    &self.config.home,
-                    &self.config.global.theme,
-                    opacity,
-                )?;
+                let opacity = illium_theme::opacity::step(theme.background_opacity, increase);
+                illium_theme::opacity::set(&self.config.home, &self.config.global.theme, opacity)?;
                 self.shell.apply_opacity(&self.config);
                 return Ok(format!("background opacity: {:.0}%", opacity * 100.0));
             }
             Command::ResetOpacity => {
-                winarchy_theme::opacity::clear(&self.config.home)?;
+                illium_theme::opacity::clear(&self.config.home)?;
                 self.shell.apply_opacity(&self.config);
                 return Ok(format!(
                     "background opacity: {:.0}%",
@@ -1182,7 +1174,7 @@ impl Manager {
         }
     }
     /// Window to refocus when a full-screen surface closes: the foreground
-    /// window unless it belongs to Winarchy itself.
+    /// window unless it belongs to Illium itself.
     fn restore_target(&self, foreground: isize) -> Option<isize> {
         let mut pid = 0;
         unsafe {
@@ -1445,7 +1437,7 @@ impl Manager {
         let hash = match crate::lockscreen::load(&self.config.home) {
             Ok(hash) => hash,
             Err(error) => {
-                tracing::warn!(%error, "no lock password; run winarchyctl lock set-password");
+                tracing::warn!(%error, "no lock password; run illiumctl lock set-password");
                 return session::lock_workstation();
             }
         };
@@ -1472,7 +1464,7 @@ impl Manager {
             .collect();
         (self.monitors.clone(), primary, backdrops)
     }
-    /// Winarchy's lock is only a surface over the session: whenever it may be
+    /// Illium's lock is only a surface over the session: whenever it may be
     /// bypassed, the Windows lock takes over.
     fn lock_windows(&mut self, reason: &str) {
         if self.shell.lock.released {
@@ -1936,7 +1928,7 @@ impl Manager {
 }
 impl Drop for Manager {
     fn drop(&mut self) {
-        if let Err(error) = winarchy_theme::opacity::clear(&self.config.home) {
+        if let Err(error) = illium_theme::opacity::clear(&self.config.home) {
             tracing::warn!(%error, "could not clear temporary opacity");
         }
         for c in &self.model.clients {
@@ -1970,8 +1962,8 @@ fn watch(home: std::path::PathBuf, tx: EventSender) {
             return;
         };
         let wallpaper_snapshot = || {
-            let images = winarchy_theme::Theme::selected(&home).and_then(|theme| {
-                winarchy_theme::pack::fingerprint(&home, &theme).map(|images| (theme, images))
+            let images = illium_theme::Theme::selected(&home).and_then(|theme| {
+                illium_theme::pack::fingerprint(&home, &theme).map(|images| (theme, images))
             });
             (
                 images,
@@ -1980,7 +1972,7 @@ fn watch(home: std::path::PathBuf, tx: EventSender) {
         };
         let mut previous = crate::files::snapshot(&home);
         let mut previous_wallpapers = wallpaper_snapshot();
-        let mut previous_previews = winarchy_theme::preview::catalog(&home);
+        let mut previous_previews = illium_theme::preview::catalog(&home);
         loop {
             if WaitForSingleObject(h, INFINITE) != WAIT_OBJECT_0 {
                 break;
@@ -1998,7 +1990,7 @@ fn watch(home: std::path::PathBuf, tx: EventSender) {
             let _ = tx.send(Event::Opacity);
             // The picker covers inactive themes too. This bounded scan lives on
             // the notification thread and never decodes pixels or reloads applets.
-            let next_previews = winarchy_theme::preview::catalog(&home);
+            let next_previews = illium_theme::preview::catalog(&home);
             if next != previous {
                 previous = next;
                 let _ = tx.send(Event::Reload);
@@ -2038,7 +2030,7 @@ pub fn run(replace: bool) -> Result<(), String> {
     }
     let home = Config::home();
     Config::install(&home)?;
-    winarchy_theme::opacity::clear(&home)?;
+    illium_theme::opacity::clear(&home)?;
     let state_path = home.join("state.json");
     let config_files = crate::files::snapshot(&home)?;
     let config = Config::load(&home)?;
@@ -2175,7 +2167,7 @@ pub fn run(replace: bool) -> Result<(), String> {
             m.layout();
             m.focus_visible();
             watch(home, tx);
-            tracing::info!("Winarchy core initialized");
+            tracing::info!("Illium core initialized");
             Ok(())
         })();
         if let Err(e) = result {
@@ -2245,7 +2237,7 @@ pub fn run(replace: bool) -> Result<(), String> {
                 };
                 match result {
                     Ok(()) => {
-                        tracing::info!("Winarchy ready");
+                        tracing::info!("Illium ready");
                         session::stop_processes(&m.config.wm.stop_processes);
                         apps::start_resident();
                         terminal::prewarm(m.config.apps.apps.get("terminal"));

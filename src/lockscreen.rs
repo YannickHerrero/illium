@@ -1,12 +1,12 @@
-//! Winarchy's own lock screen: the password file, attempt counting and the
+//! Illium's own lock screen: the password file, attempt counting and the
 //! keys withheld from the lock surface. Windowing lives in the platform layer.
 use crate::keyboard::{ALT, CTRL, SUPER};
 use argon2::{Argon2, password_hash::PasswordVerifier};
 use std::path::{Path, PathBuf};
 
-/// Failed attempts before Winarchy hands over to the Windows lock.
+/// Failed attempts before Illium hands over to the Windows lock.
 pub const ATTEMPTS: u8 = 5;
-/// `winarchyctl lock set-password` writes the same file name.
+/// `illiumctl lock set-password` writes the same file name.
 pub fn path(home: &Path) -> PathBuf {
     home.join("lock-password")
 }
@@ -88,7 +88,7 @@ mod tests {
     }
     #[test]
     fn load_rejects_missing_and_malformed_files() {
-        let home = std::env::temp_dir().join(format!("winarchy-lock-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("illium-lock-{}", std::process::id()));
         std::fs::create_dir_all(&home).unwrap();
         assert!(load(&home).is_err());
         std::fs::write(path(&home), "not a hash").unwrap();

@@ -1,9 +1,9 @@
-# Prints the weather as JSON for the Winarchy weather applet.
-# Settings from applet.toml arrive as WINARCHY_APPLET_* environment variables.
+# Prints the weather as JSON for the Illium weather applet.
+# Settings from applet.toml arrive as ILLIUM_APPLET_* environment variables.
 $ErrorActionPreference = "Stop"
-$lat = $env:WINARCHY_APPLET_LATITUDE
-$lon = $env:WINARCHY_APPLET_LONGITUDE
-$place = $env:WINARCHY_APPLET_PLACE
+$lat = $env:ILLIUM_APPLET_LATITUDE
+$lon = $env:ILLIUM_APPLET_LONGITUDE
+$place = $env:ILLIUM_APPLET_PLACE
 if (-not $lat -or -not $lon) { throw "latitude and longitude are required in [settings]" }
 $culture = [Globalization.CultureInfo]::InvariantCulture
 

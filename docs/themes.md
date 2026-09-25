@@ -4,11 +4,11 @@ Built-in themes include the official Catppuccin Mocha and Latte palettes, plus
 wallpaper-driven **Dynamic Dark** and **Dynamic Light**. Mocha is the first-run default. Every visible color is supplied by theme properties, including the launcher's input and selection.
 
 ```powershell
-winarchyctl theme set catppuccin-latte
-winarchyctl theme set catppuccin-mocha
+illiumctl theme set catppuccin-latte
+illiumctl theme set catppuccin-mocha
 ```
 
-The command validates the new configuration, refreshes the shell, and writes the selected name to `winarchy.toml`, keeping its other settings. Failure restores the previous global file.
+The command validates the new configuration, refreshes the shell, and writes the selected name to `illium.toml`, keeping its other settings. Failure restores the previous global file.
 
 To add a theme, copy an existing TOML file to `themes/my-theme.toml` and edit its colors:
 
@@ -27,9 +27,9 @@ red = "#f38ba8"
 
 `mode` is optional: `"dark"` or `"light"` switches the Windows color mode for apps and system surfaces when the theme is applied (a per-user registry preference, followed by the usual settings-change broadcast so open applications follow). Use exactly six hexadecimal RGB digits. Background is the desktop and launcher base; surface is the bar; overlay is selection/border; text is normal and occupied-workspace text; subtext is inactive text; accent marks the active workspace, the launcher selection and the focused window border; overlay frames the unfocused windows. Green/yellow/red are available semantic colors. Application theming is left to external integrations; wallpapers are described below.
 
-Themes may also provide `ansi` and `brights`, each an array of exactly eight `"#rrggbb"` colors in this order: black, red, green, yellow, blue, magenta, cyan, white. Both fields are optional and independent; older themes remain valid. They describe terminal colors for external consumers and do not change Winarchy's shell colors or automatically configure applications. Consumers choose their own fallback when either array is absent.
+Themes may also provide `ansi` and `brights`, each an array of exactly eight `"#rrggbb"` colors in this order: black, red, green, yellow, blue, magenta, cyan, white. Both fields are optional and independent; older themes remain valid. They describe terminal colors for external consumers and do not change Illium's shell colors or automatically configure applications. Consumers choose their own fallback when either array is absent.
 
-The built-in themes include the [official Catppuccin terminal palettes](https://github.com/catppuccin/wezterm/tree/main/dist). Existing installed files are not overwritten: upgrade Winarchy before adding these fields to local themes, as older versions reject unknown fields.
+The built-in themes include the [official Catppuccin terminal palettes](https://github.com/catppuccin/wezterm/tree/main/dist). Existing installed files are not overwritten: upgrade Illium before adding these fields to local themes, as older versions reject unknown fields.
 
 `background_opacity` is optional (default `0.85`), a finite number from `0.0`
 to `1.0`. It controls the native terminal, Files and Tasks window backgrounds
@@ -47,15 +47,15 @@ background_opacity = 0.85
 ```
 
 The old `terminal_background_opacity` spelling remains accepted as an alias,
-now with the same shared scope. Do not specify both names. Upgrade all Winarchy
+now with the same shared scope. Do not specify both names. Upgrade all Illium
 binaries before using the new spelling: older readers reject unknown fields.
 
 ### Adjust opacity live
 
 - **Ctrl+Alt+Shift+Y**: decrease by 5 percentage points.
 - **Ctrl+Alt+Shift+U**: increase by 5 percentage points.
-- CLI equivalents: `winarchyctl opacity decrease` / `winarchyctl opacity increase`.
-- `winarchyctl opacity reset` drops the adjustment and returns to the theme's value.
+- CLI equivalents: `illiumctl opacity decrease` / `illiumctl opacity increase`.
+- `illiumctl opacity reset` drops the adjustment and returns to the theme's value.
 
 Interactive adjustments are bounded to **5–100%** and apply to all open, hidden
 and subsequently opened companion windows, without restarting sessions or moving
@@ -67,7 +67,7 @@ valid appearance in running applications.
 Existing `keybindings.toml` files are not overwritten during upgrades: add the
 two bindings from [configuration](configuration.md#keybindingstoml) if missing.
 
-Select with `winarchyctl theme set my-theme`. Names cannot contain slashes, backslashes or dots. Editing the active palette triggers the directory watcher.
+Select with `illiumctl theme set my-theme`. Names cannot contain slashes, backslashes or dots. Editing the active palette triggers the directory watcher.
 
 ## Dynamic Dark and Dynamic Light
 
@@ -78,20 +78,20 @@ palette generator, network access or theme-pack installation is required.
 Place your personal PNG/JPEG images in this **shared** directory:
 
 ```text
-%USERPROFILE%\.config\winarchy\wallpapers\dynamic\
+%USERPROFILE%\.config\illium\wallpapers\dynamic\
 ```
 
-With `WINARCHY_CONFIG_HOME`, use `<config-home>/wallpapers/dynamic/` instead. The
+With `ILLIUM_CONFIG_HOME`, use `<config-home>/wallpapers/dynamic/` instead. The
 daemon creates the empty directory on installation/upgrade; no personal images
 are shipped or committed. The ordinary wallpaper size/count/link restrictions
 below apply. Images are never modified. Do not put these wallpapers in the
-Winarchy source tree or the external theme-pack repository.
+Illium source tree or the external theme-pack repository.
 
 ```powershell
-winarchyctl theme set dynamic-dark
-winarchyctl wallpaper picker
+illiumctl theme set dynamic-dark
+illiumctl wallpaper picker
 # The same wallpaper, with a light palette:
-winarchyctl theme set dynamic-light
+illiumctl theme set dynamic-light
 ```
 
 **Ctrl+Alt+Shift+W**, the Wallpaper menu, `wallpaper set` and `wallpaper next` all
@@ -130,11 +130,11 @@ The last applied pair is atomically published in `dynamic-theme.state`, separate
 from the cache, installed palettes and preferences. All theme consumers apply
 this state only to dynamic themes, before the temporary opacity override.
 
-- Empty library or `winarchyctl wallpaper clear`: matching built-in fallback palette and
+- Empty library or `illiumctl wallpaper clear`: matching built-in fallback palette and
   solid background. The explicit solid choice survives restarts.
 - Explicit unreadable image or publication failure: retain the current image,
   palette and saved choice. Inspect `wallpaper_pending` / `wallpaper_error` in
-  `winarchyctl status`; pending includes palette preparation.
+  `illiumctl status`; pending includes palette preparation.
 - Missing/unreadable remembered image on activation: try the other images,
   then the matching solid fallback.
 - Image edits/additions/removals: detected by the existing wallpaper watcher;
@@ -146,7 +146,7 @@ this state only to dynamic themes, before the temporary opacity override.
 Open **Alt+Shift+Space → Appearance → Theme**, **Ctrl+Alt+Shift+Space**, or:
 
 ```powershell
-winarchyctl theme picker
+illiumctl theme picker
 ```
 
 The picker follows [Omarchy's carousel](theme-picker-reference.md): a large
@@ -174,7 +174,7 @@ and respectively four and two wallpapers. Their PNG previews are unchanged;
 WebP wallpapers are converted to PNG without resizing or additional pixel loss.
 Sources, hashes, conversion details and the upstream license are installed in
 each theme's `SOURCES.md` and `LICENSE`. These are Omarchy screenshots, not
-representations of Winarchy-specific applications. Asset and branding rights
+representations of Illium-specific applications. Asset and branding rights
 remain with their respective owners; see the source notes before redistribution.
 
 Missing built-in assets are added when the upgraded daemon starts; existing
@@ -198,7 +198,7 @@ in addition to temporary decode buffers and currently displayed images. Nothing
 is downloaded or written to a persistent image cache. Rapid navigation discards
 superseded work; an Enter during loading waits for the requested preview.
 
-`winarchyctl status` exposes `theme_picker`, `theme_picker_selected`,
+`illiumctl status` exposes `theme_picker`, `theme_picker_selected`,
 `theme_picker_filter`, `theme_picker_loading` and `theme_picker_error` for
 diagnostics. Opening through IPC acknowledges without waiting for image loading.
 An application failure is reported in diagnostics, not as extra picker UI.
@@ -214,10 +214,10 @@ Existing keybinding files are not overwritten on upgrade. Add under `[keybinding
 On an **empty workspace**, choose **Alt+Shift+Space → Demo**, or run:
 
 ```powershell
-winarchyctl demo
+illiumctl demo
 ```
 
-Winarchy opens three dedicated windows using the active theme and opacity:
+Illium opens three dedicated windows using the active theme and opacity:
 
 - **Left half:** native terminal with a fixed, colored fictional Rust build/test log.
 - **Top right:** native terminal with a built-in demo fetch, fictional machine data
@@ -237,7 +237,7 @@ live theme/opacity watchers remain active. Close the three windows normally when
 finished; the browser attempts to remove its temporary data on exit. Forced
 termination/crashes can leave temporary files under the system temp directory.
 
-`demo` acknowledges startup, not completion. `winarchyctl status` exposes
+`demo` acknowledges startup, not completion. `illiumctl status` exposes
 `demo_pending` and `demo_error`; wait until pending is false and error is null
 before capturing. The windows are identified by their owned processes and ready
 markers, not titles or fixed sleep delays. The final scene uses 50/50 splits and
@@ -257,7 +257,7 @@ preview-file replacement is performed.
 
 ## External theme packs
 
-Themes do not need to be compiled into Winarchy. A local pack is a folder named with 1–64 lowercase ASCII letters, digits, hyphens or underscores:
+Themes do not need to be compiled into Illium. A local pack is a folder named with 1–64 lowercase ASCII letters, digits, hyphens or underscores:
 
 ```text
 my-theme/
@@ -272,34 +272,34 @@ my-theme/
 Install without a running daemon, then select:
 
 ```powershell
-winarchyctl theme install "C:\Downloads\my-theme"
-winarchyctl theme set my-theme
+illiumctl theme install "C:\Downloads\my-theme"
+illiumctl theme set my-theme
 ```
 
-The installer validates the palette and decodes the images, installs assets under `themes/my-theme/`, then publishes `themes/my-theme.toml`. Existing palettes or asset directories are never overwritten. No scripts are executed and no network access is performed. Keep external packs outside the Winarchy repository; adding a pack requires no rebuild. A theme can also be installed manually using the same layout.
+The installer validates the palette and decodes the images, installs assets under `themes/my-theme/`, then publishes `themes/my-theme.toml`. Existing palettes or asset directories are never overwritten. No scripts are executed and no network access is performed. Keep external packs outside the Illium repository; adding a pack requires no rebuild. A theme can also be installed manually using the same layout.
 
 ## Wallpapers
 
 For an installed static `my-theme.toml`, place images in `themes/my-theme/wallpapers/`.
 The two dynamic themes instead share `wallpapers/dynamic/` as described above.
-No manifest entries are needed. The first readable JPEG/PNG in alphabetical order is used on first activation. The menu **Alt+Shift+Space → Appearance → Wallpaper** opens the same visual carousel as the theme picker, starting on the current (or pending) image. Left/Right or Tab/Shift+Tab browse, typing filters filenames, and Enter or clicking the selected card applies that exact image through the existing wallpaper loader. Escape clears the filter, then cancels; clicking outside cancels. Browsing never changes the desktop or saved choices. `winarchyctl wallpaper clear` selects the solid theme color without adding an artificial image card. Without readable wallpapers, the carousel stays empty and can be cancelled. If the active theme changes while browsing wallpapers, the picker cancels rather than applying an old filename to the new theme. **Ctrl+Alt+Shift+W** opens the wallpaper picker directly. The `winarchyctl wallpaper next` command still cycles through the same theme's images, wrapping around and skipping unreadable files. From a solid background it starts with the first image; without images it does nothing.
+No manifest entries are needed. The first readable JPEG/PNG in alphabetical order is used on first activation. The menu **Alt+Shift+Space → Appearance → Wallpaper** opens the same visual carousel as the theme picker, starting on the current (or pending) image. Left/Right or Tab/Shift+Tab browse, typing filters filenames, and Enter or clicking the selected card applies that exact image through the existing wallpaper loader. Escape clears the filter, then cancels; clicking outside cancels. Browsing never changes the desktop or saved choices. `illiumctl wallpaper clear` selects the solid theme color without adding an artificial image card. Without readable wallpapers, the carousel stays empty and can be cancelled. If the active theme changes while browsing wallpapers, the picker cancels rather than applying an old filename to the new theme. **Ctrl+Alt+Shift+W** opens the wallpaper picker directly. The `illiumctl wallpaper next` command still cycles through the same theme's images, wrapping around and skipping unreadable files. From a solid background it starts with the first image; without images it does nothing.
 
 ```powershell
-winarchyctl wallpaper picker
-winarchyctl wallpaper next
-winarchyctl wallpaper set "A painting.jpg"
-winarchyctl wallpaper clear
+illiumctl wallpaper picker
+illiumctl wallpaper next
+illiumctl wallpaper set "A painting.jpg"
+illiumctl wallpaper clear
 ```
 
 The wallpaper carousel shares the theme picker's surface, geometry, preview worker and bounded caches; it does not share or cancel the real wallpaper worker. Directory edits refresh its cards. Labels display original filenames. `status` exposes `wallpaper_picker`, `wallpaper_picker_theme`, `wallpaper_picker_selected`, `wallpaper_picker_filter`, `wallpaper_picker_loading` and `wallpaper_picker_error` separately from theme-picker diagnostics. An older running daemon must be upgraded/restarted before it recognizes `wallpaper picker`.
 
-The last explicit choice is saved per theme in `wallpapers.json`, independently of the palette and window-placement state. Switching away and back or restarting restores that choice, including an explicit solid background. If the chosen image disappears or cannot be decoded, Winarchy tries the other images and ultimately the theme's solid `background`. An unknown `wallpaper set` file is rejected immediately. For an existing file, the command acknowledges the request without waiting for image decoding. If decoding fails, the current image and saved choice are preserved; `winarchyctl status` exposes `wallpaper_pending` and `wallpaper_error` for completion/error tracking.
+The last explicit choice is saved per theme in `wallpapers.json`, independently of the palette and window-placement state. Switching away and back or restarting restores that choice, including an explicit solid background. If the chosen image disappears or cannot be decoded, Illium tries the other images and ultimately the theme's solid `background`. An unknown `wallpaper set` file is rejected immediately. For an existing file, the command acknowledges the request without waiting for image decoding. If decoding fails, the current image and saved choice are preserved; `illiumctl status` exposes `wallpaper_pending` and `wallpaper_error` for completion/error tracking.
 
-Images fill Winarchy's own desktop surfaces on every monitor with centered, aspect-preserving cropping. The same image is used on all monitors. The Windows wallpaper preference is not modified, so leaving Winarchy restores the underlying desktop as before. Image additions, edits, removals and saved-selection edits are watched separately from configuration: they do not restart applets or change WezTerm's palette. Decoding and resizing run in one background worker: the previous background remains visible until the latest request is ready. Rapid cycling advances from the pending target and discards obsolete results. A 128 MiB LRU cache keeps prepared images, keyed by file path, size, modification time and monitor resolutions; the next wallpaper is preloaded. Prepared buffers for one request are limited to 256 MiB, separately from the decode limits and currently displayed Slint images. Center-cropping and bilinear resampling use SIMD acceleration when supported by the CPU, with alpha-aware filtering for transparent PNGs. No persistent cache or modified originals are created.
+Images fill Illium's own desktop surfaces on every monitor with centered, aspect-preserving cropping. The same image is used on all monitors. The Windows wallpaper preference is not modified, so leaving Illium restores the underlying desktop as before. Image additions, edits, removals and saved-selection edits are watched separately from configuration: they do not restart applets or change WezTerm's palette. Decoding and resizing run in one background worker: the previous background remains visible until the latest request is ready. Rapid cycling advances from the pending target and discards obsolete results. A 128 MiB LRU cache keeps prepared images, keyed by file path, size, modification time and monitor resolutions; the next wallpaper is preloaded. Prepared buffers for one request are limited to 256 MiB, separately from the decode limits and currently displayed Slint images. Center-cropping and bilinear resampling use SIMD acceleration when supported by the CPU, with alpha-aware filtering for transparent PNGs. No persistent cache or modified originals are created.
 
-Theme-only changes recolor existing shell and applet views without reindexing applications or restarting providers. The subsequent file-watcher notification is ignored when that exact configuration has already been applied. Windows light/dark registry broadcasts are serialized in a separate latest-value worker, since other applications may respond slowly. `winarchyctl config reload` remains an explicit full reload.
+Theme-only changes recolor existing shell and applet views without reindexing applications or restarting providers. The subsequent file-watcher notification is ignored when that exact configuration has already been applied. Windows light/dark registry broadcasts are serialized in a separate latest-value worker, since other applications may respond slowly. `illiumctl config reload` remains an explicit full reload.
 
-Existing keybinding files are not overwritten by an upgrade. Add or replace this entry under `[keybindings]` (older defaults used `wallpaper next`), then reload with **Alt+Shift+R** or `winarchyctl config reload`:
+Existing keybinding files are not overwritten by an upgrade. Add or replace this entry under `[keybindings]` (older defaults used `wallpaper next`), then reload with **Alt+Shift+R** or `illiumctl config reload`:
 
 ```toml
 "Ctrl+Alt+Shift+W" = "wallpaper picker"

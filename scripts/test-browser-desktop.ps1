@@ -52,7 +52,7 @@ function Wait-For([scriptblock]$Condition, [string]$Message) {
         Start-Sleep -Milliseconds 100
     }
 }
-$root = Join-Path $env:TEMP ('winarchy-browser-test-' + [guid]::NewGuid())
+$root = Join-Path $env:TEMP ('illium-browser-test-' + [guid]::NewGuid())
 $configDir = Join-Path $root 'config'
 $filters = Join-Path $configDir 'browser'
 New-Item -ItemType Directory -Force $filters | Out-Null
@@ -61,25 +61,25 @@ New-Item -ItemType Directory -Force (Join-Path $configDir 'themes') | Out-Null
 $themePath = Join-Path $configDir 'themes/test.toml'
 $theme = (Get-Content "$PSScriptRoot/../config/themes/catppuccin-mocha.toml" -Raw) + "`nbackground_opacity = 0.75`n"
 [IO.File]::WriteAllText($themePath, $theme)
-[IO.File]::WriteAllText((Join-Path $configDir 'winarchy.toml'), 'theme = "test"')
+[IO.File]::WriteAllText((Join-Path $configDir 'illium.toml'), 'theme = "test"')
 $opacityPath = Join-Path $configDir 'background-opacity.state'
 @{
     history = @(@{ url='https://rust-lang.org/'; title='Rust language' })
     bookmarks = @(@{ url='https://bookmarked.example/'; title='Bookmarked page' })
 } | ConvertTo-Json -Depth 4 | Set-Content -Encoding Ascii (Join-Path $filters 'library.json')
-$oldHome = $env:WINARCHY_CONFIG_HOME
+$oldHome = $env:ILLIUM_CONFIG_HOME
 $oldLocal = $env:LOCALAPPDATA
 $process = $null
 $log = Join-Path $root 'startup.log'
 try {
-    $env:WINARCHY_CONFIG_HOME = $configDir
+    $env:ILLIUM_CONFIG_HOME = $configDir
     $env:LOCALAPPDATA = Join-Path $root 'local'
     $process = Start-Process -FilePath $Exe -ArgumentList '--standalone' -PassThru -RedirectStandardError $log
     Wait-For { $process.Refresh(); $process.MainWindowHandle -ne [IntPtr]::Zero } 'No browser window'
     Wait-For { (Get-Content $log -Raw -ErrorAction SilentlyContinue) -match 'webview_ready_ms=' } 'WebView not ready'
     $window = $process.MainWindowHandle
     if ($CheckTilingFocus) {
-        # Requires Winarchy running; do not move the mouse during this check.
+        # Requires Illium running; do not move the mouse during this check.
         [void][BrowserTest]::SetThreadDpiAwarenessContext([IntPtr](-4))
         Wait-For { [BrowserTest]::GetForegroundWindow() -eq $window } 'New browser did not receive foreground focus'
         $rect = New-Object BrowserTest+Rect
@@ -176,7 +176,7 @@ try {
         Add-Type -AssemblyName System.Windows.Forms, UIAutomationClient, UIAutomationTypes, System.Drawing
         [void][BrowserTest]::SetForegroundWindow($window)
         Wait-For { [BrowserTest]::GetForegroundWindow() -eq $window } 'Leader test requires foreground focus'
-        $leaderPanel = [BrowserTest]::FindWindowEx($window,[IntPtr]::Zero,'WinarchyLeaderPanel',$null)
+        $leaderPanel = [BrowserTest]::FindWindowEx($window,[IntPtr]::Zero,'IlliumLeaderPanel',$null)
         if ($leaderPanel -eq [IntPtr]::Zero) { throw 'Leader panel missing' }
         function Send-LeaderKeys([string]$keys) {
             if ([BrowserTest]::GetForegroundWindow() -ne $window) { throw 'Focus left the test browser; refusing keyboard input' }
@@ -435,7 +435,7 @@ try {
     }
     Write-Host "PASS: centered home/overlay, Escape, home opacity, fuzzy suggestions, navigation, opaque page, history and bookmark persistence. Logs: $root"
 } finally {
-    $env:WINARCHY_CONFIG_HOME = $oldHome
+    $env:ILLIUM_CONFIG_HOME = $oldHome
     $env:LOCALAPPDATA = $oldLocal
     if ($process -and !$process.HasExited) {
         [void]$process.CloseMainWindow()

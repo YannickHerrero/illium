@@ -1,4 +1,4 @@
-//! Opt-in tests: run only on an interactive Windows desktop with Winarchy running.
+//! Opt-in tests: run only on an interactive Windows desktop with Illium running.
 #![cfg(windows)]
 use std::{sync::mpsc, time::Duration};
 use windows::{
@@ -12,7 +12,7 @@ fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
 }
 fn ctl(s: &str) -> serde_json::Value {
-    let reply = winarchy::platform::ipc::client(s).expect("running daemon");
+    let reply = illium::platform::ipc::client(s).expect("running daemon");
     assert!(reply.ok, "{s}: {}", reply.message);
     if s == "status" {
         serde_json::from_str(&reply.message).unwrap()
@@ -30,7 +30,7 @@ unsafe extern "system" fn procedure(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LR
 fn fixture() -> Vec<isize> {
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || unsafe {
-        let name = wide("WinarchySmokeFixture");
+        let name = wide("IlliumSmokeFixture");
         let wc = WNDCLASSW {
             lpfnWndProc: Some(procedure),
             lpszClassName: PCWSTR(name.as_ptr()),
@@ -39,7 +39,7 @@ fn fixture() -> Vec<isize> {
         RegisterClassW(&wc);
         let mut ids = Vec::new();
         for i in 0..4 {
-            let title = wide(&format!("Winarchy smoke {i}"));
+            let title = wide(&format!("Illium smoke {i}"));
             let h = CreateWindowExW(
                 WINDOW_EX_STYLE(0),
                 PCWSTR(name.as_ptr()),
@@ -120,12 +120,12 @@ impl Drop for Cleanup {
                 let _ = PostMessageW(Some(HWND(*id as *mut _)), WM_CLOSE, WPARAM(0), LPARAM(0));
             }
         }
-        let _ = winarchy::platform::ipc::client(&format!("workspace {}", self.1));
-        let _ = winarchy::platform::ipc::client("theme set catppuccin-mocha");
+        let _ = illium::platform::ipc::client(&format!("workspace {}", self.1));
+        let _ = illium::platform::ipc::client("theme set catppuccin-mocha");
     }
 }
 #[test]
-#[ignore = "moves desktop windows; requires running Winarchy and interactive session"]
+#[ignore = "moves desktop windows; requires running Illium and interactive session"]
 fn desktop_smoke() {
     unsafe {
         let h = GetForegroundWindow();
@@ -213,7 +213,7 @@ fn desktop_smoke() {
         ctl(&format!("window focus {direction}"));
         ctl(&format!("window move {direction}"));
     }
-    use winarchy::command::Direction::{Down, Left, Right, Up};
+    use illium::command::Direction::{Down, Left, Right, Up};
     for (key, direction) in [
         (0x48, Left),
         (0x4a, Down),
@@ -235,14 +235,13 @@ fn desktop_smoke() {
                 .map(|c| {
                     (
                         c["id"].as_i64().unwrap() as isize,
-                        serde_json::from_value::<winarchy::layout::Rect>(c["rect"].clone())
-                            .unwrap(),
+                        serde_json::from_value::<illium::layout::Rect>(c["rect"].clone()).unwrap(),
                     )
                 })
                 .collect::<Vec<_>>()
         };
         let expected =
-            winarchy::layout::neighbor(&geometry(&state), current, direction).unwrap_or(current);
+            illium::layout::neighbor(&geometry(&state), current, direction).unwrap_or(current);
         keys(&[0x12, key]);
         assert_eq!(
             unsafe { GetForegroundWindow().0 as isize },
@@ -256,7 +255,7 @@ fn desktop_smoke() {
             .iter()
             .map(|c| c["id"].as_i64().unwrap() as isize)
             .collect::<Vec<_>>();
-        if let Some(other) = winarchy::layout::neighbor(&geometry(&state), expected, direction) {
+        if let Some(other) = illium::layout::neighbor(&geometry(&state), expected, direction) {
             let a = expected_order
                 .iter()
                 .position(|id| *id == expected)
@@ -350,7 +349,7 @@ fn ipc_desktop_smoke() {
     ctl("theme set catppuccin-latte");
     assert_eq!(status()["theme"], "catppuccin-latte");
     ctl("theme set catppuccin-mocha");
-    let home = winarchy::config::Config::home();
+    let home = illium::config::Config::home();
     let wm = home.join("wm.toml");
     if let Ok(old) = std::fs::read_to_string(&wm) {
         std::fs::write(&wm, old.replace("gap = 16", "gap = 10")).unwrap();
@@ -359,7 +358,7 @@ fn ipc_desktop_smoke() {
         std::fs::write(&wm, "not valid TOML").unwrap();
         std::thread::sleep(Duration::from_secs(1));
         assert_eq!(status()["gap"], 10);
-        assert!(!winarchy::platform::ipc::client("config reload").unwrap().ok);
+        assert!(!illium::platform::ipc::client("config reload").unwrap().ok);
         std::fs::write(&wm, old).unwrap();
         ctl("config reload");
         assert_eq!(status()["gap"], 6);
@@ -371,7 +370,7 @@ fn ipc_desktop_smoke() {
 }
 
 #[test]
-#[ignore = "kills a disposable Winarchy daemon; no existing daemon may be running"]
+#[ignore = "kills a disposable Illium daemon; no existing daemon may be running"]
 fn crash_restores_hidden_windows() {
     crash_session(false);
 }
@@ -400,14 +399,14 @@ fn crash_session(replace: bool) {
         assert!(explorer_running(), "start Explorer before this test");
     }
     let exe =
-        std::env::var("WINARCHY_TEST_DAEMON").expect("set WINARCHY_TEST_DAEMON to test executable");
+        std::env::var("ILLIUM_TEST_DAEMON").expect("set ILLIUM_TEST_DAEMON to test executable");
     let mut command = std::process::Command::new(exe);
     if replace {
         command.arg("--replace-explorer");
     }
     let mut daemon = TestDaemon(command.spawn().unwrap());
     for _ in 0..100 {
-        if winarchy::platform::ipc::client("status").is_ok() {
+        if illium::platform::ipc::client("status").is_ok() {
             break;
         }
         std::thread::sleep(Duration::from_millis(100));

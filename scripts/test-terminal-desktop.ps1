@@ -15,8 +15,8 @@ public static class TerminalDesktopTest {
 }
 '@
 [void][TerminalDesktopTest]::SetProcessDPIAware()
-$configHome=Join-Path $env:TEMP ('winarchy-terminal-test-'+[guid]::NewGuid())
-$old=$env:WINARCHY_CONFIG_HOME
+$configHome=Join-Path $env:TEMP ('illium-terminal-test-'+[guid]::NewGuid())
+$old=$env:ILLIUM_CONFIG_HOME
 New-Item -ItemType Directory "$configHome\themes" -Force | Out-Null
 $theme=@'
 name = "Terminal test"
@@ -50,10 +50,10 @@ function Wait-Color($hwnd,$expected) {
 }
 $p=$null
 try {
- Save-Utf8 "$configHome\winarchy.toml" 'theme = "test"'
+ Save-Utf8 "$configHome\illium.toml" 'theme = "test"'
  Save-Utf8 "$configHome\themes\test.toml" $theme
  Save-Utf8 "$configHome\terminal.toml" 'font_size = 14.0'
- $env:WINARCHY_CONFIG_HOME=$configHome
+ $env:ILLIUM_CONFIG_HOME=$configHome
  $p=Start-Process $Executable -ArgumentList '--standalone' -PassThru
  Start-Sleep -Seconds 3;$p.Refresh();$hwnd=$p.MainWindowHandle
  if ($hwnd -eq 0) {throw 'No terminal window'}
@@ -72,7 +72,7 @@ try {
  $p.Refresh();if ($p.MainWindowHandle -ne $hwnd) {throw 'Reload replaced the window'}
  'PASS: live palette, font reload, invalid alpha retention, unchanged HWND and WSL PID'
 } finally {
- $env:WINARCHY_CONFIG_HOME=$old
+ $env:ILLIUM_CONFIG_HOME=$old
  if ($null -ne $p -and -not $p.HasExited) {[void]$p.CloseMainWindow();if (-not $p.WaitForExit(5000)) {throw 'Test terminal did not exit'}}
  Remove-Item -Recurse -Force $configHome
 }

@@ -1,6 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>Winarchy tabs fixture — first</title>
+<title>Illium tabs fixture — first</title>
 <style>body { font: 18px system-ui; color-scheme: light dark; } input { font: inherit; }</style>
 <h1>Background tabs fixture</h1>
 <p>Type below, switch tabs, then return: the value and scroll position should remain.</p>
@@ -13,7 +13,7 @@
 <script>
 const query = new URLSearchParams(location.search);
 const child = query.has('child');
-document.title = 'Winarchy tabs fixture — ' + (child ? 'second' : 'first');
+document.title = 'Illium tabs fixture — ' + (child ? 'second' : 'first');
 document.querySelector('#popup').onclick = () => window.open('tabs.html?child=1');
 window.addEventListener('load', () => {
   document.querySelector('#network').textContent = !window.adLoaded && window.exceptionLoaded

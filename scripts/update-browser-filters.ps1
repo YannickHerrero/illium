@@ -1,11 +1,11 @@
 # Run explicitly, never on the browser's startup path. Restart the browser afterwards.
 [CmdletBinding()]
-param([string]$ConfigHome = $env:WINARCHY_CONFIG_HOME)
+param([string]$ConfigHome = $env:ILLIUM_CONFIG_HOME)
 $ErrorActionPreference = 'Stop'
-if (!$ConfigHome) { $ConfigHome = Join-Path $HOME '.config/winarchy' }
+if (!$ConfigHome) { $ConfigHome = Join-Path $HOME '.config/illium' }
 $dir = Join-Path $ConfigHome 'browser'
 New-Item -ItemType Directory -Force $dir | Out-Null
-# Upstream lists retain their own licenses, not Winarchy's MIT license.
+# Upstream lists retain their own licenses, not Illium's MIT license.
 # See https://easylist.to/pages/licence.html and docs/browser.md.
 $lists = @{
     'easylist.txt' = 'https://easylist.to/easylist/easylist.txt'
@@ -27,4 +27,4 @@ foreach ($name in $lists.Keys) {
 }
 # Old compiled caches are rebuildable, never user data.
 Get-ChildItem $dir -Filter 'filters-adblock-*.bin' | Remove-Item
-Write-Host 'Restart winarchy-browser to use these lists.'
+Write-Host 'Restart illium-browser to use these lists.'

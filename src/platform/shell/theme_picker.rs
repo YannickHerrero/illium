@@ -10,6 +10,7 @@ use crate::{
         render::{Colors, Key, PAD},
     },
 };
+use illium_theme::preview::Entry;
 use slint::{ComponentHandle, ModelRc, VecModel};
 use std::{
     cell::{Cell, RefCell},
@@ -18,7 +19,6 @@ use std::{
     rc::Rc,
     sync::{Arc, Weak},
 };
-use winarchy_theme::preview::Entry;
 use windows::Win32::UI::WindowsAndMessaging::HWND_TOPMOST;
 
 #[derive(Clone, Debug)]
@@ -181,7 +181,7 @@ impl Picker {
                 w: 1,
                 h: 1,
             },
-            colors: Colors::from_theme(&winarchy_theme::Theme::default_theme()),
+            colors: Colors::from_theme(&illium_theme::Theme::default_theme()),
             entries: vec![],
             model: Model::default(),
             shown: Model::default(),

@@ -1,8 +1,8 @@
-use winarchy::layout::{Axis, Rect, Splits, fibonacci};
+use illium::layout::{Axis, Rect, Splits, fibonacci};
 
 #[test]
 fn default_shortcuts_and_editor_labels() {
-    use winarchy::{command::Command, config::Keys, keybindings, keyboard};
+    use illium::{command::Command, config::Keys, keybindings, keyboard};
     let keys: Keys = toml::from_str(keybindings::DEFAULTS).unwrap();
     let bindings = keyboard::parse(&keys).unwrap();
     for (key, axis, delta, label) in [
@@ -125,7 +125,7 @@ fn limits_and_degenerate_cases() {
 }
 #[test]
 fn membership_order_generation_and_workspace_isolation() {
-    let mut model = winarchy::model::Model::new();
+    let mut model = illium::model::Model::new();
     model.splits[0].sync(vec![(1, 1), (2, 2)]);
     model.splits[1].sync(vec![(3, 3), (4, 4)]);
     model.splits[0].resize(0, Axis::Width, 5);

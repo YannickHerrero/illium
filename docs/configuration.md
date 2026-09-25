@@ -1,10 +1,10 @@
 # Configuration
 
-All files live under `%USERPROFILE%\.config\winarchy`, or `WINARCHY_CONFIG_HOME`. Missing defaults are installed using create-new semantics: existing files are never overwritten. TOML files are UTF-8 regular files (no symlinks/reparse points), limited to 64 KiB each. Configuration and theme directory snapshots examine at most 256 entries.
+All files live under `%USERPROFILE%\.config\illium`, or `ILLIUM_CONFIG_HOME`. Missing defaults are installed using create-new semantics: existing files are never overwritten. TOML files are UTF-8 regular files (no symlinks/reparse points), limited to 64 KiB each. Configuration and theme directory snapshots examine at most 256 entries.
 
-Directory notifications trigger a debounced, validated reload. Changes to logs and recovery markers do not cause reloads. Reload is transactional across the configuration set: if any file is invalid, the last valid configuration remains active. Fix the file or run `winarchyctl config reload` to see a readable error. Startup requires valid files.
+Directory notifications trigger a debounced, validated reload. Changes to logs and recovery markers do not cause reloads. Reload is transactional across the configuration set: if any file is invalid, the last valid configuration remains active. Fix the file or run `illiumctl config reload` to see a readable error. Startup requires valid files.
 
-## winarchy.toml
+## illium.toml
 
 Only global settings:
 
@@ -13,7 +13,7 @@ theme = "catppuccin-mocha"
 background_blur = false
 ```
 
-`background_blur` (optional, default `false`) blurs what lies behind the translucent backgrounds of the native terminal, Files and Tasks, for a frosted-glass look with [`background_opacity`](themes.md). It applies live to open and hidden windows and survives theme switches; `winarchyctl blur toggle` flips it. It uses the Windows accent blur, which stays visible on unfocused windows, and needs Windows' "Transparency effects" setting (Settings > Personalization > Colors) to be on. The browser, the status bar and external applications are not blurred.
+`background_blur` (optional, default `false`) blurs what lies behind the translucent backgrounds of the native terminal, Files and Tasks, for a frosted-glass look with [`background_opacity`](themes.md). It applies live to open and hidden windows and survives theme switches; `illiumctl blur toggle` flips it. It uses the Windows accent blur, which stays visible on unfocused windows, and needs Windows' "Transparency effects" setting (Settings > Personalization > Colors) to be on. The browser, the status bar and external applications are not blurred.
 
 ## wm.toml
 
@@ -28,7 +28,7 @@ border_width = 2
 conceal = "park"
 ```
 
-V1 requires nine workspaces and Fibonacci. Gaps are 0–100 logical pixels. Pointer focus focuses eligible clients on pointer entry. In the other direction, focus changed by a directional shortcut or a workspace switch centers the pointer on the newly focused client. Dimensions are scaled to physical monitor coordinates. Gaps are measured between the visible frames of windows: Winarchy compensates for the invisible resize borders Windows adds around top-level windows. `square_corners` asks the Desktop Window Manager not to round the corners of managed windows and shell surfaces; the preference is reset when a window leaves Winarchy. `border_width` is the total visible border around each visible client in logical pixels, including the one-pixel edge Windows draws itself, in the theme's `accent` for the focused one and `overlay` for the others; 0 disables it. Border widths are 0 to 32. `conceal` selects how the clients of inactive workspaces leave the screen: `park` (the default) moves them entirely off screen, to x = -32000 like minimized windows, so the window stays visible to Win32, keeps painting and comes back to its place without repainting, and the [exposé](usage.md#exposé) can still capture it; `hide` uses plain ShowWindow, as a fallback for an application that misbehaves off screen (its exposé card then shows only the icon and title). Either way the recovery helper restores the windows if the daemon dies.
+V1 requires nine workspaces and Fibonacci. Gaps are 0–100 logical pixels. Pointer focus focuses eligible clients on pointer entry. In the other direction, focus changed by a directional shortcut or a workspace switch centers the pointer on the newly focused client. Dimensions are scaled to physical monitor coordinates. Gaps are measured between the visible frames of windows: Illium compensates for the invisible resize borders Windows adds around top-level windows. `square_corners` asks the Desktop Window Manager not to round the corners of managed windows and shell surfaces; the preference is reset when a window leaves Illium. `border_width` is the total visible border around each visible client in logical pixels, including the one-pixel edge Windows draws itself, in the theme's `accent` for the focused one and `overlay` for the others; 0 disables it. Border widths are 0 to 32. `conceal` selects how the clients of inactive workspaces leave the screen: `park` (the default) moves them entirely off screen, to x = -32000 like minimized windows, so the window stays visible to Win32, keeps painting and comes back to its place without repainting, and the [exposé](usage.md#exposé) can still capture it; `hide` uses plain ShowWindow, as a fallback for an application that misbehaves off screen (its exposé card then shows only the icon and title). Either way the recovery helper restores the windows if the daemon dies.
 
 ## keybindings.toml
 
@@ -46,7 +46,7 @@ V1 requires nine workspaces and Fibonacci. Gaps are 0–100 logical pixels. Poin
 "Alt+Shift+3" = "window move-workspace 3 --follow"
 ```
 
-Modifiers: Alt, Ctrl, Shift, Super. Keys: letters, digits, Space, Enter, arrows, Escape, Tab, F1 to F12, and a single punctuation character such as `?` or `,`, resolved to the physical key that types it on the active keyboard layout. A function key may be bound alone. The `dictate` command is the one hold-to-talk action: the daemon records through [winarchy-dictate.exe](dictate.md) while its key is down, swallowing the key's repeats and release; over `winarchyctl dictate` it toggles. Matching uses virtual keys, with exact modifier sets. Remove a binding to release that shortcut to applications. Only configured combinations are consumed; Ctrl+Alt+Delete is not supported. Default bindings are listed in the README and shipped `config/defaults/keybindings.toml`.
+Modifiers: Alt, Ctrl, Shift, Super. Keys: letters, digits, Space, Enter, arrows, Escape, Tab, F1 to F12, and a single punctuation character such as `?` or `,`, resolved to the physical key that types it on the active keyboard layout. A function key may be bound alone. The `dictate` command is the one hold-to-talk action: the daemon records through [illium-dictate.exe](dictate.md) while its key is down, swallowing the key's repeats and release; over `illiumctl dictate` it toggles. Matching uses virtual keys, with exact modifier sets. Remove a binding to release that shortcut to applications. Only configured combinations are consumed; Ctrl+Alt+Delete is not supported. Default bindings are listed in the README and shipped `config/defaults/keybindings.toml`.
 
 Opacity shortcuts adjust all bundled applications by five percentage points (5–100%),
 without changing the installed theme; browser pages remain opaque. See
@@ -68,7 +68,7 @@ not overwrite your file), then reload with **Alt+Shift+R**:
 ```
 
 The same commands work over IPC, for example
-`winarchyctl window resize --width +5%`. One axis and a signed integer percentage
+`illiumctl window resize --width +5%`. One axis and a signed integer percentage
 from -100% to +100% (excluding zero) are required. Hold a resize shortcut to
 repeat it; other ordinary shortcuts remain one-shot.
 
@@ -88,7 +88,7 @@ Ratios are kept in memory per workspace through focus/workspace changes,
 configuration reloads and display changes. They belong to layout positions, so
 swapping windows keeps the proportions. Changing tiled membership resets that
 workspace to equal splits: opening/closing, moving between workspaces,
-minimizing/restoring, or toggling floating/fullscreen. Restarting Winarchy also
+minimizing/restoring, or toggling floating/fullscreen. Restarting Illium also
 resets ratios. No new layout type or persistent configuration is needed.
 
 Desktop validation: try 2, 3 and 5 tiled windows, each shortcut and a held key;
@@ -106,11 +106,11 @@ browser = "msedge.exe"
 editor = '"C:\Program Files\Editor\editor.exe" --new-window'
 ```
 
-Values are native Windows command lines passed to CreateProcessW, not shell scripts. Quote paths with spaces. TOML single-quoted literal strings avoid backslash escaping. For shell syntax explicitly configure `cmd.exe /c ...` or a PowerShell invocation. PATH is inherited when Winarchy starts.
+Values are native Windows command lines passed to CreateProcessW, not shell scripts. Quote paths with spaces. TOML single-quoted literal strings avoid backslash escaping. For shell syntax explicitly configure `cmd.exe /c ...` or a PowerShell invocation. PATH is inherited when Illium starts.
 
 ## terminal.toml
 
-Preferences for the optional bundled `winarchy-terminal.exe`: font family/size,
+Preferences for the optional bundled `illium-terminal.exe`: font family/size,
 padding, bounded scrollback and WSL distribution. Colors and background opacity
 belong to the selected theme, not this file. See [native terminal](terminal.md)
 for settings, activation and the resident fast path. Editing terminal preferences
@@ -149,7 +149,7 @@ JetBrains Mono otherwise. Size is in logical pixels (6–48, default 13).
 Weight accepts 100–900 (`400` regular, `700` bold) and applies to all workspace
 labels. When omitted, kanji and the active workspace remain bold, other numerals
 regular. Invalid sizes/weights reject the reload and retain the last valid config.
-You can also reload explicitly with `winarchyctl config reload`.
+You can also reload explicitly with `illiumctl config reload`.
 
 Positions: top/bottom. Height: 16–100 logical pixels. Each section lists built-in modules and applet names in display order; an applet name must match a folder under `applets/` with an `applet.toml` (see [applets](applets.md)). Built-in modules: space (name of the current space, hidden while there is only one; a click opens the [space picker](usage.md#spaces)), window-title, volume, battery, clock, cpu (overall load in percent since the previous refresh), memory (available RAM in GB with one decimal), drawer (see [below](#drawer)) and separator, a fine vertical divider in the subtext color that widens the gap between its neighbours, has no module action when clicked and may be listed as many times as wanted. Workspaces are supported on the left, at their listed position: for example, `left = ["winagotchi", "workspaces"]` places an installed `winagotchi` applet before the workspace buttons. The center is centered on the screen regardless of the side groups' widths. battery, cpu and memory show a monochrome icon in the theme's subtext color next to their value. Battery disappears when unavailable; audio is read from the default render endpoint. Clock substitutions, in English: `%A` weekday, `%a` short weekday, `%d` day, `%B` month, `%b` short month (Jan, Feb, Mar, Apr, May, June, July, Aug, Sept, Oct, Nov, Dec), `%H`, `%M`, `%S`. A bar is created on every monitor; its reservation is calculated directly, never from Explorer's taskbar work area. The bar's surface uses the theme's shared `background_opacity`, including live opacity shortcuts, while text, icons and the active workspace indicator stay opaque. Clicking an empty area of the bar toggles its background between that translucent surface color and fully transparent (the wallpaper shows through); a click that closes an open popup does not toggle. The toggle is not persisted across daemon restarts. The bar uses bundled JetBrains Mono,
 rounded workspace indicators and subtle hover feedback. A fine border faces the desktop
@@ -217,7 +217,7 @@ title = "Picture-in-Picture"
 ignore = true
 ```
 
-Fields are optional. Supplied executable (full path), class and title fields must all match case-insensitive substrings. Empty match fields match all eligible windows. Rules run in file order: ignore wins immediately, floating accumulates, and the last matching workspace assignment wins. Workspace numbers must be 1–9. Rules apply on initial management, not retroactively to existing clients. Child/invisible/cloaked/tool/shell/Winarchy windows are filtered before rules; dialogs and owned windows float automatically.
+Fields are optional. Supplied executable (full path), class and title fields must all match case-insensitive substrings. Empty match fields match all eligible windows. Rules run in file order: ignore wins immediately, floating accumulates, and the last matching workspace assignment wins. Workspace numbers must be 1–9. Rules apply on initial management, not retroactively to existing clients. Child/invisible/cloaked/tool/shell/Illium windows are filtered before rules; dialogs and owned windows float automatically.
 
 ## themes/*.toml
 
@@ -225,4 +225,4 @@ See [themes](themes.md). Adding a theme requires no rebuild.
 
 ## Logs
 
-`winarchy.log` is written inside the configuration directory. Start with `--debug` for command and positioning diagnostics. New window lifecycle messages omit application titles, and launch command arguments are omitted even in debug mode. Historical logs and configuration parse errors can still contain private data; review logs before sharing. Logs currently require manual rotation while the daemon is stopped.
+`illium.log` is written inside the configuration directory. Start with `--debug` for command and positioning diagnostics. New window lifecycle messages omit application titles, and launch command arguments are omitted even in debug mode. Historical logs and configuration parse errors can still contain private data; review logs before sharing. Logs currently require manual rotation while the daemon is stopped.

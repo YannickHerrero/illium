@@ -1,11 +1,11 @@
 //! Opt-in interactive test. Uses a disposable config; temporarily changes theme.
 #![cfg(windows)]
+use illium_ipc::client::client;
 use std::{
     fs,
     path::PathBuf,
     time::{Duration, Instant},
 };
-use winarchy_ipc::client::client;
 use windows::{
     Win32::{
         Foundation::*,
@@ -60,7 +60,7 @@ fn send(vk: VIRTUAL_KEY, scan: u16, unicode: bool) {
     );
 }
 fn picker_hwnd() -> HWND {
-    unsafe { FindWindowW(None, w!("Winarchy Theme Picker")) }.unwrap()
+    unsafe { FindWindowW(None, w!("Illium Theme Picker")) }.unwrap()
 }
 struct Restore {
     home: PathBuf,
@@ -78,7 +78,7 @@ impl Drop for Restore {
             let _ = client("launcher toggle");
             let _ = client("launcher toggle");
         }
-        let _ = fs::write(self.home.join("winarchy.toml"), &self.global);
+        let _ = fs::write(self.home.join("illium.toml"), &self.global);
         if let Some(bytes) = &self.wallpapers {
             let _ = fs::write(self.home.join("wallpapers.json"), bytes);
         } else {
@@ -90,16 +90,16 @@ impl Drop for Restore {
     }
 }
 #[test]
-#[ignore = "requires an unlocked Windows desktop and running upgraded daemon with a disposable WINARCHY_CONFIG_HOME; changes theme and keyboard focus"]
+#[ignore = "requires an unlocked Windows desktop and running upgraded daemon with a disposable ILLIUM_CONFIG_HOME; changes theme and keyboard focus"]
 fn picker_focus_filter_cancel_confirm_and_asset_refresh() {
-    let home = winarchy_theme::config_home();
+    let home = illium_theme::config_home();
     let initial = status();
     assert_eq!(initial["theme_picker"], false, "close shell menus first");
     let name = format!("picker-smoke-{}", std::process::id());
     assert!(!home.join("themes").join(&name).exists());
     assert!(!home.join(format!("themes/{name}.toml")).exists());
     let restore = Restore {
-        global: fs::read(home.join("winarchy.toml")).unwrap(),
+        global: fs::read(home.join("illium.toml")).unwrap(),
         wallpapers: fs::read(home.join("wallpapers.json")).ok(),
         home: home.clone(),
         name: name.clone(),
@@ -120,10 +120,7 @@ fn picker_focus_filter_cancel_confirm_and_asset_refresh() {
         send(VIRTUAL_KEY(0), c, true);
     }
     wait(|s| s["theme_picker_filter"] == name && s["theme_picker_selected"] == name);
-    assert_eq!(
-        fs::read(home.join("winarchy.toml")).unwrap(),
-        restore.global
-    );
+    assert_eq!(fs::read(home.join("illium.toml")).unwrap(), restore.global);
     send(VK_ESCAPE, 0, false);
     wait(|s| s["theme_picker"] == true && s["theme_picker_filter"] == "");
     send(VK_ESCAPE, 0, false);

@@ -43,7 +43,7 @@ fn snapshot(window: &MinimalSoftwareWindow, name: &str) -> Vec<PremultipliedRgba
     window.draw_if_needed(|renderer| {
         renderer.render(&mut pixels, size.width as usize);
     });
-    if let Some(dir) = std::env::var_os("WINARCHY_PICKER_RENDER_DIR") {
+    if let Some(dir) = std::env::var_os("ILLIUM_PICKER_RENDER_DIR") {
         fs::create_dir_all(&dir).unwrap();
         let image = image::RgbaImage::from_fn(size.width, size.height, |x, y| {
             let p = pixels[(y * size.width + x) as usize];
@@ -69,8 +69,7 @@ fn snapshot(window: &MinimalSoftwareWindow, name: &str) -> Vec<PremultipliedRgba
 }
 #[test]
 fn headless_picker_renders_filters_and_never_applies_while_browsing() {
-    let temp =
-        Temp(std::env::temp_dir().join(format!("winarchy-picker-ui-{}", std::process::id())));
+    let temp = Temp(std::env::temp_dir().join(format!("illium-picker-ui-{}", std::process::id())));
     let _ = fs::remove_dir_all(&temp.0);
     Config::install(&temp.0).unwrap();
     // Test legacy palette-only themes alongside our deterministic fixtures.
@@ -103,8 +102,8 @@ fn headless_picker_renders_filters_and_never_applies_while_browsing() {
         .save(temp.0.join(format!("themes/{id}/preview.png")))
         .unwrap();
     }
-    fs::write(temp.0.join("winarchy.toml"), "theme = \"ocean\"\n").unwrap();
-    let before = fs::read(temp.0.join("winarchy.toml")).unwrap();
+    fs::write(temp.0.join("illium.toml"), "theme = \"ocean\"\n").unwrap();
+    let before = fs::read(temp.0.join("illium.toml")).unwrap();
     let config = Config::load(&temp.0).unwrap();
     let windows = Rc::new(RefCell::new(vec![]));
     slint::platform::set_platform(Box::new(Headless(windows.clone()))).unwrap();
@@ -282,7 +281,7 @@ fn headless_picker_renders_filters_and_never_applies_while_browsing() {
     assert!(picker.error.is_some());
     let mut light = config.clone();
     light.theme =
-        winarchy_theme::Theme::parse(include_str!("../../../config/themes/catppuccin-latte.toml"))
+        illium_theme::Theme::parse(include_str!("../../../config/themes/catppuccin-latte.toml"))
             .unwrap();
     picker.apply_theme(&light);
     assert_eq!(settle(&mut picker), Outcome::None);
@@ -297,7 +296,7 @@ fn headless_picker_renders_filters_and_never_applies_while_browsing() {
     );
     assert_eq!(settle(&mut picker), Outcome::None);
     picker.close();
-    assert_eq!(fs::read(temp.0.join("winarchy.toml")).unwrap(), before);
+    assert_eq!(fs::read(temp.0.join("illium.toml")).unwrap(), before);
     assert!(!temp.0.join("wallpapers.json").exists());
 
     // The same production surface/worker now browses actual wallpapers. Exact
@@ -412,6 +411,6 @@ fn headless_picker_renders_filters_and_never_applies_while_browsing() {
         picker.views.is_empty(),
         "notifications invalidate closed views too"
     );
-    assert_eq!(fs::read(temp.0.join("winarchy.toml")).unwrap(), before);
+    assert_eq!(fs::read(temp.0.join("illium.toml")).unwrap(), before);
     assert!(!temp.0.join("wallpapers.json").exists());
 }

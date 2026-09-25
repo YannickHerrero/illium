@@ -1,6 +1,6 @@
 # Applications
 
-`winarchy-apps.exe` holds the companion applications in one executable, one
+`illium-apps.exe` holds the companion applications in one executable, one
 subcommand each: `shot`, `tasks`, `files`. The daemon starts them from its own
 directory with the `app <name>` command, so `keybindings.toml` binds them
 (`Alt+E` for `app files`, `Alt+Shift+Escape` for `app tasks`, `Win+Shift+S`
@@ -9,11 +9,11 @@ launcher list them as Files, Tasks and Screenshot.
 
 ## Resident process
 
-`winarchy-apps.exe serve` keeps the file manager and the task manager ready:
+`illium-apps.exe serve` keeps the file manager and the task manager ready:
 both windows are built once and hidden, and `app files` or `app tasks` only
 shows them. The daemon starts it when it is ready, asks it over an
-owner-only named pipe (`winarchy-apps-<SID>-<session>`, one instance per
-user and session), and falls back to a plain `winarchy-apps.exe <name>`
+owner-only named pipe (`illium-apps-<SID>-<session>`, one instance per
+user and session), and falls back to a plain `illium-apps.exe <name>`
 process when it does not answer, restarting it for the next time. `q` hides
 the window and keeps its state (directory, sort, filter); the next show reads
 the theme again. Showing a window takes 10 to 60 ms in the resident, against
@@ -24,9 +24,9 @@ showing an overlay or capturing the desktop. `app shot` captures the current
 screen on demand; repeated requests during a selection are ignored. Completing
 or cancelling a selection releases its screen buffers and keeps the worker ready.
 A failed resident request falls back to the standalone screenshot process.
-`winarchy-apps.log` records the capture-to-overlay preparation time in milliseconds.
+`illium-apps.log` records the capture-to-overlay preparation time in milliseconds.
 The resident uses 25 to 45 MB and samples processes only while Tasks is
-shown; `winarchyctl quit` stops it with the daemon.
+shown; `illiumctl quit` stops it with the daemon.
 
 They have no title bar (the manager's border marks the focused one), read the
 active theme from the configuration home when they are shown and follow theme
@@ -34,15 +34,15 @@ and shared `background_opacity` changes live, including while hidden. Their
 backgrounds default to 85% opacity; text and selection stay readable and opaque.
 Ctrl+Alt+Shift+Y/U adjust opacity by five points for all companion windows (see
 [themes](themes.md#adjust-opacity-live)). They are otherwise
-ordinary windows: Winarchy tiles them like any client, and a
-rule on `winarchy-apps.exe` in `rules.toml` can float them instead. Their
+ordinary windows: Illium tiles them like any client, and a
+rule on `illium-apps.exe` in `rules.toml` can float them instead. Their
 Slint markup is compiled into the executable; the interpreter is reserved
 for applets. A crash in an application never touches the window manager, and
 the process holding the keyboard hook contains no file or process code.
 
 In every application `q` quits, `?` shows the keys, and the bottom line shows
 the mode, a pending question or the last error. Failures are also appended to
-`winarchy-apps.log` in the temporary directory.
+`illium-apps.log` in the temporary directory.
 
 ## Tasks
 
@@ -98,8 +98,8 @@ Rename and create use plain file system calls. Listings stop at 10,000
 entries with a notice. Nothing is previewed as an image, and there are no
 tabs, bookmarks or plugins.
 
-`winarchy-apps.exe files <directory>` starts in that directory instead of
-the user profile; through the resident, `winarchyctl app files` shows the
+`illium-apps.exe files <directory>` starts in that directory instead of
+the user profile; through the resident, `illiumctl app files` shows the
 directory left open, or the profile the first time.
 
 ## Opacity desktop smoke test
@@ -107,7 +107,7 @@ directory left open, or the profile the first time.
 On an unlocked Windows desktop, with test windows unobscured:
 
 ```powershell
-./scripts/test-apps-opacity-desktop.ps1 -Executable C:\path\to\winarchy-apps.exe
+./scripts/test-apps-opacity-desktop.ps1 -Executable C:\path\to\illium-apps.exe
 ```
 
 This opens disposable standalone Files and Tasks windows and checks live opacity,
@@ -121,7 +121,7 @@ terminal/browser windows sharing the daemon's shortcuts.
 `shot` freezes the virtual screen dimmed; drag a rectangle to copy it to the
 clipboard as a bitmap. Escape or a right click cancels.
 
-Manual Windows check after restarting Winarchy: confirm no overlay appears at
+Manual Windows check after restarting Illium: confirm no overlay appears at
 startup, then time the first Win+Shift+S and subsequent invocations. Compare the
 `shot: overlay ready` log entries (capture/preparation only, not process startup).
 Test Escape, right click, focus loss, repeated shortcuts during selection and

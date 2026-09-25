@@ -7,7 +7,7 @@ pub struct Client {
     pub workspace: u8,
     pub floating: bool,
     pub fullscreen: bool,
-    /// Hidden by Winarchy because its workspace is inactive.
+    /// Hidden by Illium because its workspace is inactive.
     pub hidden: bool,
     /// Rectangle before the client was parked off screen.
     pub parked: Option<Rect>,

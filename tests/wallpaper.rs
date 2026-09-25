@@ -1,17 +1,17 @@
 //! Opt-in IPC test. Temporarily changes the desktop theme; restores original files.
 #![cfg(windows)]
+use illium_ipc::client::client;
 use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
-use winarchy_ipc::client::client;
 const IMAGE: &[u8] = include_bytes!("fixtures/wallpaper.png");
 fn command(s: &str) {
-    let reply = client(s).expect("running Winarchy");
+    let reply = client(s).expect("running Illium");
     assert!(reply.ok, "{s}: {}", reply.message);
 }
 fn status() -> serde_json::Value {
-    let reply = client("status").expect("running Winarchy");
+    let reply = client("status").expect("running Illium");
     assert!(reply.ok, "{}", reply.message);
     serde_json::from_str(&reply.message).unwrap()
 }
@@ -34,7 +34,7 @@ struct Restore {
 }
 impl Drop for Restore {
     fn drop(&mut self) {
-        let _ = std::fs::write(self.home.join("winarchy.toml"), &self.global);
+        let _ = std::fs::write(self.home.join("illium.toml"), &self.global);
         match &self.selections {
             Some(bytes) => {
                 let _ = std::fs::write(self.home.join("wallpapers.json"), bytes);
@@ -52,13 +52,13 @@ impl Drop for Restore {
 #[ignore = "temporarily changes themes; requires a running upgraded daemon with the same config home"]
 fn wallpapers_follow_selection_and_directory_changes() {
     let initial = status();
-    let home = winarchy_theme::config_home();
+    let home = illium_theme::config_home();
     let name = format!("wallpaper-smoke-{}", std::process::id());
     let dir = home.join("themes").join(&name);
     assert!(!dir.exists());
     assert!(!home.join("themes").join(format!("{name}.toml")).exists());
     let _restore = Restore {
-        global: std::fs::read(home.join("winarchy.toml")).unwrap(),
+        global: std::fs::read(home.join("illium.toml")).unwrap(),
         selections: std::fs::read(home.join("wallpapers.json")).ok(),
         home: home.clone(),
         name: name.clone(),

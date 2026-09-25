@@ -1,6 +1,6 @@
 # Testing
 
-Winarchy is an integration candidate, not a verified V1 release. Automated checks cover the pure logic; the interactive behaviour is exercised by opt-in desktop tests that rearrange real windows.
+Illium is an integration candidate, not a verified V1 release. Automated checks cover the pure logic; the interactive behaviour is exercised by opt-in desktop tests that rearrange real windows.
 
 ## Automated checks
 
@@ -12,7 +12,7 @@ cargo test --workspace --locked
 python3 scripts/check-cli-dependencies.py
 ```
 
-The Linux test suite covers the command grammar, configuration loading and invalid reloads, palettes, rule matching, keyboard chords and modifier tracking, Fibonacci geometry and non-overlap, directional navigation, workspace ordering, IPC framing and timeouts, and the models of the companion applications (process sorting and filtering, file listing, selection, clipboard and prompts against a temporary tree). The dependency check keeps `winarchyctl` free of the daemon and UI toolkit. CI runs the same checks on `windows-latest` and packages the release binaries.
+The Linux test suite covers the command grammar, configuration loading and invalid reloads, palettes, rule matching, keyboard chords and modifier tracking, Fibonacci geometry and non-overlap, directional navigation, workspace ordering, IPC framing and timeouts, and the models of the companion applications (process sorting and filtering, file listing, selection, clipboard and prompts against a temporary tree). The dependency check keeps `illiumctl` free of the daemon and UI toolkit. CI runs the same checks on `windows-latest` and packages the release binaries.
 
 ## Workspace switcher
 
@@ -21,26 +21,26 @@ fitting, negative monitor coordinates, proportional source clipping and
 non-overlapping occlusion fragments:
 
 ```sh
-cargo test -p winarchy --lib workspace_switcher
-cargo test -p winarchy-ipc
+cargo test -p illium --lib workspace_switcher
+cargo test -p illium-ipc
 ```
 
 Windows additionally exercises the production Slint view/session with a
 headless software renderer: card labels, fallback stacking, minimized windows,
 stale input, browsing without activation, confirmation during animation,
-removal, cancellation and teardown. Set `WINARCHY_WORKSPACE_RENDER` to a PNG path
+removal, cancellation and teardown. Set `ILLIUM_WORKSPACE_RENDER` to a PNG path
 for a rendered fixture. The optional DWM test creates **only offscreen,
 non-activating test windows**; it checks parked-source registration, cropped
 fragments, reuse during movement, disposal and unchanged foreground:
 
 ```powershell
-cargo test -p winarchy --lib headless_workspace_switcher -- --test-threads=1
-cargo test -p winarchy --lib native_workspace_thumbnail -- --ignored --test-threads=1
+cargo test -p illium --lib headless_workspace_switcher -- --test-threads=1
+cargo test -p illium --lib native_workspace_thumbnail -- --ignored --test-threads=1
 ```
 
 Manual desktop acceptance after upgrading both binaries:
 
-1. Open `winarchyctl workspace switcher toggle`; verify the nine cards and live
+1. Open `illiumctl workspace switcher toggle`; verify the nine cards and live
    terminal/video previews, including inactive workspaces with `conceal = "park"`.
 2. Hold arrows/hjkl, reverse direction mid-animation, jump with 1–9; the real
    active workspace must remain unchanged until Enter. Escape restores focus.
@@ -61,8 +61,8 @@ corrupt caches, shared Dark/Light selection, publication rollback, effective
 palette subscriptions and recovery from invalid disposable state:
 
 ```sh
-cargo test -p winarchy-theme --features live
-cargo test -p winarchy --lib dynamic
+cargo test -p illium-theme --features live
+cargo test -p illium --lib dynamic
 ```
 
 Windows additionally exercises the production wallpaper coordinator with a
@@ -72,9 +72,9 @@ switching, opacity preservation, fresh-coordinator restoration, source removal
 and edits, clear/fallback and cancellation when returning to a static theme:
 
 ```powershell
-cargo test -p winarchy --lib dynamic_wallpaper_lifecycle -- --test-threads=1
-cargo test -p winarchy --lib headless_picker -- --test-threads=1
-cargo test -p winarchy-terminal --lib reload
+cargo test -p illium --lib dynamic_wallpaper_lifecycle -- --test-threads=1
+cargo test -p illium --lib headless_picker -- --test-threads=1
+cargo test -p illium-terminal --lib reload
 ```
 
 Implementation validation passed on Linux and the targeted tests ran on Windows
@@ -105,17 +105,17 @@ It also verifies the shared temporary override and reset without changing the
 running desktop or personal configuration:
 
 ```powershell
-cargo test -p winarchy --lib bar_fades_only_its_background_and_honors_shared_override -- --nocapture
+cargo test -p illium --lib bar_fades_only_its_background_and_honors_shared_override -- --nocapture
 ```
 
-This test passes on Windows. After deployment, `winarchyctl status` exposes
+This test passes on Windows. After deployment, `illiumctl status` exposes
 `bar_background_opacity` (null when no bar exists) alongside `bar_transparent`.
 Opacity shortcuts and external override edits update bars in place, without
 restarting applets or recreating HWNDs. The opt-in live regression also covers a
 quick command/reset whose file notifications can coalesce:
 
 ```powershell
-.\scripts\test-bar-opacity-desktop.ps1 -Bin "$env:LOCALAPPDATA\Programs\Winarchy"
+.\scripts\test-bar-opacity-desktop.ps1 -Bin "$env:LOCALAPPDATA\Programs\Illium"
 ```
 
 It briefly decreases opacity, restores only its own temporary override, and
@@ -130,7 +130,7 @@ The timezone provider's DST/date-rollover checks run with
 `powershell -NoProfile -ExecutionPolicy Bypass -File tests/timezones-provider.ps1`.
 
 ```powershell
-cargo test -p winarchy --lib bar_ -- --test-threads=1
+cargo test -p illium --lib bar_ -- --test-threads=1
 ```
 
 The offscreen checks cover workspace/module order, click anchors, clock/date clicks,
@@ -147,7 +147,7 @@ Portable tests cover the hint vocabulary (1–9, A–Z, numpad), navigation wrap
 command parsing and the default configurable shortcut:
 
 ```sh
-cargo test -p winarchy -p winarchy-ipc --lib --tests
+cargo test -p illium -p illium-ipc --lib --tests
 ```
 
 The production Slint layout also has an offscreen test for module-center reports,
@@ -156,14 +156,14 @@ Windows adds a session test for stale generations, incomplete geometry, invalid
 selections and cancellation before the strip is ready:
 
 ```powershell
-cargo test -p winarchy --lib bar_hints
-cargo test -p winarchy --lib escape
+cargo test -p illium --lib bar_hints
+cargo test -p illium --lib escape
 ```
 
 Implementation validation: the portable suite passed (105 tests); the Slint
 layout/pixel test passed in a temporary Linux headless harness compiling the same
 `ui/shell.slint` and importing `platform/shell/bar_hints_tests.rs`. Windows code
-and tests passed `cargo check -p winarchy --tests --target x86_64-pc-windows-gnu`.
+and tests passed `cargo check -p illium --tests --target x86_64-pc-windows-gnu`.
 After merging the workspace-order fix, the four hint tests and both bar tests also
 passed natively on Windows with the MSVC build. The hint layout test covers modules
 both before and after the workspace buttons. Native Escape regressions also pass:
@@ -172,13 +172,13 @@ queued immediately after selection and suppression of held-key repeats; a
 headless applet whose `cancel` callback returns true still closes in one press
 and receives exactly one `dismissed` callback.
 A focused Windows regression now covers an Escape-intercepting client hook installed
-*after* Winarchy's hook. Opening a passive popup must renew Winarchy's capture
+*after* Illium's hook. Opening a passive popup must renew Illium's capture
 priority without changing the foreground HWND. Escape closes it, repeats/key-up
 stay consumed, and the next press goes back to the client. This opt-in test uses
 real hooks and tagged Escape injections (no desktop clicks); run it alone:
 
 ```powershell
-cargo test -p winarchy --lib passive_popup_escape -- --ignored --test-threads=1
+cargo test -p illium --lib passive_popup_escape -- --ignored --test-threads=1
 ```
 
 It fails with the old popup flag-only publication and passes with capture renewal.
@@ -188,7 +188,7 @@ including midnight and half-hour labels.
 **Physical-key interaction with third-party hooks and mixed-DPI behavior still need desktop validation.**
 
 For a failure that cannot be reproduced with injected input, start the daemon
-with `WINARCHY_TRACE_ESCAPE=1`. `winarchy.log` then records Escape-only input
+with `ILLIUM_TRACE_ESCAPE=1`. `illium.log` then records Escape-only input
 metadata (`source=hook` or `source=raw`, down/up, source-specific flags, consumed
 state, active capture modes) plus
 the foreground HWND and open applet at dispatch time. No other keys or typed
@@ -226,7 +226,7 @@ On an unlocked Windows desktop, with the updated default binding installed:
 6. Repeat with a bottom bar and monitors at different DPIs, focusing a client on
    each monitor first. Only its bar should show hints; popups must stay anchored.
 
-`winarchyctl status` exposes `bar_hints` and `bar_applet` (name or null) for probes.
+`illiumctl status` exposes `bar_hints` and `bar_applet` (name or null) for probes.
 
 ## Theme demo scene
 
@@ -235,8 +235,8 @@ static terminal fixtures and independent temporary browser libraries/filter list
 Windows adds a no-shell terminal session test and a hidden WebView home regression:
 
 ```powershell
-cargo test -p winarchy-terminal demo_ignores_input_and_redraws_without_a_shell
-cargo test -p winarchy-browser --bin winarchy-browser demo_home_never_loads_the_normal_library -- --ignored --test-threads=1 --nocapture
+cargo test -p illium-terminal demo_ignores_input_and_redraws_without_a_shell
+cargo test -p illium-browser --bin illium-browser demo_home_never_loads_the_normal_library -- --ignored --test-threads=1 --nocapture
 ```
 
 The browser regression deliberately provides an unreadable normal library,
@@ -263,23 +263,23 @@ check/manual validation. See [demo privacy limits](themes.md#demo-scene-for-them
 Desktop tests are `#[ignore]`d and never run in CI. **Save your work first: they rearrange, hide and close windows.** Use a disposable configuration directory:
 
 ```powershell
-$env:WINARCHY_CONFIG_HOME = "$env:USERPROFILE\winarchy-test"
-.\target\debug\winarchy.exe
+$env:ILLIUM_CONFIG_HOME = "$env:USERPROFILE\illium-test"
+.\target\debug\illium.exe
 cargo test --test desktop -- --ignored --exact ipc_desktop_smoke --nocapture
 # Only on an unlocked desktop:
 cargo test --test desktop -- --ignored --exact desktop_smoke --nocapture
-.\target\debug\winarchyctl.exe quit
+.\target\debug\illiumctl.exe quit
 # No existing daemon may be running for these:
-$env:WINARCHY_TEST_DAEMON = (Resolve-Path .\target\debug\winarchy.exe).Path
+$env:ILLIUM_TEST_DAEMON = (Resolve-Path .\target\debug\illium.exe).Path
 cargo test --test startup -- --ignored --exact enrolls_preexisting_windows_and_tracks_restoration --nocapture
 cargo test --test desktop -- --ignored --exact crash_restores_hidden_windows --nocapture
 # Destructive Explorer-session test: close File Explorer windows first.
 cargo test --test desktop -- --ignored --exact replacement_crash_restores_explorer --nocapture
 ```
 
-`wallpapers_follow_selection_and_directory_changes` temporarily installs a tiny fixture theme and checks image discovery, cycling, solid backgrounds, remembered choices, corrupt/deleted image fallback, rapid requests, cancellation and asynchronous errors through IPC. It restores the original theme and wallpaper-selection files. Run it only with an upgraded daemon and matching `WINARCHY_CONFIG_HOME`.
+`wallpapers_follow_selection_and_directory_changes` temporarily installs a tiny fixture theme and checks image discovery, cycling, solid backgrounds, remembered choices, corrupt/deleted image fallback, rapid requests, cancellation and asynchronous errors through IPC. It restores the original theme and wallpaper-selection files. Run it only with an upgraded daemon and matching `ILLIUM_CONFIG_HOME`.
 
-Performance probes (release builds): `cargo run -p winarchy-theme --release --example profile_wallpaper -- <wallpaper-directory> 2560 1600` measures decoding and fitting without changing files or the desktop. On Windows, `cargo run --release --example profile_theme -- pissarro akane dracula` deliberately changes the live theme/wallpapers, measures acknowledgement, preparation completion and status latency, then restores the original selection files. The daemon log also records worker preparation time, cache-hit application latency and in-place theme changes.
+Performance probes (release builds): `cargo run -p illium-theme --release --example profile_wallpaper -- <wallpaper-directory> 2560 1600` measures decoding and fitting without changing files or the desktop. On Windows, `cargo run --release --example profile_theme -- pissarro akane dracula` deliberately changes the live theme/wallpapers, measures acknowledgement, preparation completion and status latency, then restores the original selection files. The daemon log also records worker preparation time, cache-hit application latency and in-place theme changes.
 
 Do not run the ignored tests concurrently: they share the current user's daemon and desktop. From WSL, compile with `cargo xwin test --target x86_64-pc-windows-msvc --no-run`, copy the reported executables to Windows and run them there.
 
@@ -297,14 +297,14 @@ picker and Slint software renderer with **no native window**. It creates its own
 temporary themes, drives the FocusScope callbacks, checks scrim alpha, cached
 image reuse, filtering, confirmation, unreadable assets and stale input, and
 asserts that browsing never writes the selected theme or wallpaper preferences.
-The same test also exercises wallpaper mode: active filename selection, original labels, filtering, deferred confirmation, directory deletion, empty catalogs, cancellation on theme changes and reopening in theme mode. It is safe while your normal Winarchy session is running.
+The same test also exercises wallpaper mode: active filename selection, original labels, filtering, deferred confirmation, directory deletion, empty catalogs, cancellation on theme changes and reopening in theme mode. It is safe while your normal Illium session is running.
 
 Optional PNG snapshots of that test (not theme assets):
 
 ```powershell
-$env:WINARCHY_PICKER_RENDER_DIR = "$env:TEMP\winarchy-picker-renders"
-cargo test -p winarchy --lib headless_picker -- --test-threads=1
-Remove-Item Env:WINARCHY_PICKER_RENDER_DIR
+$env:ILLIUM_PICKER_RENDER_DIR = "$env:TEMP\illium-picker-renders"
+cargo test -p illium --lib headless_picker -- --test-threads=1
+Remove-Item Env:ILLIUM_PICKER_RENDER_DIR
 ```
 
 Snapshots cover the center/previous card, one/multiple/no matches, long labels,

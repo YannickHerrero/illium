@@ -1,4 +1,4 @@
-//! Push-to-talk glue for the optional `winarchy-dictate.exe` resident: the
+//! Push-to-talk glue for the optional `illium-dictate.exe` resident: the
 //! hook reports the `dictate` key going down and up, and the daemon relays
 //! `start` and `stop` over the resident's pipe. The daemon never records,
 //! transcribes or pastes anything itself, and works without the executable.
@@ -7,17 +7,17 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
-const PREFIX: &str = "winarchy-dictate";
+const PREFIX: &str = "illium-dictate";
 /// What the daemon last asked for; `Command::Dictate` over IPC toggles it.
 static RECORDING: AtomicBool = AtomicBool::new(false);
 fn executable() -> Result<std::path::PathBuf, String> {
     Ok(std::env::current_exe()
         .map_err(|e| e.to_string())?
-        .with_file_name("winarchy-dictate.exe"))
+        .with_file_name("illium-dictate.exe"))
 }
 fn request(line: &str, timeout: Duration) -> Result<String, String> {
-    let pipe = winarchy_ipc::client::pipe_path(&winarchy_ipc::identity::endpoint_named(PREFIX)?);
-    let reply = winarchy_ipc::client::client_at(&pipe, line, timeout)?;
+    let pipe = illium_ipc::client::pipe_path(&illium_ipc::identity::endpoint_named(PREFIX)?);
+    let reply = illium_ipc::client::client_at(&pipe, line, timeout)?;
     if reply.ok {
         Ok(reply.message)
     } else {
@@ -32,7 +32,7 @@ fn spawn_resident() {
             }
         }
         Ok(exe) => {
-            tracing::warn!(path = %exe.display(), "dictate is bound but winarchy-dictate.exe is missing")
+            tracing::warn!(path = %exe.display(), "dictate is bound but illium-dictate.exe is missing")
         }
         Err(e) => tracing::warn!(%e, "dictation executable path unavailable"),
     }
@@ -63,7 +63,7 @@ pub fn hold(down: bool) {
         }
     });
 }
-/// `winarchyctl dictate`: start when idle, stop when recording.
+/// `illiumctl dictate`: start when idle, stop when recording.
 pub fn toggle() {
     hold(!RECORDING.load(Ordering::Relaxed));
 }

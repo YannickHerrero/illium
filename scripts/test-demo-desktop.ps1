@@ -1,11 +1,11 @@
-# Run against an updated Winarchy on an EMPTY workspace. Never changes workspace,
+# Run against an updated Illium on an EMPTY workspace. Never changes workspace,
 # stops the daemon, modifies personal browser data, or closes unrelated windows.
 param(
     [Parameter(Mandatory = $true)][string]$Bin,
     [switch]$KeepScene
 )
 $ErrorActionPreference = 'Stop'
-$ctl = Join-Path $Bin 'winarchyctl.exe'
+$ctl = Join-Path $Bin 'illiumctl.exe'
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
@@ -20,7 +20,7 @@ public static class DemoProbe {
 '@
 function Status {
     $text = & $ctl status
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot query Winarchy status' }
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot query Illium status' }
     return ($text | ConvertFrom-Json)
 }
 function Owner([long]$id) {
@@ -55,12 +55,12 @@ try {
     $windows = @($state.clients | Where-Object workspace -eq $before.workspace)
     Assert ($windows.Count -eq 3) 'Expected exactly three demo windows'
     foreach ($window in $windows) {
-        Assert ([DemoProbe]::GetProp([IntPtr]$window.id, 'WinarchyDemoReady') -ne [IntPtr]::Zero) 'Window is not a ready demo'
+        Assert ([DemoProbe]::GetProp([IntPtr]$window.id, 'IlliumDemoReady') -ne [IntPtr]::Zero) 'Window is not a ready demo'
         $owned += [pscustomobject]@{ Id = [long]$window.id; Owner = (Owner $window.id) }
     }
-    Assert ((Class $windows[0].id) -eq 'WinarchyTerminal') 'Left window must be a terminal'
-    Assert ((Class $windows[1].id) -eq 'WinarchyTerminal') 'Top-right window must be a terminal'
-    Assert ((Class $windows[2].id) -eq 'WinarchyBrowser') 'Bottom-right window must be the browser'
+    Assert ((Class $windows[0].id) -eq 'IlliumTerminal') 'Left window must be a terminal'
+    Assert ((Class $windows[1].id) -eq 'IlliumTerminal') 'Top-right window must be a terminal'
+    Assert ((Class $windows[2].id) -eq 'IlliumBrowser') 'Bottom-right window must be the browser'
     $left, $top, $bottom = $windows[0].rect, $windows[1].rect, $windows[2].rect
     Assert ($left.x -lt $top.x -and $left.y -lt $bottom.y) 'Left/right geometry is wrong'
     Assert ([Math]::Abs($top.x - $bottom.x) -le 2 -and $top.y -lt $bottom.y) 'Right-hand split is wrong'
@@ -82,7 +82,7 @@ try {
 } finally {
     if (-not $KeepScene) {
         foreach ($window in $owned) {
-            if ((Owner $window.Id) -eq $window.Owner -and [DemoProbe]::GetProp([IntPtr]$window.Id, 'WinarchyDemoReady') -ne [IntPtr]::Zero) {
+            if ((Owner $window.Id) -eq $window.Owner -and [DemoProbe]::GetProp([IntPtr]$window.Id, 'IlliumDemoReady') -ne [IntPtr]::Zero) {
                 [void][DemoProbe]::PostMessage([IntPtr]$window.Id, 0x10, [IntPtr]::Zero, [IntPtr]::Zero)
             }
         }

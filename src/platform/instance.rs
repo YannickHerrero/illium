@@ -12,7 +12,7 @@ impl Instance {
             let h = CreateMutexW(None, false, PCWSTR(name.as_ptr())).map_err(|e| e.to_string())?;
             if GetLastError() == ERROR_ALREADY_EXISTS {
                 let _ = CloseHandle(h);
-                return Err("Winarchy is already running".into());
+                return Err("Illium is already running".into());
             }
             Ok(Self(h))
         }

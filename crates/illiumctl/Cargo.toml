@@ -1,0 +1,21 @@
+[package]
+name = "illiumctl"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Command-line controller for the Illium window manager"
+repository = "https://github.com/YannickHerrero/illium"
+
+[dependencies]
+serde_json = "1"
+argon2 = "0.6"
+rpassword = "7.5.4"
+illium-config = { path = "../illium-config" }
+illium-ipc = { path = "../illium-ipc" }
+illium-theme = { path = "../illium-theme" }
+
+[dev-dependencies]
+tempfile = "3"
+
+[build-dependencies]
+winresource = "0.1"

@@ -207,18 +207,17 @@ fn bar_fades_only_its_background_and_honors_shared_override() {
     assert_eq!(modules.borrow()[1].0, "clock");
     assert!(modules.borrow()[1].1 > active_x as f32 + 52.);
 
-    let home =
-        std::env::temp_dir().join(format!("winarchy-bar-opacity-test-{}", std::process::id()));
+    let home = std::env::temp_dir().join(format!("illium-bar-opacity-test-{}", std::process::id()));
     Config::install(&home).unwrap();
     let config = Config::load(&home).unwrap();
     assert_eq!(
         Shell::background_opacity(&config),
         config.theme.background_opacity
     );
-    winarchy_theme::opacity::set(&home, &config.global.theme, 0.6).unwrap();
+    illium_theme::opacity::set(&home, &config.global.theme, 0.6).unwrap();
     assert_eq!(Shell::background_opacity(&config), 0.6);
     assert_eq!(config.theme.background_opacity, 0.85);
-    winarchy_theme::opacity::clear(&home).unwrap();
+    illium_theme::opacity::clear(&home).unwrap();
     assert_eq!(Shell::background_opacity(&config), 0.85);
     std::fs::remove_dir_all(home).unwrap();
 }

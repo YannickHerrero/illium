@@ -1,12 +1,12 @@
 //! Single preview worker with a replaceable request and bounded memory caches.
 //! Independent of the wallpaper worker: browsing cannot cancel a real wallpaper.
 use super::render::{self, Frame, Key};
+use illium_theme::preview::{self, Entry};
 use std::{
     collections::VecDeque,
     path::PathBuf,
     sync::{Arc, Condvar, Mutex},
 };
-use winarchy_theme::preview::{self, Entry};
 
 const CACHE_BYTES: usize = 64 * 1024 * 1024;
 const MAX_VIEW_BYTES: usize = 256 * 1024 * 1024;
@@ -354,7 +354,7 @@ mod tests {
                     },
                     dpi: 96,
                     selected: i == 2,
-                    colors: render::Colors::from_theme(&winarchy_theme::Theme::default_theme()),
+                    colors: render::Colors::from_theme(&illium_theme::Theme::default_theme()),
                 }
             })
             .collect();
