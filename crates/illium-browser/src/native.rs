@@ -86,6 +86,7 @@ struct App {
     view_context: Option<ViewContext>,
     popups: Rc<RefCell<VecDeque<(TabId, String)>>>,
     background_opacity: f32,
+    background_blur: bool,
 }
 thread_local! { static APP: RefCell<Option<App>> = const { RefCell::new(None) }; }
 pub(crate) fn wide(s: &str) -> Vec<u16> {
@@ -802,6 +803,7 @@ unsafe fn apply_theme(theme: &illium_theme::Theme) -> AppResult<()> {
         app.surface = color(&theme.surface);
         app.text = color(&theme.text);
         app.background_opacity = theme.background_opacity;
+        app.background_blur = theme.background_blur;
         previous
     });
     let _ = DeleteObject(previous.0.into());
@@ -835,11 +837,18 @@ unsafe fn apply_theme(theme: &illium_theme::Theme) -> AppResult<()> {
     Ok(())
 }
 unsafe fn apply_opacity(app: &App) {
+    // This is an accent-blur prototype on the existing GDI/layered host,
+    // not the terminal's per-pixel DirectComposition rendering. Never apply
+    // desktop blur to web content, including when a palette overlays a page.
+    if !app.home {
+        illium_theme::blur::set(app.hwnd.0 as isize, false);
+    }
     let style = GetWindowLongPtrW(app.hwnd, GWL_EXSTYLE);
     if app.home {
         SetWindowLongPtrW(app.hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED.0 as isize);
         let alpha = (app.background_opacity * 255.0).round() as u8;
         let _ = SetLayeredWindowAttributes(app.hwnd, COLORREF(0), alpha, LWA_ALPHA);
+        illium_theme::blur::set(app.hwnd.0 as isize, app.background_blur);
     } else {
         // WebView2 pages must never inherit the native home's layered alpha.
         SetWindowLongPtrW(app.hwnd, GWL_EXSTYLE, style & !(WS_EX_LAYERED.0 as isize));
@@ -1321,6 +1330,7 @@ fn run_inner(
                 view_context: None,
                 popups: Rc::new(RefCell::new(VecDeque::new())),
                 background_opacity: theme.background_opacity,
+                background_blur: theme.background_blur,
             })
         });
         home_mode(start_home);

@@ -55,6 +55,23 @@ Launching without an argument (including `Alt+B`), or submitting an empty addres
 
 While the home window is foreground, typing redirects focus and the first character to the search field even after selecting a suggestion. Editing shortcuts such as Ctrl+V work too. Other applications' input and Alt/Windows shortcuts are not intercepted; this does not apply to web pages.
 
+Experimental home blur: the native home host now requests the shared Windows
+accent blur when `background_blur = true` in `illium.toml`, including live theme
+updates. It disables the effect on navigation to a web page and reapplies it on
+returning home. Home palettes share the host's effect; palettes over web pages
+remain opaque. This is a GDI/layered-window prototype, not the terminal's
+DirectComposition renderer: global opacity still affects text and controls, and
+visual blur compatibility must be checked on Windows before treating it as
+supported. Windows Transparency effects must be enabled and home opacity must
+be below 1 to see through the background.
+
+Run `scripts/test-browser-desktop.ps1` with `-BackgroundBlur` to exercise the
+existing opacity/navigation regression checks with this setting enabled. These
+checks do **not** prove that Windows visually renders the blur. Manually compare
+home with blur on/off over a detailed background, toggle it live, inspect the
+navigation/tab/leader palettes, navigate to a page (which must remain opaque),
+and return home. Also check unfocused, resized and reopened windows.
+
 The field suggests up to eight local results, matching case-insensitive ordered subsequences against titles and URLs. Contiguous matches rank higher; equally ranked favorites precede recent history. The eight best matches are displayed in favorite/history groups, preserving relevance within each group. With empty input, favorites come first, then recent history. No remote suggestions, page prefetches or second WebView are used. Typing and pressing Enter submits the input as typed; select a suggestion with arrows first to open it, or click it. Editing the query clears the selection. On web pages, Escape closes the palette and returns page focus; clicking the page also dismisses it when WebView receives focus. On home, Escape clears the query and keeps the palette visible.
 
 `Ctrl+D` adds the current page to favorites without opening the search field or moving focus. Repeating it does not remove or duplicate the bookmark. Favorites and history share the same fuzzy results list, with each URL shown only once. An already-open home refreshes its data when it regains focus. Successful top-level web navigations record the title, URL and last-visit timestamp; history is deduplicated and limited to 500 entries. History rows show relative visit ages (minutes, hours, days), calculated when painted without a background timer. Older libraries remain readable: entries without a timestamp show their title until revisited. Data is stored as plain JSON in `browser/library.json`; embedded URL username/password credentials are removed, but paths and query strings remain. There is no private browsing mode yet. Close the browser and remove this file to erase history and bookmarks. Updates are merged under a file lock across windows; no idle polling/indexer is added.

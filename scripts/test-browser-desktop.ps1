@@ -7,6 +7,9 @@ param(
     [switch]$CheckTilingFocus,
     # Allows palette/navigation checks when the desktop cannot grant foreground focus.
     [switch]$SkipFocusChecks,
+    # Exercise the experimental accent blur with the same home/page opacity checks.
+    # This does not verify the visual blur produced by Windows composition.
+    [switch]$BackgroundBlur,
     # Opt-in real keyboard input, restricted to this test's foreground window.
     # Do not use the keyboard/mouse while running this check.
     [switch]$CheckLeader,
@@ -61,7 +64,8 @@ New-Item -ItemType Directory -Force (Join-Path $configDir 'themes') | Out-Null
 $themePath = Join-Path $configDir 'themes/test.toml'
 $theme = (Get-Content "$PSScriptRoot/../config/themes/catppuccin-mocha.toml" -Raw) + "`nbackground_opacity = 0.75`n"
 [IO.File]::WriteAllText($themePath, $theme)
-[IO.File]::WriteAllText((Join-Path $configDir 'illium.toml'), 'theme = "test"')
+$config = "theme = 'test'`nbackground_blur = " + $BackgroundBlur.IsPresent.ToString().ToLowerInvariant()
+[IO.File]::WriteAllText((Join-Path $configDir 'illium.toml'), $config)
 $opacityPath = Join-Path $configDir 'background-opacity.state'
 @{
     history = @(@{ url='https://rust-lang.org/'; title='Rust language' })
