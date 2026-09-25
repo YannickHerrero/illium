@@ -1,250 +1,171 @@
-//! Pure lock-idle state and bounded ASCII animation frames (no desktop required).
+//! Pure lock-idle state; the animation is `winarchy_screensaver`'s player,
+//! one per monitor like Omarchy's one terminal per monitor.
 use std::time::{Duration, Instant};
-use winarchy_config::screensaver::{Effect, Screensaver};
+use winarchy_config::screensaver::Screensaver;
+use winarchy_screensaver::player::Player;
 
 pub struct Saver {
     config: Screensaver,
     activity: u64,
     idle_since: Instant,
-    cycle: Instant,
-    pub effect: Option<Effect>,
-    previous: Option<Effect>,
-    random: u64,
+    pub saving: bool,
+    players: Vec<Player>,
+    last_frame: Instant,
+    seed: u64,
 }
+
+/// A monitor surface in physical pixels and its DPI scale.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Surface {
+    pub width: usize,
+    pub height: usize,
+    pub scale: f32,
+}
+
 impl Saver {
     pub fn new(config: Screensaver, now: Instant, activity: u64, seed: u64) -> Self {
         Self {
             config,
             activity,
             idle_since: now,
-            cycle: now,
-            effect: None,
-            previous: None,
-            random: seed.max(1),
+            saving: false,
+            players: vec![],
+            last_frame: now,
+            seed,
         }
     }
     /// Losing the input desktop must not keep an invisible animation running.
     pub fn reset(&mut self, now: Instant, activity: u64) {
         self.activity = activity;
         self.idle_since = now;
-        self.effect = None;
+        self.saving = false;
+        self.players.clear();
     }
     /// Returns whether the visible mode changed. Activity always wins over timeout.
     pub fn poll(&mut self, now: Instant, activity: u64) -> bool {
         if activity != self.activity {
             self.activity = activity;
             self.idle_since = now;
-            return self.effect.take().is_some();
+            let was = self.saving;
+            self.saving = false;
+            self.players.clear();
+            return was;
         }
-        if !self.config.enabled || self.config.effects.is_empty() {
+        if !self.config.enabled || self.config.effects.is_empty() || self.saving {
             return false;
         }
-        if self.effect.is_none()
-            && now.duration_since(self.idle_since) >= Duration::from_secs(self.config.timeout)
-        {
-            self.choose(now);
+        if now.duration_since(self.idle_since) >= Duration::from_secs(self.config.timeout) {
+            self.saving = true;
+            self.last_frame = now;
             return true;
-        }
-        if self.effect.is_some() && now.duration_since(self.cycle) >= Duration::from_secs(12) {
-            self.choose(now);
         }
         false
     }
-    fn choose(&mut self, now: Instant) {
-        self.random ^= self.random << 13;
-        self.random ^= self.random >> 7;
-        self.random ^= self.random << 17;
-        let choices: Vec<_> = self
-            .config
-            .effects
+    /// Advances every monitor's animation; returns, per surface, the new
+    /// RGB frame when it changed.
+    pub fn frames(&mut self, now: Instant, surfaces: &[Surface]) -> Vec<Option<&[u8]>> {
+        if !self.saving {
+            return vec![None; surfaces.len()];
+        }
+        let elapsed = now.duration_since(self.last_frame).as_secs_f64();
+        self.last_frame = now;
+        self.players.truncate(surfaces.len());
+        let mut changed = vec![];
+        for (index, surface) in surfaces.iter().enumerate() {
+            let size = (surface.width, surface.height);
+            if self.players.get(index).is_none_or(|p| p.size() != size) {
+                self.seed = self
+                    .seed
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                let player = Player::new(
+                    &self.config.effects,
+                    surface.width,
+                    surface.height,
+                    surface.scale,
+                    self.seed,
+                );
+                if index < self.players.len() {
+                    self.players[index] = player;
+                } else {
+                    self.players.push(player);
+                }
+                changed.push(true);
+            } else {
+                changed.push(self.players[index].advance(elapsed));
+            }
+        }
+        self.players
             .iter()
-            .copied()
-            .filter(|e| self.config.effects.len() == 1 || Some(*e) != self.previous)
-            .collect();
-        self.effect = Some(choices[self.random as usize % choices.len()]);
-        self.previous = self.effect;
-        self.cycle = now;
-    }
-    pub fn frame(&self, now: Instant, monitor: usize) -> Vec<Row> {
-        frame(
-            self.effect.unwrap_or(Effect::Decrypt),
-            now.duration_since(self.cycle).as_secs_f32(),
-            monitor,
-        )
+            .zip(changed)
+            .map(|(p, changed)| changed.then(|| p.pixels()))
+            .collect()
     }
 }
 
-pub const WIDTH: usize = 64;
-pub const HEIGHT: usize = 23;
-const LOGO: [&str; 5] = [
-    "W   W III N   N  AAA  RRRR   CCC H   H Y   Y",
-    "W   W  I  NN  N A   A R   R C    H   H  Y Y ",
-    "W W W  I  N N N AAAAA RRRR  C    HHHHH   Y  ",
-    "WW WW  I  N  NN A   A R  R  C    H   H   Y  ",
-    "W   W III N   N A   A R   R  CCC H   H   Y  ",
-];
-pub struct Row {
-    pub text: String,
-    pub intensity: f32,
-    pub blend: f32,
-}
-fn noise(x: usize, y: usize, tick: usize) -> usize {
-    let mut n = (x as u64).wrapping_mul(0x9e3779b9)
-        ^ (y as u64).wrapping_mul(0x85ebca6b)
-        ^ (tick as u64).wrapping_mul(0xc2b2ae35);
-    n ^= n >> 16;
-    n = n.wrapping_mul(0x45d9f3b);
-    (n ^ (n >> 16)) as usize
-}
-fn logo(x: usize, y: usize) -> char {
-    let left = (WIDTH - LOGO[0].len()) / 2;
-    if (9..14).contains(&y) && x >= left {
-        LOGO[y - 9]
-            .as_bytes()
-            .get(x - left)
-            .copied()
-            .unwrap_or(b' ') as char
-    } else {
-        ' '
-    }
-}
-pub fn frame(effect: Effect, seconds: f32, monitor: usize) -> Vec<Row> {
-    let tick = (seconds * 15.0) as usize;
-    let glyphs = b"0123456789ABCDEF:.*+";
-    (0..HEIGHT)
-        .map(|y| {
-            let beam = ((y as f32 - (seconds * 5.0) % (HEIGHT as f32 + 8.0)).abs() / 5.0).min(1.0);
-            let text = (0..WIDTH)
-                .map(|x| {
-                    let target = logo(x, y);
-                    let n = noise(x, y + monitor * HEIGHT, tick);
-                    match effect {
-                        Effect::Decrypt
-                            if target != ' '
-                                && seconds < 7.0
-                                && noise(x, y, monitor) % 100
-                                    > (seconds / 7.0 * 100.0) as usize =>
-                        {
-                            glyphs[n % glyphs.len()] as char
-                        }
-                        Effect::Matrix => {
-                            let head = (tick + noise(x, 0, monitor) % (HEIGHT * 2)) % (HEIGHT * 2);
-                            let distance = (head + HEIGHT * 2 - y) % (HEIGHT * 2);
-                            if distance < 7 {
-                                glyphs[n % glyphs.len()] as char
-                            } else if seconds > 2.0 {
-                                target
-                            } else {
-                                ' '
-                            }
-                        }
-                        _ => target,
-                    }
-                })
-                .collect();
-            Row {
-                text,
-                intensity: if effect == Effect::Beams {
-                    0.2 + 0.8 * (1.0 - beam)
-                } else {
-                    0.85
-                },
-                blend: ((seconds * 0.7 + y as f32 * 0.22 + monitor as f32).sin() + 1.0) * 0.5,
-            }
-        })
-        .collect()
-}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use winarchy_config::screensaver::Effect;
+    const SURFACE: Surface = Surface {
+        width: 640,
+        height: 360,
+        scale: 1.0,
+    };
     #[test]
-    fn idle_activity_and_cycles() {
+    fn idle_and_activity() {
         let now = Instant::now();
         let mut s = Saver::new(Screensaver::default(), now, 0, 42);
         assert!(!s.poll(now + Duration::from_secs(29), 0));
         assert!(s.poll(now + Duration::from_secs(30), 0));
-        let first = s.effect;
-        s.poll(now + Duration::from_secs(42), 0);
-        assert_ne!(s.effect, first);
+        assert!(s.saving);
+        assert!(!s.poll(now + Duration::from_secs(42), 0));
         assert!(s.poll(now + Duration::from_secs(43), 1));
-        assert_eq!(s.effect, None);
+        assert!(!s.saving);
         assert!(!s.poll(now + Duration::from_secs(72), 1));
         assert!(!s.poll(now + Duration::from_secs(73), 2));
-        assert_eq!(s.effect, None);
+        assert!(!s.saving);
     }
     #[test]
-    fn disabled_and_single_effect() {
+    fn disabled_never_saves() {
         let now = Instant::now();
-        let mut c = Screensaver {
+        let c = Screensaver {
             enabled: false,
             ..Screensaver::default()
         };
-        let mut s = Saver::new(c.clone(), now, 0, 0);
-        assert!(!s.poll(now + Duration::from_secs(100), 0));
-        c.enabled = true;
-        c.effects = vec![Effect::Beams];
         let mut s = Saver::new(c, now, 0, 0);
-        for t in [30, 42, 54] {
-            s.poll(now + Duration::from_secs(t), 0);
-            assert_eq!(s.effect, Some(Effect::Beams));
-        }
+        assert!(!s.poll(now + Duration::from_secs(100), 0));
+        assert!(s.frames(now, &[SURFACE]).iter().all(Option::is_none));
     }
     #[test]
-    fn reset_restarts_idle_and_previous_effect_survives_wake() {
+    fn reset_restarts_idle() {
         let now = Instant::now();
         let mut s = Saver::new(Screensaver::default(), now, 0, 7);
         s.poll(now + Duration::from_secs(30), 0);
-        let first = s.effect;
         s.reset(now + Duration::from_secs(31), 2);
-        assert_eq!(s.effect, None);
+        assert!(!s.saving);
         assert!(!s.poll(now + Duration::from_secs(60), 2));
         assert!(s.poll(now + Duration::from_secs(61), 2));
-        assert_ne!(s.effect, first);
-        for t in (73..1000).step_by(12) {
-            let previous = s.effect;
-            s.poll(now + Duration::from_secs(t), 2);
-            assert_ne!(s.effect, previous);
-        }
     }
     #[test]
-    fn decrypt_finishes_and_rain_moves() {
-        let complete = frame(Effect::Decrypt, 8.0, 0);
-        let logo = frame(Effect::ColorShift, 8.0, 0);
-        assert!(complete.iter().zip(&logo).all(|(a, b)| a.text == b.text));
-        assert!(
-            frame(Effect::Decrypt, 0.0, 0)
-                .iter()
-                .zip(&logo)
-                .any(|(a, b)| a.text != b.text)
-        );
-        assert!(
-            frame(Effect::Matrix, 0.0, 0)
-                .iter()
-                .zip(frame(Effect::Matrix, 1.0, 0))
-                .any(|(a, b)| a.text != b.text)
-        );
-        assert!(
-            frame(Effect::Beams, 0.0, 0)
-                .iter()
-                .zip(frame(Effect::Beams, 2.0, 0))
-                .any(|(a, b)| a.intensity != b.intensity)
-        );
-    }
-    #[test]
-    fn frames_are_bounded_and_animated() {
-        for effect in Screensaver::default().effects {
-            let a = frame(effect, 0.0, 0);
-            let b = frame(effect, 4.0, 1);
-            assert_eq!(a.len(), HEIGHT);
-            assert!(
-                a.iter()
-                    .all(|r| r.text.len() == WIDTH && (0.0..=1.0).contains(&r.blend))
-            );
-            assert!(
-                a.iter()
-                    .zip(b)
-                    .any(|(a, b)| a.text != b.text || a.blend != b.blend)
-            );
-        }
+    fn frames_follow_each_surface() {
+        let now = Instant::now();
+        let c = Screensaver {
+            effects: vec![Effect::Decrypt],
+            ..Screensaver::default()
+        };
+        let mut s = Saver::new(c, now, 0, 7);
+        assert!(s.poll(now + Duration::from_secs(30), 0));
+        let small = Surface {
+            width: 320,
+            height: 200,
+            scale: 1.0,
+        };
+        let first = s.frames(now + Duration::from_secs(30), &[SURFACE, small]);
+        assert_eq!(first[0].map(<[u8]>::len), Some(640 * 360 * 3));
+        assert_eq!(first[1].map(<[u8]>::len), Some(320 * 200 * 3));
+        let later = s.frames(now + Duration::from_secs(33), &[SURFACE]);
+        assert_eq!(later.len(), 1);
+        assert!(later[0].is_some(), "decrypt draws during its first seconds");
     }
 }

@@ -127,6 +127,8 @@ pub fn describe(command: &str) -> String {
         Command::BarHints => "Bar applet hints".into(),
         Command::Dictate => "Dictate while held".into(),
         Command::Lock => "Lock screen".into(),
+        Command::Screensaver(None) => "Screensavers".into(),
+        Command::Screensaver(Some(name)) => format!("Screensaver demo {name}"),
         Command::Wallpaper(None) => "Solid background".into(),
         Command::Wallpaper(Some(name)) => format!("Wallpaper {name}"),
         Command::Explorer(true) => "Start Explorer".into(),

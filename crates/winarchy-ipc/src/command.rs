@@ -73,6 +73,9 @@ pub enum Command {
     /// Winarchy's own lock screen, unlocked with the password set by
     /// `winarchyctl lock set-password`.
     Lock,
+    /// Lock screensaver demo: the effect list, or one effect (by its `tte`
+    /// name) full screen.
+    Screensaver(Option<String>),
     /// None selects the solid theme background.
     Wallpaper(Option<String>),
     Explorer(bool),
@@ -180,6 +183,10 @@ impl FromStr for Command {
             ["bar", "hints"] => Self::BarHints,
             ["dictate"] => Self::Dictate,
             ["lock"] => Self::Lock,
+            ["screensaver", "demo"] => Self::Screensaver(None),
+            ["screensaver", "demo", name] if name.chars().all(|c| c.is_ascii_lowercase()) => {
+                Self::Screensaver(Some((*name).into()))
+            }
             ["demo"] => Self::Demo,
             ["app", name] if name.chars().all(|c| c.is_ascii_lowercase()) => {
                 Self::App((*name).into())
@@ -224,6 +231,11 @@ mod tests {
         );
         assert_eq!("app shot".parse(), Ok(Command::App("shot".into())));
         assert_eq!("theme picker".parse(), Ok(Command::ThemePicker));
+        assert_eq!(
+            "screensaver demo matrix".parse(),
+            Ok(Command::Screensaver(Some("matrix".into())))
+        );
+        assert_eq!("screensaver demo".parse(), Ok(Command::Screensaver(None)));
         assert_eq!(
             "opacity increase".parse(),
             Ok(Command::BackgroundOpacity(true))

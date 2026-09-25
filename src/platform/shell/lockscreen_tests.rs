@@ -59,7 +59,7 @@ fn focused_key_wakes_without_hook_and_cannot_type_or_submit() {
         assert!(lock.opened);
         assert!(!view.get_saving());
         assert!(!input::SAVING.load(Ordering::SeqCst));
-        assert!(lock.saver.as_ref().unwrap().effect.is_none());
+        assert!(!lock.saver.as_ref().unwrap().saving);
         // Repeats remain in the fallback scope until the waking key is up.
         press(key.clone());
         press(key.clone());

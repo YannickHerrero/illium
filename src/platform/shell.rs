@@ -179,6 +179,7 @@ pub(super) mod bar_hints;
 pub(super) mod expose;
 pub(super) mod keybindings;
 pub(super) mod lockscreen;
+pub(super) mod saver_demo;
 pub(super) mod space_picker;
 pub(super) mod theme_picker;
 mod wallpaper;
@@ -249,6 +250,7 @@ pub struct Shell {
     pub workspace_switcher: workspace_switcher::Switcher,
     pub spaces: space_picker::SpacePicker,
     pub lock: lockscreen::Lock,
+    pub saver_demo: saver_demo::SaverDemo,
     surface_key: Option<(Vec<Rect>, bool, String, i32)>,
     pub backgrounds: Vec<Background>,
     pub bars: Vec<Bar>,
@@ -365,6 +367,7 @@ impl Shell {
             workspace_switcher: workspace_switcher::Switcher::new(tx.clone())?,
             spaces: space_picker::SpacePicker::new(tx.clone())?,
             lock: lockscreen::Lock::new(tx.clone()),
+            saver_demo: saver_demo::SaverDemo::new(tx.clone())?,
             surface_key: None,
             backgrounds: vec![],
             bars: vec![],
@@ -793,6 +796,7 @@ impl Shell {
         self.expose.arrange();
         self.spaces.arrange();
         self.lock.arrange();
+        self.saver_demo.arrange();
         true
     }
     pub fn toggle_bar_background(&mut self) {
@@ -954,6 +958,10 @@ impl Shell {
                 MetaEntry::Run(crate::command::Command::Keybindings),
             ),
             ("Appearance ›".into(), MetaEntry::Menu(MetaMenu::Appearance)),
+            (
+                "Screen savers ›".into(),
+                MetaEntry::Run(crate::command::Command::Screensaver(None)),
+            ),
             ("Demo".into(), MetaEntry::Run(crate::command::Command::Demo)),
         ]
     }

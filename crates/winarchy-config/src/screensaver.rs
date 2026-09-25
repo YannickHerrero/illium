@@ -1,15 +1,132 @@
 //! Optional lock-surface animation settings in winarchy.toml.
 use serde::Deserialize;
 
+/// TerminalTextEffects effect names, as `tte` spells them.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "lowercase")]
 pub enum Effect {
-    Matrix,
-    Decrypt,
     Beams,
+    BinaryPath,
+    Blackhole,
+    BouncyBalls,
+    Bubbles,
+    Burn,
+    #[serde(alias = "color-shift")]
     ColorShift,
+    Crumble,
+    Decrypt,
+    ErrorCorrect,
+    Expand,
+    Fireworks,
+    Highlight,
+    LaserEtch,
+    Matrix,
+    MiddleOut,
+    OrbittingVolley,
+    Overflow,
+    Pour,
+    Print,
+    Rain,
+    RandomSequence,
+    Rings,
+    Scattered,
+    Slice,
+    Slide,
+    Smoke,
+    Spotlights,
+    Spray,
+    Swarm,
+    Sweep,
+    SynthGrid,
+    Thunderstorm,
+    Unstable,
+    VhsTape,
+    Waves,
+    Wipe,
 }
-
+impl Effect {
+    /// Every effect, in `tte` order (the default: Omarchy uses `--random-effect`).
+    pub const ALL: &[Effect] = &[
+        Effect::Beams,
+        Effect::BinaryPath,
+        Effect::Blackhole,
+        Effect::BouncyBalls,
+        Effect::Bubbles,
+        Effect::Burn,
+        Effect::ColorShift,
+        Effect::Crumble,
+        Effect::Decrypt,
+        Effect::ErrorCorrect,
+        Effect::Expand,
+        Effect::Fireworks,
+        Effect::Highlight,
+        Effect::LaserEtch,
+        Effect::Matrix,
+        Effect::MiddleOut,
+        Effect::OrbittingVolley,
+        Effect::Overflow,
+        Effect::Pour,
+        Effect::Print,
+        Effect::Rain,
+        Effect::RandomSequence,
+        Effect::Rings,
+        Effect::Scattered,
+        Effect::Slice,
+        Effect::Slide,
+        Effect::Smoke,
+        Effect::Spotlights,
+        Effect::Spray,
+        Effect::Swarm,
+        Effect::Sweep,
+        Effect::SynthGrid,
+        Effect::Thunderstorm,
+        Effect::Unstable,
+        Effect::VhsTape,
+        Effect::Waves,
+        Effect::Wipe,
+    ];
+    pub fn name(self) -> &'static str {
+        match self {
+            Effect::Beams => "beams",
+            Effect::BinaryPath => "binarypath",
+            Effect::Blackhole => "blackhole",
+            Effect::BouncyBalls => "bouncyballs",
+            Effect::Bubbles => "bubbles",
+            Effect::Burn => "burn",
+            Effect::ColorShift => "colorshift",
+            Effect::Crumble => "crumble",
+            Effect::Decrypt => "decrypt",
+            Effect::ErrorCorrect => "errorcorrect",
+            Effect::Expand => "expand",
+            Effect::Fireworks => "fireworks",
+            Effect::Highlight => "highlight",
+            Effect::LaserEtch => "laseretch",
+            Effect::Matrix => "matrix",
+            Effect::MiddleOut => "middleout",
+            Effect::OrbittingVolley => "orbittingvolley",
+            Effect::Overflow => "overflow",
+            Effect::Pour => "pour",
+            Effect::Print => "print",
+            Effect::Rain => "rain",
+            Effect::RandomSequence => "randomsequence",
+            Effect::Rings => "rings",
+            Effect::Scattered => "scattered",
+            Effect::Slice => "slice",
+            Effect::Slide => "slide",
+            Effect::Smoke => "smoke",
+            Effect::Spotlights => "spotlights",
+            Effect::Spray => "spray",
+            Effect::Swarm => "swarm",
+            Effect::Sweep => "sweep",
+            Effect::SynthGrid => "synthgrid",
+            Effect::Thunderstorm => "thunderstorm",
+            Effect::Unstable => "unstable",
+            Effect::VhsTape => "vhstape",
+            Effect::Waves => "waves",
+            Effect::Wipe => "wipe",
+        }
+    }
+}
 #[derive(Clone, Debug, Deserialize)]
 #[serde(try_from = "Raw")]
 pub struct Screensaver {
@@ -22,12 +139,7 @@ impl Default for Screensaver {
         Self {
             enabled: true,
             timeout: 30,
-            effects: vec![
-                Effect::Matrix,
-                Effect::Decrypt,
-                Effect::Beams,
-                Effect::ColorShift,
-            ],
+            effects: Effect::ALL.to_vec(),
         }
     }
 }
@@ -86,7 +198,9 @@ mod tests {
         let c: Screensaver = toml::from_str("").unwrap();
         assert!(c.enabled);
         assert_eq!(c.timeout, 30);
-        assert_eq!(c.effects.len(), 4);
+        assert_eq!(c.effects, Effect::ALL);
+        let c: Screensaver = toml::from_str("effects = ['colorshift', 'color-shift']").unwrap();
+        assert_eq!(c.effects, vec![Effect::ColorShift]);
         for bad in [
             "timeout = 0",
             "timeout = -1",

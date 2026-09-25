@@ -1,6 +1,6 @@
 [workspace]
-members = ["crates/winarchy-ipc", "crates/winarchy-theme", "crates/winarchy-config", "crates/winarchyctl", "crates/winarchy-apps", "crates/winarchy-terminal", "crates/winarchy-dictate", "crates/winarchy-browser"]
-default-members = [".", "crates/winarchy-ipc", "crates/winarchy-theme", "crates/winarchy-config", "crates/winarchyctl", "crates/winarchy-apps", "crates/winarchy-terminal", "crates/winarchy-dictate", "crates/winarchy-browser"]
+members = ["crates/winarchy-ipc", "crates/winarchy-theme", "crates/winarchy-config", "crates/winarchy-screensaver", "crates/winarchyctl", "crates/winarchy-apps", "crates/winarchy-terminal", "crates/winarchy-dictate", "crates/winarchy-browser"]
+default-members = [".", "crates/winarchy-ipc", "crates/winarchy-theme", "crates/winarchy-config", "crates/winarchy-screensaver", "crates/winarchyctl", "crates/winarchy-apps", "crates/winarchy-terminal", "crates/winarchy-dictate", "crates/winarchy-browser"]
 resolver = "3"
 
 [package]
@@ -16,6 +16,7 @@ build = "build.rs"
 winarchy-ipc = { path = "crates/winarchy-ipc" }
 winarchy-theme = { path = "crates/winarchy-theme" }
 winarchy-config = { path = "crates/winarchy-config" }
+winarchy-screensaver = { path = "crates/winarchy-screensaver" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 # Keybinding edits rewrite the user's file in place, keeping comments and order.

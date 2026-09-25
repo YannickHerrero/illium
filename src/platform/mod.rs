@@ -90,6 +90,8 @@ pub enum Event {
     Lock(u64, shell::lockscreen::Input),
     /// Space picker input, tagged with its opening generation.
     SpacePicker(u64, shell::space_picker::Input),
+    /// Screensaver demo input, tagged with its opening generation.
+    SaverDemo(u64, shell::saver_demo::Input),
 }
 struct Manager {
     config: Config,
@@ -627,6 +629,9 @@ impl Manager {
         {
             self.finish_space_picker(crate::space_picker::Outcome::Close);
         }
+        if self.shell.saver_demo.opened && !matches!(c, Command::Screensaver(_) | Command::Status) {
+            self.finish_saver_demo(shell::saver_demo::Outcome::Close);
+        }
         if self.prune() {
             self.layout();
         }
@@ -954,6 +959,27 @@ impl Manager {
                     self.lock(foreground)?;
                 }
             }
+            Command::Screensaver(name) => {
+                let effect = match name {
+                    None => None,
+                    Some(name) => Some(
+                        winarchy_config::screensaver::Effect::ALL
+                            .iter()
+                            .copied()
+                            .find(|e| e.name() == name)
+                            .ok_or_else(|| format!("unknown screensaver effect: {name}"))?,
+                    ),
+                };
+                let restore = self.restore_target(foreground);
+                self.shell.dismiss();
+                self.shell.close_popup();
+                self.applets.close();
+                self.finish_picker(crate::theme_picker::Outcome::Cancel);
+                self.finish_editor(shell::keybindings::Outcome::Close);
+                self.shell
+                    .saver_demo
+                    .open(&self.config, self.full_area(), restore, effect);
+            }
             Command::App(name) => apps::open(name),
             Command::Dictate => dictate::toggle(),
             Command::Reload => self.reload()?,
@@ -1124,6 +1150,12 @@ impl Manager {
                 }
             })
             .collect()
+    }
+    fn finish_saver_demo(&mut self, outcome: shell::saver_demo::Outcome) {
+        if outcome == shell::saver_demo::Outcome::Close {
+            let restore = self.shell.saver_demo.close();
+            self.restore_focus(restore);
+        }
     }
     fn finish_space_picker(&mut self, outcome: crate::space_picker::Outcome) {
         use crate::space_picker::Outcome;
@@ -1647,6 +1679,10 @@ impl Manager {
                 let outcome = self.shell.lock.input(epoch, input);
                 self.finish_lock(outcome);
             }
+            Event::SaverDemo(epoch, input) => {
+                let outcome = self.shell.saver_demo.input(epoch, input);
+                self.finish_saver_demo(outcome);
+            }
             Event::Capture(vk, modifiers, down) => {
                 let outcome = self.shell.editor.capture(vk, modifiers, down);
                 self.finish_editor(outcome);
@@ -2164,6 +2200,8 @@ pub fn run(replace: bool) -> Result<(), String> {
             m.poll_demo();
             m.shell.poll_wallpaper();
             m.shell.lock.poll();
+            let outcome = m.shell.saver_demo.poll();
+            m.finish_saver_demo(outcome);
             m.sync_wallpaper_palette();
             let Manager {
                 shell,

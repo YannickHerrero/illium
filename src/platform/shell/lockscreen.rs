@@ -4,14 +4,17 @@
 #[cfg(test)]
 #[path = "lockscreen_tests.rs"]
 mod tests;
-use super::{LockView, SaverRow, color, id, prepare, tool};
+use super::{LockView, color, id, prepare, tool};
 use crate::{
     config::Config,
     layout::Rect,
     lockscreen::{Attempts, Verdict},
     platform::{Event, EventSender, dpi, native, status},
 };
-use crate::{platform::input, screensaver::Saver};
+use crate::{
+    platform::input,
+    screensaver::{Saver, Surface},
+};
 use slint::{ComponentHandle, winit_030::WinitWindowAccessor};
 use std::{cell::Cell, rc::Rc, sync::atomic::Ordering, time::Instant};
 use windows::Win32::UI::WindowsAndMessaging::HWND_TOPMOST;
@@ -230,7 +233,7 @@ impl Lock {
             if input::SAVING.swap(false, Ordering::SeqCst) {
                 for view in &self.views {
                     show_saver(view, false);
-                    view.set_saver_rows(Default::default());
+                    view.set_saver_frame(Default::default());
                     view.invoke_clear_field();
                     // Restore logical focus only, never activate a window on
                     // top of the secure desktop or another foreground owner.
@@ -242,7 +245,7 @@ impl Lock {
             return;
         }
         let changed = saver.poll(now, input::LOCK_ACTIVITY.load(Ordering::SeqCst));
-        let saving = saver.effect.is_some();
+        let saving = saver.saving;
         if changed {
             // Arm input swallowing before displaying the animation. On wake,
             // leave it armed until the field and focus have been restored.
@@ -253,7 +256,7 @@ impl Lock {
                 view.invoke_clear_field();
                 show_saver(view, saving);
                 if !saving {
-                    view.set_saver_rows(Default::default());
+                    view.set_saver_frame(Default::default());
                 }
             }
             if let Some(view) = self.views.get(self.primary) {
@@ -269,18 +272,26 @@ impl Lock {
             self.next_frame = now;
         }
         if saving && now >= self.next_frame {
-            self.next_frame = now + std::time::Duration::from_millis(33);
-            for (index, view) in self.views.iter().take(self.monitors.len()).enumerate() {
-                let rows: Vec<_> = saver
-                    .frame(now, index)
-                    .into_iter()
-                    .map(|row| SaverRow {
-                        text: row.text.into(),
-                        intensity: row.intensity,
-                        blend: row.blend,
-                    })
-                    .collect();
-                view.set_saver_rows(Rc::new(slint::VecModel::from(rows)).into());
+            self.next_frame = now + std::time::Duration::from_millis(16);
+            let surfaces: Vec<Surface> = self
+                .monitors
+                .iter()
+                .map(|m| Surface {
+                    width: m.w.max(1) as usize,
+                    height: m.h.max(1) as usize,
+                    scale: m.w as f32 / dpi::logical(*m, m.w),
+                })
+                .collect();
+            let frames = saver.frames(now, &surfaces);
+            for ((view, surface), frame) in self.views.iter().zip(&surfaces).zip(frames) {
+                if let Some(rgb) = frame {
+                    let buffer = slint::SharedPixelBuffer::<slint::Rgb8Pixel>::clone_from_slice(
+                        rgb,
+                        surface.width as u32,
+                        surface.height as u32,
+                    );
+                    view.set_saver_frame(slint::Image::from_rgb8(buffer));
+                }
             }
         }
     }
@@ -288,14 +299,14 @@ impl Lock {
         let Some(saver) = &mut self.saver else {
             return;
         };
-        if saver.effect.is_none() {
+        if !saver.saving {
             return;
         }
         saver.reset(Instant::now(), input::LOCK_ACTIVITY.load(Ordering::SeqCst));
         for view in &self.views {
             view.invoke_clear_field();
             show_saver(view, false);
-            view.set_saver_rows(Default::default());
+            view.set_saver_frame(Default::default());
         }
         if let Some(view) = self.views.get(self.primary) {
             view.invoke_focus_field();
@@ -306,7 +317,7 @@ impl Lock {
         self.saver = None;
         for view in &self.views {
             show_saver(view, false);
-            view.set_saver_rows(Default::default());
+            view.set_saver_frame(Default::default());
             view.invoke_reset_input();
         }
         input::SAVING.store(false, Ordering::SeqCst);
