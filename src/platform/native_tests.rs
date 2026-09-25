@@ -9,7 +9,7 @@ impl Fixture {
             CreateWindowExW(
                 WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
                 w!("STATIC"),
-                w!("Winarchy offscreen regression"),
+                w!("Illium offscreen regression"),
                 WS_POPUP,
                 rect.x,
                 rect.y,

@@ -2,7 +2,7 @@
 # fields of the `Data` struct declared in view.slint (extra keys are ignored).
 # The first argument, when present, is the action requested by the view.
 param([string]$Action = "")
-$greeting = $env:WINARCHY_APPLET_GREETING
+$greeting = $env:ILLIUM_APPLET_GREETING
 [ordered]@{
   message = "$greeting from PowerShell"
   count = (Get-Process).Count

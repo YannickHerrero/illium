@@ -60,7 +60,7 @@ fn passive_popup_escape_precedes_a_newer_client_hook_without_focus() {
     let (tx, rx) = crate::queue::channel(1024);
     start(tx, vec![]).unwrap();
     let foreground = unsafe { GetForegroundWindow() };
-    // Model a foreground app that intercepts Escape after Winarchy has started.
+    // Model a foreground app that intercepts Escape after Illium has started.
     let hook = unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(client_hook), None, 0) }.unwrap();
     struct Hook(HHOOK);
     impl Drop for Hook {

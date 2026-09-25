@@ -1,4 +1,4 @@
-//! Placement memory across daemon restarts. Windows outlive Winarchy, so the
+//! Placement memory across daemon restarts. Windows outlive Illium, so the
 //! HWND stays a valid key; the process behind it is checked against reuse.
 use crate::layout::Rect;
 use serde::{Deserialize, Serialize};
@@ -130,7 +130,7 @@ mod tests {
         }
     }
     fn temp(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("winarchy-state-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("illium-state-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         dir.join(name)
     }

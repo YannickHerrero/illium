@@ -13,8 +13,8 @@ public static class AppsOpacityTest {
 }
 '@
 [void][AppsOpacityTest]::SetProcessDPIAware()
-$root = Join-Path $env:TEMP ('winarchy-apps-opacity-test-' + [guid]::NewGuid())
-$old = $env:WINARCHY_CONFIG_HOME
+$root = Join-Path $env:TEMP ('illium-apps-opacity-test-' + [guid]::NewGuid())
+$old = $env:ILLIUM_CONFIG_HOME
 New-Item -ItemType Directory "$root\themes" -Force | Out-Null
 $theme = (Get-Content "$PSScriptRoot/../config/themes/catppuccin-mocha.toml" -Raw).Replace('#1e1e2e', '#112233') + "`nbackground_opacity = 1.0`n"
 function Save($path, $text) { [IO.File]::WriteAllText($path, $text) }
@@ -39,9 +39,9 @@ function Wait-Pixel($hwnd, $color, [bool]$equal=$true) {
 }
 $p = $null
 try {
-    Save "$root\winarchy.toml" 'theme = "test"'
+    Save "$root\illium.toml" 'theme = "test"'
     Save "$root\themes\test.toml" $theme
-    $env:WINARCHY_CONFIG_HOME = $root
+    $env:ILLIUM_CONFIG_HOME = $root
     foreach ($app in @('files', 'tasks')) {
         $p = Start-Process $Executable -ArgumentList $app -PassThru
         $until = [DateTime]::UtcNow.AddSeconds(15)
@@ -67,7 +67,7 @@ try {
         Write-Host "PASS: $app live opacity, reset, palette reload, invalid theme retention, unchanged HWND"
     }
 } finally {
-    $env:WINARCHY_CONFIG_HOME = $old
+    $env:ILLIUM_CONFIG_HOME = $old
     if ($p -and !$p.HasExited) { [void]$p.CloseMainWindow(); [void]$p.WaitForExit(5000) }
     Remove-Item -Recurse -Force $root
 }

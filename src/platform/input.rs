@@ -355,7 +355,7 @@ unsafe extern "system" fn display_window(h: HWND, message: u32, w: WPARAM, l: LP
 }
 pub fn start(tx: EventSender, bindings: Vec<Binding>) -> Result<(), String> {
     TRACE_ESCAPE.store(
-        std::env::var("WINARCHY_TRACE_ESCAPE").as_deref() == Ok("1"),
+        std::env::var("ILLIUM_TRACE_ESCAPE").as_deref() == Ok("1"),
         std::sync::atomic::Ordering::Relaxed,
     );
     let _ = STATE.set((tx, RwLock::new(bindings)));
@@ -419,7 +419,7 @@ pub fn start(tx: EventSender, bindings: Vec<Binding>) -> Result<(), String> {
                         WINEVENT_OUTOFCONTEXT,
                     ),
                 ];
-                let class = super::native::wide("WinarchyEvents");
+                let class = super::native::wide("IlliumEvents");
                 let instance = windows::Win32::System::LibraryLoader::GetModuleHandleW(None)
                     .unwrap_or_default();
                 let wc = WNDCLASSW {

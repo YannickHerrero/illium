@@ -3,7 +3,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$Exe,
-    [string]$Filters = "$env:USERPROFILE/.config/winarchy/browser"
+    [string]$Filters = "$env:USERPROFILE/.config/illium/browser"
 )
 $ErrorActionPreference = 'Stop'
 function Wait-For([scriptblock]$Condition, [string]$Message) {
@@ -32,7 +32,7 @@ function Warm-Open {
     # Like the daemon fast path: no new browser client process in the timed path.
     $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $session=[Diagnostics.Process]::GetCurrentProcess().SessionId
-    $pipe=New-Object IO.Pipes.NamedPipeClientStream '.',("winarchy-browser-$sid-$session"),([IO.Pipes.PipeDirection]::InOut)
+    $pipe=New-Object IO.Pipes.NamedPipeClientStream '.',("illium-browser-$sid-$session"),([IO.Pipes.PipeDirection]::InOut)
     try {
         $pipe.Connect(3000)
         $writer=New-Object IO.StreamWriter $pipe,(New-Object Text.UTF8Encoding $false)
@@ -61,19 +61,19 @@ function Memory([int]$RootId) {
     }
     return @{ processes=$count; private_commit_mib=[Math]::Round($private/1MB,1); working_set_sum_mib=[Math]::Round($working/1MB,1) }
 }
-$root = Join-Path $env:TEMP ('winarchy-browser-resident-test-' + [guid]::NewGuid())
+$root = Join-Path $env:TEMP ('illium-browser-resident-test-' + [guid]::NewGuid())
 $config = Join-Path $root 'config'
 $filterDir = Join-Path $config 'browser'
 New-Item -ItemType Directory -Force $filterDir, (Join-Path $config 'themes') | Out-Null
-[IO.File]::WriteAllText((Join-Path $config 'winarchy.toml'), 'theme = "test"')
+[IO.File]::WriteAllText((Join-Path $config 'illium.toml'), 'theme = "test"')
 $theme = (Get-Content "$PSScriptRoot/../config/themes/catppuccin-mocha.toml" -Raw) + "`nbackground_opacity = 0.75`n"
 [IO.File]::WriteAllText((Join-Path $config 'themes/test.toml'), $theme)
 Get-ChildItem $Filters -File | Where-Object { $_.Extension -in '.txt','.bin' } | Copy-Item -Destination $filterDir
 if (!(Get-ChildItem $filterDir -Filter '*.txt')) { throw 'Download filter lists first.' }
-$oldHome=$env:WINARCHY_CONFIG_HOME; $oldLocal=$env:LOCALAPPDATA
+$oldHome=$env:ILLIUM_CONFIG_HOME; $oldLocal=$env:LOCALAPPDATA
 $resident=$null; $cold=$null; $extra=$null; $owned=$false
 try {
-    $env:WINARCHY_CONFIG_HOME=$config
+    $env:ILLIUM_CONFIG_HOME=$config
     $env:LOCALAPPDATA=Join-Path $root 'local'
     $coldLog=Join-Path $root 'cold.log'
     $cold=Start-Process $Exe -ArgumentList '--standalone' -RedirectStandardError $coldLog -PassThru
@@ -153,5 +153,5 @@ try {
     }
     if ($cold -and !$cold.HasExited) { [void]$cold.CloseMainWindow() }
     if ($extra -is [Diagnostics.Process] -and !$extra.HasExited) { [void]$extra.CloseMainWindow() }
-    $env:WINARCHY_CONFIG_HOME=$oldHome; $env:LOCALAPPDATA=$oldLocal
+    $env:ILLIUM_CONFIG_HOME=$oldHome; $env:LOCALAPPDATA=$oldLocal
 }

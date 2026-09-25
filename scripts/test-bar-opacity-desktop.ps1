@@ -3,12 +3,12 @@
 # opacity and restores only its own override. Tests coalesced create/delete events.
 param([Parameter(Mandatory = $true)][string]$Bin)
 $ErrorActionPreference = 'Stop'
-$diagnostics = Join-Path $env:TEMP ('winarchy-bar-opacity-' + [guid]::NewGuid())
+$diagnostics = Join-Path $env:TEMP ('illium-bar-opacity-' + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $diagnostics | Out-Null
 function Ctl([string]$command) {
     $out = Join-Path $diagnostics 'verify-out.txt'
     $err = Join-Path $diagnostics 'verify-err.txt'
-    $p = Start-Process (Join-Path $bin 'winarchyctl.exe') -ArgumentList $command -WorkingDirectory $bin -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+    $p = Start-Process (Join-Path $bin 'illiumctl.exe') -ArgumentList $command -WorkingDirectory $bin -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
     $handle = $p.Handle
     if (-not $p.WaitForExit(10000)) { $p.Kill(); throw 'CLI timed out' }
     if ($p.ExitCode -ne 0) { throw [IO.File]::ReadAllText($err) }
@@ -16,7 +16,7 @@ function Ctl([string]$command) {
 }
 $before = (Ctl 'status') | ConvertFrom-Json
 if ($null -eq $before.bar_background_opacity) { throw 'No bar opacity status' }
-$config = if ($env:WINARCHY_CONFIG_HOME) { $env:WINARCHY_CONFIG_HOME } else { Join-Path $env:USERPROFILE '.config\winarchy' }
+$config = if ($env:ILLIUM_CONFIG_HOME) { $env:ILLIUM_CONFIG_HOME } else { Join-Path $env:USERPROFILE '.config\illium' }
 $state = Join-Path $config 'background-opacity.state'
 $previous = if (Test-Path $state) { [IO.File]::ReadAllBytes($state) } else { $null }
 $ownState = $null

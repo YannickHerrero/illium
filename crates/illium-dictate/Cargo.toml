@@ -1,0 +1,22 @@
+[package]
+name = "illium-dictate"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Hold-to-talk local dictation resident for Illium"
+repository = "https://github.com/YannickHerrero/illium"
+
+[dependencies]
+illium-theme = { path = "../illium-theme", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+illium-ipc = { path = "../illium-ipc" }
+# Parakeet through ONNX Runtime; ort-sys fetches Microsoft's prebuilt runtime at build time.
+transcribe-rs = { version = "0.3", default-features = false, features = ["onnx"] }
+sha2 = "0.10"
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi", "Win32_UI_Input_KeyboardAndMouse", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_System_Threading", "Win32_Media_Audio"] }
+
+# ort-sys downloads the runtime through ureq with native TLS; a Linux host
+# cross-compiling for Windows has no OpenSSL headers, so the host build vendors its own.
+[build-dependencies]
+openssl-sys = { version = "0.9", features = ["vendored"] }

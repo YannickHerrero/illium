@@ -21,12 +21,12 @@ pub(super) fn id(w: &slint::Window) -> isize {
         _ => 0,
     }
 }
-const ORIGINAL_PROC: &str = "WinarchyOriginalProc";
+const ORIGINAL_PROC: &str = "IlliumOriginalProc";
 /// Windows paints a classic caption over the top of a winit window each time
 /// it is activated, even without WS_CAPTION, and leaves it there until the
 /// next redraw. Answering the non-client messages ourselves prevents that.
 /// Marks the background surfaces, which must stay at the bottom of the Z order.
-const BOTTOM: &str = "WinarchyBottom";
+const BOTTOM: &str = "IlliumBottom";
 unsafe extern "system" fn surface_proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     if m == WM_NCACTIVATE {
         return LRESULT(1);
@@ -451,7 +451,7 @@ impl Shell {
     }
     fn background_opacity(c: &Config) -> f32 {
         let mut theme = c.theme.clone();
-        winarchy_theme::opacity::apply(&c.home, &c.global.theme, &mut theme);
+        illium_theme::opacity::apply(&c.home, &c.global.theme, &mut theme);
         theme.background_opacity
     }
     /// Opacity-only changes never rebuild surfaces or restart applet providers.
@@ -1055,12 +1055,12 @@ impl Shell {
                     MetaEntry::Run(Command::Explorer(true)),
                 )
             },
-            ("Quit Winarchy".into(), MetaEntry::Run(Command::Quit)),
+            ("Quit Illium".into(), MetaEntry::Run(Command::Quit)),
         ])
     }
     fn wallpaper_names(&self) -> Result<Vec<String>, String> {
-        let dir = winarchy_theme::pack::wallpaper_dir(&self.home, &self.theme)?;
-        winarchy_theme::pack::images(&dir)
+        let dir = illium_theme::pack::wallpaper_dir(&self.home, &self.theme)?;
+        illium_theme::pack::images(&dir)
     }
     /// Enters a submenu or returns the command to run for result `n`, and
     /// whether the menu stays open around it.

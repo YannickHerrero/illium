@@ -2,7 +2,7 @@
 
 An applet is a small application living in the bar: an icon, an optional
 label, and a popup opened by clicking the icon. Applets are folders under the
-configuration home, `%USERPROFILE%\.config\winarchy\applets\<name>\`, and are
+configuration home, `%USERPROFILE%\.config\illium\applets\<name>\`, and are
 placed in the bar by name in any section of `bar.toml`:
 
 ```toml
@@ -17,7 +17,7 @@ folder holding an `applet.toml`, or the configuration is rejected. Applets may
 also be listed in the `drawer` list, folded behind a chevron until the bar is
 hovered or the chevron clicked (see [drawer](configuration.md#drawer)).
 
-Winarchy ships `weather`, `wifi`, `calendar`, `timezones`, `volume`, `battery` and `_template`; they
+Illium ships `weather`, `wifi`, `calendar`, `timezones`, `volume`, `battery` and `_template`; they
 are installed with the other defaults and never overwritten. `calendar` uses
 `attach = "clock"`: it has no icon and opens when the date is clicked;
 `timezones` uses `attach = "time"` and opens from the separate time target. Both
@@ -29,7 +29,7 @@ default; the switch in the header mutes the output, as do `m` and the arrows
 adjust the level while the popup has focus. `wifi` lists the nearby networks: `j`/`k` or
 the arrows move, Enter connects (asking for the key of an unknown secured
 network, stored as a WPA2 profile), `d` disconnects, `f` forgets the saved
-profile and `r` rescans. The key is passed as the provider's argument (never logged by Winarchy). Profile
+profile and `r` rescans. The key is passed as the provider's argument (never logged by Illium). Profile
 creation briefly uses a randomly named, current-user-only temporary directory,
 removed in a `finally` block; Windows then stores the saved WLAN profile.
 The Wi-Fi provider reads English/French `netsh` output, chooses one interface
@@ -63,14 +63,14 @@ applets/weather/
 | `provider` | none | `builtin:clock`, `builtin:system`, `builtin:volume` or `builtin:battery` instead of a process |
 | `focusable` | `false` | Let the popup take keyboard focus |
 | `attach` | none | Built-in module (`clock`, `time`, `battery`, `cpu`, `memory`, `volume`, `window-title`) whose click opens this applet; it then has no icon and is loaded whenever that module is in a section |
-| `[settings]` | empty | Passed to the provider as `WINARCHY_APPLET_<KEY>` variables |
+| `[settings]` | empty | Passed to the provider as `ILLIUM_APPLET_<KEY>` variables |
 
 ### Animated bar icons
 
 Set `sprite = "glitchcat.toml"` in `applet.toml`. Packs are separate data files,
 so multiple packs can be installed side by side and selected by changing this
 one filename (hot reload). No pet names, state names beyond the `idle` fallback,
-or fixed atlas dimensions are built into Winarchy. A picker is not required.
+or fixed atlas dimensions are built into Illium. A picker is not required.
 For example, a pack for an 8 × 9 atlas:
 
 ```toml
@@ -99,8 +99,8 @@ the applet folder. Invalid/missing packs or mismatched atlas sizes log a warning
 and use the ordinary icon. Frames are 1–512 pixels per dimension, the grid is
 1–32 rows/columns, the atlas at most 4096 pixels per dimension, cadence
 60–2000 ms, and display height 16–48 logical pixels (clamped to bar height).
-Existing static applets require no changes. Older Winarchy builds reject the
-new manifest key: upgrade Winarchy before installing animated applets.
+Existing static applets require no changes. Older Illium builds reject the
+new manifest key: upgrade Illium before installing animated applets.
 
 ### The provider
 
@@ -155,7 +155,7 @@ interfaces, so it works on any laptop; a control the machine lacks is hidden.
   cycles and power from the battery class driver (the source of
   `powercfg /batteryreport`). Batteries reporting relative capacities show no
   Wh figures, and several batteries are summed. "Not charging" while plugged in
-  is how firmware charge limits appear; Winarchy does not set such limits,
+  is how firmware charge limits appear; Illium does not set such limits,
   which are vendor specific.
 - The power mode is the Windows setting of the same name (the power mode
   functions of `powrprof.dll`, undocumented but used by the Settings app). It
@@ -179,7 +179,7 @@ while open.
 The time popup compares Local, London, Paris and Tokyo across 24 shared hourly
 columns. Accent shading marks daytime (08–18), muted cells mark night, the current
 hour is highlighted and a vertical accent line indicates the current minute.
-Midnight cells show the new date. All colors come from the active Winarchy theme.
+Midnight cells show the new date. All colors come from the active Illium theme.
 The view refreshes on opening and every minute; Windows time zone rules handle
 summer/winter time, including skipped or repeated hours.
 
@@ -214,7 +214,7 @@ Default configuration installation never overwrites existing applet files.
 ### Wi-Fi traffic sampling
 
 With `wifi_traffic = true`, the script remains responsible for discovery and actions.
-Winarchy reads counters for exactly its connected interface GUID through `GetIfEntry2`
+Illium reads counters for exactly its connected interface GUID through `GetIfEntry2`
 on a background thread, at most once per second with the popup open and once every
 30 seconds otherwise. Ethernet/VPN interfaces are rejected. No additional PowerShell
 process or network probe is needed for those samples.
@@ -229,7 +229,7 @@ include all traffic on that adapter, not just Internet/application payload.
 ### The view
 
 `view.slint` exports a component, `View` by preference, that inherits `Window`
-with `no-frame: true`. Winarchy sets these properties when they exist:
+with `no-frame: true`. Illium sets these properties when they exist:
 
 - `busy`: boolean, true while an external or audio provider is running.
 - `has-data`: optional boolean, true after a snapshot has been applied. Use it
@@ -271,8 +271,8 @@ remain in a view for its own controls, but no longer intercepts global Escape.
 The opt-in native unit test `wifi_view_renders_and_pins_password_target` compiles and
 renders the real Slint view headlessly and exercises connection, password-target
 pinning, dismissal and forget confirmation without executing any network actions.
-Set `WINARCHY_WIFI_TEST_DIR` to the Windows-visible applet folder and optionally
-`WINARCHY_WIFI_RENDER_DIR` to an existing output folder for PPM snapshots, then run
+Set `ILLIUM_WIFI_TEST_DIR` to the Windows-visible applet folder and optionally
+`ILLIUM_WIFI_RENDER_DIR` to an existing output folder for PPM snapshots, then run
 that test with `--ignored`. It includes light/dark, 150% DPI and long-list fixtures.
 
 ## Popup behaviour

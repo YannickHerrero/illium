@@ -17,7 +17,7 @@ unsafe extern "system" fn procedure(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LR
 fn fixtures() -> Vec<isize> {
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || unsafe {
-        let name = wide("WinarchyPreexistingFixture");
+        let name = wide("IlliumPreexistingFixture");
         let wc = WNDCLASSW {
             lpfnWndProc: Some(procedure),
             lpszClassName: PCWSTR(name.as_ptr()),
@@ -26,7 +26,7 @@ fn fixtures() -> Vec<isize> {
         RegisterClassW(&wc);
         let mut ids = vec![];
         for i in 0..4 {
-            let title = wide(&format!("Winarchy existing {i}"));
+            let title = wide(&format!("Illium existing {i}"));
             let h = CreateWindowExW(
                 WINDOW_EX_STYLE(0),
                 PCWSTR(name.as_ptr()),
@@ -60,7 +60,7 @@ struct Session {
 }
 impl Drop for Session {
     fn drop(&mut self) {
-        let _ = winarchy::platform::ipc::client("quit");
+        let _ = illium::platform::ipc::client("quit");
         let until = Instant::now() + Duration::from_secs(3);
         while Instant::now() < until && self.daemon.try_wait().ok().flatten().is_none() {
             std::thread::sleep(Duration::from_millis(50));
@@ -77,7 +77,7 @@ impl Drop for Session {
     }
 }
 fn state() -> Option<serde_json::Value> {
-    let reply = winarchy::platform::ipc::client("status").ok()?;
+    let reply = illium::platform::ipc::client("status").ok()?;
     if !reply.ok {
         return None;
     }
@@ -103,10 +103,10 @@ fn contains(s: &serde_json::Value, id: isize) -> bool {
         .any(|c| c["id"].as_i64() == Some(id as i64))
 }
 #[test]
-#[ignore = "rearranges existing desktop windows; set WINARCHY_TEST_DAEMON and use a disposable config, no running daemon"]
+#[ignore = "rearranges existing desktop windows; set ILLIUM_TEST_DAEMON and use a disposable config, no running daemon"]
 fn enrolls_preexisting_windows_and_tracks_restoration() {
-    assert!(state().is_none(), "stop Winarchy before the startup test");
-    let exe = std::env::var("WINARCHY_TEST_DAEMON").expect("set test daemon path");
+    assert!(state().is_none(), "stop Illium before the startup test");
+    let exe = std::env::var("ILLIUM_TEST_DAEMON").expect("set test daemon path");
     let ids = fixtures();
     let _session = Session {
         daemon: std::process::Command::new(exe).spawn().unwrap(),
@@ -123,7 +123,7 @@ fn enrolls_preexisting_windows_and_tracks_restoration() {
         .map(|c| {
             assert_eq!(c["workspace"], s["workspace"]);
             assert_eq!(c["floating"], false);
-            serde_json::from_value::<winarchy::layout::Rect>(c["rect"].clone()).unwrap()
+            serde_json::from_value::<illium::layout::Rect>(c["rect"].clone()).unwrap()
         })
         .collect::<Vec<_>>();
     for (i, a) in rects.iter().enumerate() {
@@ -142,7 +142,7 @@ fn enrolls_preexisting_windows_and_tracks_restoration() {
         let _ = ShowWindow(HWND(ids[0] as *mut _), SW_MINIMIZE);
     }
     std::thread::sleep(Duration::from_millis(300));
-    let reply = winarchy::platform::ipc::client("config reload").unwrap();
+    let reply = illium::platform::ipc::client("config reload").unwrap();
     assert!(reply.ok);
     assert!(
         unsafe { IsIconic(HWND(ids[0] as *mut _)).as_bool() },
@@ -154,12 +154,12 @@ fn enrolls_preexisting_windows_and_tracks_restoration() {
     wait_for(|s| ids.iter().all(|id| contains(s, *id)));
 }
 #[test]
-#[ignore = "rearranges existing desktop windows; set WINARCHY_TEST_DAEMON and use a disposable config, no running daemon"]
+#[ignore = "rearranges existing desktop windows; set ILLIUM_TEST_DAEMON and use a disposable config, no running daemon"]
 fn restores_remembered_placement_and_drops_stale_entries() {
-    assert!(state().is_none(), "stop Winarchy before the startup test");
-    let exe = std::env::var("WINARCHY_TEST_DAEMON").expect("set test daemon path");
+    assert!(state().is_none(), "stop Illium before the startup test");
+    let exe = std::env::var("ILLIUM_TEST_DAEMON").expect("set test daemon path");
     let ids = fixtures();
-    let placement = |id: isize, pid: u32, workspace: u8| winarchy::state::Placement {
+    let placement = |id: isize, pid: u32, workspace: u8| illium::state::Placement {
         id,
         pid,
         exe: std::env::current_exe().unwrap().display().to_string(),
@@ -167,9 +167,9 @@ fn restores_remembered_placement_and_drops_stale_entries() {
         workspace,
         floating: false,
         fullscreen: false,
-        restore: winarchy::layout::Rect::default(),
+        restore: illium::layout::Rect::default(),
     };
-    let saved = winarchy::state::State {
+    let saved = illium::state::State {
         active: 3,
         recent: 1,
         monitors: [0; 9],
@@ -181,8 +181,8 @@ fn restores_remembered_placement_and_drops_stale_entries() {
         ],
         ..Default::default()
     };
-    let path = winarchy::config::Config::home().join("state.json");
-    winarchy::state::State::save(&saved.to_json(), &path).unwrap();
+    let path = illium::config::Config::home().join("state.json");
+    illium::state::State::save(&saved.to_json(), &path).unwrap();
     let _session = Session {
         daemon: std::process::Command::new(exe).spawn().unwrap(),
         ids: ids.clone(),
@@ -204,12 +204,12 @@ fn restores_remembered_placement_and_drops_stale_entries() {
     // The daemon rewrites the file on its one-second maintenance tick.
     let until = Instant::now() + Duration::from_secs(5);
     while Instant::now() < until
-        && winarchy::state::State::load(&path)
+        && illium::state::State::load(&path)
             .is_some_and(|s| s.clients.iter().any(|c| c.id == 0x7fff_0001))
     {
         std::thread::sleep(Duration::from_millis(100));
     }
-    let reloaded = winarchy::state::State::load(&path).unwrap();
+    let reloaded = illium::state::State::load(&path).unwrap();
     assert!(
         reloaded.clients.iter().all(|c| c.id != 0x7fff_0001),
         "stale entries are dropped from the saved state"

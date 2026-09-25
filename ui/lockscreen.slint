@@ -1,11 +1,11 @@
-// Winarchy lock screen: one surface per monitor over the blurred wallpaper.
+// Illium lock screen: one surface per monitor over the blurred wallpaper.
 // Only the surface on the active monitor (`primary`) takes the password; the
 // daemon checks it and decides when to fall back to the Windows lock.
 import { ScreensaverView } from "screensaver.slint";
 export component LockView inherits Window {
     in property <bool> saving;
     in property <image> saver-frame;
-    title: "Winarchy Lock";
+    title: "Illium Lock";
     no-frame: true;
     default-font-family: "JetBrains Mono";
     in property <length> surface-width;

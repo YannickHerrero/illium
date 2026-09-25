@@ -12,22 +12,21 @@ fn command() -> Result<String, String> {
         "\"{}\"",
         std::env::current_exe()
             .map_err(|e| e.to_string())?
-            .with_file_name("winarchy-terminal.exe")
+            .with_file_name("illium-terminal.exe")
             .display()
     ))
 }
 pub fn bundled(target: &str) -> bool {
-    target.trim().eq_ignore_ascii_case("winarchy-terminal.exe")
+    target.trim().eq_ignore_ascii_case("illium-terminal.exe")
         || command().is_ok_and(|c| {
             target.trim().eq_ignore_ascii_case(&c)
                 || target.trim().eq_ignore_ascii_case(c.trim_matches('"'))
         })
 }
 fn request(line: &str, timeout: Duration) -> Result<String, String> {
-    let pipe = winarchy_ipc::client::pipe_path(&winarchy_ipc::identity::endpoint_named(
-        "winarchy-terminal",
-    )?);
-    let reply = winarchy_ipc::client::client_at(&pipe, line, timeout)?;
+    let pipe =
+        illium_ipc::client::pipe_path(&illium_ipc::identity::endpoint_named("illium-terminal")?);
+    let reply = illium_ipc::client::client_at(&pipe, line, timeout)?;
     if reply.ok {
         Ok(reply.message)
     } else {
@@ -44,7 +43,7 @@ pub fn prewarm(target: Option<&String>) {
     }
 }
 pub fn wants_focus(exe: &str) -> bool {
-    exe.to_ascii_lowercase().ends_with("winarchy-terminal.exe")
+    exe.to_ascii_lowercase().ends_with("illium-terminal.exe")
         && REQUESTED
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -79,10 +78,10 @@ mod tests {
     use super::*;
     #[test]
     fn only_bundled_argument_free_launches_use_ipc() {
-        assert!(bundled("winarchy-terminal.exe"));
+        assert!(bundled("illium-terminal.exe"));
         assert!(bundled(&command().unwrap()));
         assert!(!bundled("wezterm.exe"));
-        assert!(!bundled("winarchy-terminal.exe --standalone"));
-        assert!(!bundled("C:\\other\\winarchy-terminal.exe"));
+        assert!(!bundled("illium-terminal.exe --standalone"));
+        assert!(!bundled("C:\\other\\illium-terminal.exe"));
     }
 }

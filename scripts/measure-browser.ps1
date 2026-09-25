@@ -1,16 +1,16 @@
 # Samples the host AND its WebView2 descendants. Run with no other browser instance.
 [CmdletBinding()]
 param(
-    [string]$Exe = "$PSScriptRoot/../target/release/winarchy-browser.exe",
+    [string]$Exe = "$PSScriptRoot/../target/release/illium-browser.exe",
     [string]$Url = 'about:blank',
     [int]$Seconds = 20,
     [string]$Output = 'browser-measurement.csv'
 )
 $ErrorActionPreference = 'Stop'
-if (!$PSBoundParameters.ContainsKey('Exe') -and !(Test-Path $Exe) -and (Test-Path "$PSScriptRoot/../winarchy-browser.exe")) {
-    $Exe = "$PSScriptRoot/../winarchy-browser.exe"
+if (!$PSBoundParameters.ContainsKey('Exe') -and !(Test-Path $Exe) -and (Test-Path "$PSScriptRoot/../illium-browser.exe")) {
+    $Exe = "$PSScriptRoot/../illium-browser.exe"
 }
-if (Get-Process winarchy-browser -ErrorAction SilentlyContinue) { throw 'Close other winarchy-browser instances first.' }
+if (Get-Process illium-browser -ErrorAction SilentlyContinue) { throw 'Close other illium-browser instances first.' }
 if ($Url.Contains('"')) { throw 'URL must not contain literal quotes.' }
 $log = [IO.Path]::GetFullPath("$Output.startup.log")
 $process = Start-Process -FilePath $Exe -ArgumentList ('--standalone "' + $Url + '"') -RedirectStandardError $log -PassThru

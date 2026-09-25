@@ -1,21 +1,21 @@
 # Native WSL terminal (experimental)
 
-`winarchy-terminal.exe` is a separate companion executable in this workspace.
+`illium-terminal.exe` is a separate companion executable in this workspace.
 It opens **WSL only**, never Herdr. There are no tabs, splits, plugins or SSH
-profiles. Winarchy remains responsible for windows; Herdr can be started
+profiles. Illium remains responsible for windows; Herdr can be started
 manually inside WSL if desired.
 
 ## Try it without replacing WezTerm
 
 Build on Windows with `cargo build --workspace --release --locked`, or use the
-packaged executable beside `winarchy.exe`:
+packaged executable beside `illium.exe`:
 
 ```powershell
-.\winarchy-terminal.exe              # open a new WSL window, keep a resident
-.\winarchy-terminal.exe --serve      # prewarm, no visible window and NO WSL
-.\winarchy-terminal.exe --standalone # isolated process, exits with its window
-.\winarchy-terminal.exe --status     # also records status in terminal.log
-.\winarchy-terminal.exe --quit       # refuses while terminal windows are open
+.\illium-terminal.exe              # open a new WSL window, keep a resident
+.\illium-terminal.exe --serve      # prewarm, no visible window and NO WSL
+.\illium-terminal.exe --standalone # isolated process, exits with its window
+.\illium-terminal.exe --status     # also records status in terminal.log
+.\illium-terminal.exe --quit       # refuses while terminal windows are open
 ```
 
 Closing a window terminates its own WSL child; it does not shut down the WSL
@@ -23,22 +23,22 @@ VM or intentionally terminate unrelated Linux sessions. Exiting the shell
 leaves its final output visible until the window is closed. The resident keeps
 one empty hidden window and shared graphics/font resources, not a hidden shell.
 There is at most one resident per Windows user/session and 16 windows including
-the spare. `--standalone` can use a separate `WINARCHY_CONFIG_HOME` for testing.
+the spare. `--standalone` can use a separate `ILLIUM_CONFIG_HOME` for testing.
 
-To enable the fastest path, **upgrade Winarchy too**, then set in `apps.toml`:
+To enable the fastest path, **upgrade Illium too**, then set in `apps.toml`:
 
 ```toml
 [apps]
-terminal = "winarchy-terminal.exe"
+terminal = "illium-terminal.exe"
 ```
 
-Winarchy prewarms the bundled executable at startup or when this alias changes.
-`Alt+Enter`, `winarchyctl spawn terminal` and launcher entries pointing to the
+Illium prewarms the bundled executable at startup or when this alias changes.
+`Alt+Enter`, `illiumctl spawn terminal` and launcher entries pointing to the
 bundled executable use direct IPC, without launching another process. An
 absolute path to the executable beside the daemon also works. Explicit
 arguments or another executable path retain normal Windows process launching.
 A missing resident falls back to launching the bundled terminal. Quitting
-Winarchy stops only an idle resident; existing terminal windows keep working.
+Illium stops only an idle resident; existing terminal windows keep working.
 
 The shipped alias and existing user configuration still use WezTerm: this is
 an **opt-in candidate**, not an automatic replacement. Restore
@@ -46,8 +46,8 @@ an **opt-in candidate**, not an automatic replacement. Restore
 
 ## Preferences and theme
 
-`%USERPROFILE%/.config/winarchy/terminal.toml`, respecting
-`WINARCHY_CONFIG_HOME` in the **Windows** process environment:
+`%USERPROFILE%/.config/illium/terminal.toml`, respecting
+`ILLIUM_CONFIG_HOME` in the **Windows** process environment:
 
 ```toml
 font_family = "JetBrainsMono Nerd Font Mono"
@@ -64,7 +64,7 @@ Font, padding, history, OSC 52 policy and theme edits update existing windows; d
 changes affect only new WSL children. Editing the file resets a window's zoom
 when the configured font changes. There is no settings UI.
 
-Colors come directly from `winarchy.toml` and `themes/<name>.toml`, using
+Colors come directly from `illium.toml` and `themes/<name>.toml`, using
 `background`, `text`, `accent` (cursor), `overlay` (selection), `ansi` and
 `brights`. Legacy themes without ANSI arrays fall back to Catppuccin Mocha or
 Latte according to `mode`. Application truecolor and OSC palette overrides
@@ -78,8 +78,8 @@ background_opacity = 0.85
 
 Default `0.85` (85% opacity); valid range `0.0..1.0`. The default background receives alpha;
 glyphs, cursor, selection and explicit application background cells stay
-opaque. `background_blur` in [`winarchy.toml`](configuration.md#winarchytoml)
-blurs what shows through. Upgrade all Winarchy binaries before adding this field:
+opaque. `background_blur` in [`illium.toml`](configuration.md#illiumtoml)
+blurs what shows through. Upgrade all Illium binaries before adding this field:
 older schema readers reject it. The legacy `terminal_background_opacity` name is
 still accepted. Ctrl+Alt+Shift+Y/U temporarily decrease/increase the shared
 application background opacity by five points. See [themes](themes.md#adjust-opacity-live).
@@ -87,7 +87,7 @@ application background opacity by five points. See [themes](themes.md#adjust-opa
 OS directory notifications trigger a bounded, debounced background reload.
 Invalid edits preserve the last valid settings/palette. At initial startup,
 missing/invalid files fall back to readable defaults. Theme loading does not
-require a running Winarchy daemon and does not respawn WSL. Wallpaper/preview
+require a running Illium daemon and does not respawn WSL. Wallpaper/preview
 edits and log writes do not trigger terminal reloads.
 
 ## Input
@@ -99,7 +99,7 @@ edits and log writes do not trigger terminal reloads.
 - Drag to select; hold **Shift** to select/scroll when an application owns mouse
   reporting. ANSI legacy and SGR mouse reporting are supported.
 - **Ctrl+1..9** sends CSI-u, matching the existing Herdr workaround.
-- **Alt+Enter** is left to Winarchy. AltGr/dead-key text goes through Windows
+- **Alt+Enter** is left to Illium. AltGr/dead-key text goes through Windows
   text composition, not Ctrl+digit shortcut encoding.
 
 Bracketed paste strips ESC so clipboard content cannot close its bracket and
@@ -147,9 +147,9 @@ For a lost-first-key investigation, an isolated process can opt into bounded
 startup tracing without restarting the resident or closing its sessions:
 
 ```powershell
-$env:WINARCHY_TERMINAL_TRACE_STARTUP = '1'
-.\winarchy-terminal.exe --standalone
-Remove-Item Env:WINARCHY_TERMINAL_TRACE_STARTUP
+$env:ILLIUM_TERMINAL_TRACE_STARTUP = '1'
+.\illium-terminal.exe --standalone
+Remove-Item Env:ILLIUM_TERMINAL_TRACE_STARTUP
 ```
 
 This records at most eight paint attempts and twelve keyboard-message metadata
@@ -164,7 +164,7 @@ Initial measurements on the development Windows machine, WSL already running:
 |---|---:|---:|---:|
 | Existing WezTerm GUI, forced new process | 5 | 1023 ms | 1416 ms |
 | Existing `wezterm.exe` Scoop alias, normal invocation | 10 | 1935 ms | 4113 ms |
-| Native resident, direct IPC (same protocol as Winarchy) | 20 | **33 ms** | **48 ms** |
+| Native resident, direct IPC (same protocol as Illium) | 20 | **33 ms** | **48 ms** |
 
 These are **window discovery** measurements, not actual presentation or shell
 readiness, and were sampled at different times rather than in a randomized
@@ -201,22 +201,22 @@ positions. It never presses Enter. This tests the Session/ConPTY path, not the
 native window's keyboard translation or presentation.
 
 ```powershell
-cargo test -p winarchy-terminal
+cargo test -p illium-terminal
 # Windows wakeup regression: no visible window, WSL session or injected input.
-cargo test -p winarchy-terminal --bin winarchy-terminal output_wake
+cargo test -p illium-terminal --bin illium-terminal output_wake
 # WARNING: overwrites the Windows clipboard; use a disposable desktop.
 # Hidden native window, no WSL or keyboard/focus injection.
-cargo test -p winarchy-terminal --bin winarchy-terminal osc52_windows_clipboard_roundtrip -- --ignored
+cargo test -p illium-terminal --bin illium-terminal osc52_windows_clipboard_roundtrip -- --ignored
 # Hidden GPU test: requires a desktop compositor, never shows/focuses a window.
-cargo test -p winarchy-terminal --lib hidden_gpu -- --ignored --nocapture
+cargo test -p illium-terminal --lib hidden_gpu -- --ignored --nocapture
 # Starts one disposable Debian shell, checks actual CSI-u input roundtrip.
-cargo test -p winarchy-terminal --lib wsl_preserves -- --ignored --nocapture
+cargo test -p illium-terminal --lib wsl_preserves -- --ignored --nocapture
 
 # Opens/closes visible test windows: do not interact with them during probes.
-.\target\release\winarchy-terminal.exe --serve
-cargo run -p winarchy-terminal --release --example measure_open -- 20
-.\scripts\measure-terminal.ps1 -Executable .\target\release\winarchy-terminal.exe -WindowClass WinarchyTerminal
-.\scripts\test-terminal-desktop.ps1 -Executable .\target\release\winarchy-terminal.exe
+.\target\release\illium-terminal.exe --serve
+cargo run -p illium-terminal --release --example measure_open -- 20
+.\scripts\measure-terminal.ps1 -Executable .\target\release\illium-terminal.exe -WindowClass IlliumTerminal
+.\scripts\test-terminal-desktop.ps1 -Executable .\target\release\illium-terminal.exe
 ```
 
 Manual clipboard validation (replaces the clipboard): in a newly built terminal,

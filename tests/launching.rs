@@ -13,7 +13,7 @@ use windows::{
     core::PWSTR,
 };
 fn status() -> serde_json::Value {
-    let r = winarchy::platform::ipc::client("status").unwrap();
+    let r = illium::platform::ipc::client("status").unwrap();
     assert!(r.ok);
     serde_json::from_str(&r.message).unwrap()
 }
@@ -105,7 +105,7 @@ fn await_terminal(old: HashSet<isize>) {
     panic!("no newly managed WezTerm GUI window appeared");
 }
 #[test]
-#[ignore = "requires running Winarchy, WezTerm and an unlocked desktop"]
+#[ignore = "requires running Illium, WezTerm and an unlocked desktop"]
 fn alt_enter_launches_wezterm() {
     let old = before();
     chord(0x0d);

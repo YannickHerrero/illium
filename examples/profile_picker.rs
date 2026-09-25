@@ -1,14 +1,14 @@
 //! CPU-side picker benchmark; never applies a theme or wallpaper.
 //! profile_picker <config-home> [wallpaper-theme]
 //! Disk cache is used normally; use an isolated cache directory for cold tests.
-use std::{
-    path::PathBuf,
-    time::{Duration, Instant},
-};
-use winarchy::theme_picker::{
+use illium::theme_picker::{
     Model,
     loader::{Job, Loader, Output},
     render::{Colors, Key},
+};
+use std::{
+    path::PathBuf,
+    time::{Duration, Instant},
 };
 
 fn main() -> Result<(), String> {
@@ -20,8 +20,8 @@ fn main() -> Result<(), String> {
     let theme = args.next().map(|s| s.to_string_lossy().into_owned());
     let started = Instant::now();
     let entries = match &theme {
-        Some(theme) => winarchy_theme::preview::wallpapers(&home, theme)?,
-        None => winarchy_theme::preview::catalog(&home)?,
+        Some(theme) => illium_theme::preview::wallpapers(&home, theme)?,
+        None => illium_theme::preview::catalog(&home)?,
     };
     println!(
         "catalog: {} entries, {:.2} ms",
@@ -33,7 +33,7 @@ fn main() -> Result<(), String> {
         .map(|e| e.id.as_str())
         .unwrap_or_default();
     let model = Model::new(entries.iter().map(|e| e.id.clone()).collect(), active);
-    let colors = Colors::from_theme(&winarchy_theme::Theme::default_theme());
+    let colors = Colors::from_theme(&illium_theme::Theme::default_theme());
     let cards = model.cards(1920.0, 1080.0);
     let keys: Vec<_> = cards
         .iter()

@@ -7,10 +7,10 @@ use slint::platform::{
 };
 use std::{cell::RefCell, rc::Rc};
 #[test]
-#[ignore = "requires a connected Wi-Fi interface and WINARCHY_WIFI_TEST_DIR; read-only"]
+#[ignore = "requires a connected Wi-Fi interface and ILLIUM_WIFI_TEST_DIR; read-only"]
 fn wifi_provider_and_native_counters_are_read_only() {
     let dir = std::path::PathBuf::from(
-        std::env::var_os("WINARCHY_WIFI_TEST_DIR").expect("test applet folder"),
+        std::env::var_os("ILLIUM_WIFI_TEST_DIR").expect("test applet folder"),
     );
     let applet = Applet {
         name: "wifi".into(),
@@ -58,7 +58,7 @@ impl Platform for Headless {
 fn escape_closes_applet_even_when_its_cancel_callback_would_handle_it() {
     let windows = Rc::new(RefCell::new(Vec::new()));
     slint::platform::set_platform(Box::new(Headless(windows))).unwrap();
-    let home = std::env::temp_dir().join(format!("winarchy-escape-test-{}", std::process::id()));
+    let home = std::env::temp_dir().join(format!("illium-escape-test-{}", std::process::id()));
     Config::install(&home).unwrap();
     let mut config = Config::load(&home).unwrap();
     let dir = home.join("applets/escape-test");
@@ -133,7 +133,7 @@ fn escape_closes_applet_even_when_its_cancel_callback_would_handle_it() {
 fn volume_keyboard_intent_is_optimistic_until_authoritative_completion() {
     let windows = Rc::new(RefCell::new(Vec::new()));
     slint::platform::set_platform(Box::new(Headless(windows.clone()))).unwrap();
-    let home = std::env::temp_dir().join(format!("winarchy-volume-view-{}", std::process::id()));
+    let home = std::env::temp_dir().join(format!("illium-volume-view-{}", std::process::id()));
     Config::install(&home).unwrap();
     let def = compile(&applets::load(&home, "volume").unwrap()).unwrap();
     let instance = def.create().unwrap();
@@ -170,7 +170,7 @@ fn volume_keyboard_intent_is_optimistic_until_authoritative_completion() {
 fn timezone_columns_align_despite_different_label_widths() {
     let windows = Rc::new(RefCell::new(Vec::new()));
     slint::platform::set_platform(Box::new(Headless(windows.clone()))).unwrap();
-    let home = std::env::temp_dir().join(format!("winarchy-timezone-grid-{}", std::process::id()));
+    let home = std::env::temp_dir().join(format!("illium-timezone-grid-{}", std::process::id()));
     Config::install(&home).unwrap();
     let applet = applets::load(&home, "timezones").unwrap();
     let def = compile(&applet).unwrap();
@@ -229,10 +229,10 @@ fn press(window: &MinimalSoftwareWindow, text: slint::SharedString) {
     window.dispatch_event(WindowEvent::KeyReleased { text });
 }
 #[test]
-#[ignore = "set WINARCHY_WIFI_TEST_DIR to a Windows-visible applet directory; optional WINARCHY_WIFI_RENDER_DIR for PPM snapshots"]
+#[ignore = "set ILLIUM_WIFI_TEST_DIR to a Windows-visible applet directory; optional ILLIUM_WIFI_RENDER_DIR for PPM snapshots"]
 fn wifi_view_renders_and_pins_password_target() {
     let dir = std::path::PathBuf::from(
-        std::env::var_os("WINARCHY_WIFI_TEST_DIR").expect("test applet folder"),
+        std::env::var_os("ILLIUM_WIFI_TEST_DIR").expect("test applet folder"),
     );
     let windows = Rc::new(RefCell::new(Vec::new()));
     slint::platform::set_platform(Box::new(Headless(windows.clone()))).unwrap();
@@ -277,7 +277,7 @@ fn wifi_view_renders_and_pins_password_target() {
             let size = window.size();
             let mut pixels = vec![Rgb8Pixel::default(); (size.width * size.height) as usize];
             renderer.render(&mut pixels, size.width as usize);
-            if let Some(dir) = std::env::var_os("WINARCHY_WIFI_RENDER_DIR") {
+            if let Some(dir) = std::env::var_os("ILLIUM_WIFI_RENDER_DIR") {
                 let mut bytes = format!("P6\n{} {}\n255\n", size.width, size.height).into_bytes();
                 for pixel in pixels {
                     bytes.extend([pixel.r, pixel.g, pixel.b]);

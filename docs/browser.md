@@ -1,40 +1,40 @@
-# Winarchy Browser — native-blocking prototype
+# Illium Browser — native-blocking prototype
 
-An experimental, single-window Windows browser in `crates/winarchy-browser`, alongside Terminal and Dictate. Rust/Win32 hosts WebView2 Evergreen; `adblock-rust` evaluates requests in the host, not in an extension. This is a feasibility prototype, **not a validated replacement for a full browser**.
+An experimental, single-window Windows browser in `crates/illium-browser`, alongside Terminal and Dictate. Rust/Win32 hosts WebView2 Evergreen; `adblock-rust` evaluates requests in the host, not in an extension. This is a feasibility prototype, **not a validated replacement for a full browser**.
 
 ## Build and launch (Windows)
 
 Install the current stable Microsoft WebView2 Evergreen Runtime and the Rust MSVC toolchain. Older runtimes without `ICoreWebView2_22` are not supported (the prototype requires request interception including worker sources).
 
 ```powershell
-cargo build --release -p winarchy-browser --locked
+cargo build --release -p illium-browser --locked
 powershell -ExecutionPolicy Bypass -File scripts/update-browser-filters.ps1
-.\target\release\winarchy-browser.exe https://example.com
+.\target\release\illium-browser.exe https://example.com
 ```
 
-In a release archive, use `winarchy-browser.exe` next to the other binaries and the included `scripts/update-browser-filters.ps1`. The updater is an explicit user operation; neither the browser nor Winarchy downloads lists on startup. Restart after updating. The first launch compiles the lists; subsequent launches use a content-keyed, engine-versioned disk cache. Text lists are still read to validate the cache. Missing lists cause an explicit startup error rather than silently browsing without protection.
+In a release archive, use `illium-browser.exe` next to the other binaries and the included `scripts/update-browser-filters.ps1`. The updater is an explicit user operation; neither the browser nor Illium downloads lists on startup. Restart after updating. The first launch compiles the lists; subsequent launches use a content-keyed, engine-versioned disk cache. Text lists are still read to validate the cache. Missing lists cause an explicit startup error rather than silently browsing without protection.
 
 The browser uses:
 
-- `$WINARCHY_CONFIG_HOME/browser`, or `$HOME/.config/winarchy/browser`: `easylist.txt`, `easyprivacy.txt`, optional `custom.txt`, compiled filters and `exceptions.json`;
-- `%LOCALAPPDATA%/Winarchy/browser/profile`: persistent WebView2 profile, cookies and disk cache;
-- the current `winarchy-theme`, including live changes: window/palette backgrounds, text, accents, selection, WebView initial background and page dark/light preference.
+- `$ILLIUM_CONFIG_HOME/browser`, or `$HOME/.config/illium/browser`: `easylist.txt`, `easyprivacy.txt`, optional `custom.txt`, compiled filters and `exceptions.json`;
+- `%LOCALAPPDATA%/Illium/browser/profile`: persistent WebView2 profile, cookies and disk cache;
+- the current `illium-theme`, including live changes: window/palette backgrounds, text, accents, selection, WebView initial background and page dark/light preference.
 
 ## Prepared launch (resident mode)
 
-With the bundled `browser = "winarchy-browser.exe"` alias, Winarchy prepares one hidden browser when the shell starts. `Alt+B` then sends an owner-only IPC request directly from the daemon: no intermediate browser process, filter parsing or WebView2 initialization on the warm opening path. The field and WebView2 must finish preparing first; opening immediately during shell startup can still wait for initialization.
+With the bundled `browser = "illium-browser.exe"` alias, Illium prepares one hidden browser when the shell starts. `Alt+B` then sends an owner-only IPC request directly from the daemon: no intermediate browser process, filter parsing or WebView2 initialization on the warm opening path. The field and WebView2 must finish preparing first; opening immediately during shell startup can still wait for initialization.
 
 The resident holds at most one prepared/visible window. If that window is already in use (including on another workspace), another launch opens a separate standalone window rather than hijacking it. Closing the resident's visible window destroys its controller/page and rebuilds a fresh hidden home. The current theme is read again when showing the prepared window. No website is preloaded into the spare.
 
-This intentionally trades idle RAM for latency: WebView2 remains running in the background. Normal Winarchy exit requests that an idle resident stop; if its window is still open, shutdown is deferred until the user closes it. Diagnostics and explicit lifecycle controls:
+This intentionally trades idle RAM for latency: WebView2 remains running in the background. Normal Illium exit requests that an idle resident stop; if its window is still open, shutdown is deferred until the user closes it. Diagnostics and explicit lifecycle controls:
 
 ```powershell
-winarchy-browser.exe --serve       # prepare without showing/focusing a window
-winarchy-browser.exe --status      # JSON: pid, ready, opened, last warm_open_ms
-winarchy-browser.exe --quit        # stop idle; never close a user's open page
-winarchy-browser.exe --standalone  # no residency; process exits with its window
-winarchy-browser.exe https://example.com https://www.rust-lang.org
-winarchy-browser.exe --standalone "search with spaces" https://example.com
+illium-browser.exe --serve       # prepare without showing/focusing a window
+illium-browser.exe --status      # JSON: pid, ready, opened, last warm_open_ms
+illium-browser.exe --quit        # stop idle; never close a user's open page
+illium-browser.exe --standalone  # no residency; process exits with its window
+illium-browser.exe https://example.com https://www.rust-lang.org
+illium-browser.exe --standalone "search with spaces" https://example.com
 ```
 
 Each positional argument opens one tab in the new window, in argument order;
@@ -45,13 +45,13 @@ already has an open window, the entire batch opens in a separate window: existin
 tabs are not replaced. Single-URL IPC clients remain compatible. This is URL
 opening, not restoration of form contents or page navigation histories.
 
-To opt out of prewarming, set `browser = "winarchy-browser.exe --standalone"` in `apps.toml` and reload Winarchy. Other browser aliases are unaffected. After updating filter lists, close browser windows and stop/restart the resident to load the new lists. Background initialization failures are written to `browser.log` without showing a startup dialog; a normal launch still reports failures visibly.
+To opt out of prewarming, set `browser = "illium-browser.exe --standalone"` in `apps.toml` and reload Illium. Other browser aliases are unaffected. After updating filter lists, close browser windows and stop/restart the resident to load the new lists. Background initialization failures are written to `browser.log` without showing a startup dialog; a normal launch still reports failures visibly.
 
-Initial Windows smoke measurements with EasyList/EasyPrivacy, not a benchmark: a cold standalone WebView was ready in about 600 ms; prepared `ShowWindow` handling took 11–29 ms. One measured direct-IPC round trip, including the PowerShell test client's overhead, was 111 ms. These are not first-paint or key-to-pixel measurements. The idle resident and runtime consumed about 153 MiB of private commit across seven processes; summed working sets were about 303 MiB and double-count shared pages. The daemon also logs its actual warm-open request duration in `winarchy.log`. After deployment, its direct fast path measured 22 ms including the PID/IPC exchanges, with 20 ms spent showing the prepared window; unlike the standalone client measurement, this path launches no intermediary executable.
+Initial Windows smoke measurements with EasyList/EasyPrivacy, not a benchmark: a cold standalone WebView was ready in about 600 ms; prepared `ShowWindow` handling took 11–29 ms. One measured direct-IPC round trip, including the PowerShell test client's overhead, was 111 ms. These are not first-paint or key-to-pixel measurements. The idle resident and runtime consumed about 153 MiB of private commit across seven processes; summed working sets were about 303 MiB and double-count shared pages. The daemon also logs its actual warm-open request duration in `illium.log`. After deployment, its direct fast path measured 22 ms including the PID/IPC exchanges, with 20 ms spent showing the prepared window; unlike the standalone client measurement, this path launches no intermediary executable.
 
 ## Home, history and bookmarks
 
-Launching without an argument (including `Alt+B`), or submitting an empty address / `about:blank`, shows a native home surface. A Winarchy theme color fills the window, with a focused native navigation palette centered as a whole in the browser's client area. The same palette overlays web pages with `Ctrl+L`, without changing the page's bounds. It contains a search field, navigation heading, grouped favorites/history with icons and category badges, and a result count/keyboard hint footer. It uses Cascadia Mono (with Windows font fallback), the active theme's colors, a compact 13-pixel logical font, 20% tighter spacing, a DPI-scaled maximum width of 680 logical pixels and a bounded, scrollable result list. The home window uses the theme's `background_opacity` (85% by default, also applying to its native controls), including live Ctrl+Alt+Shift+Y/U adjustments. Web pages always stay fully opaque, even when opacity changes while browsing. An explicit web URL on the command line bypasses home.
+Launching without an argument (including `Alt+B`), or submitting an empty address / `about:blank`, shows a native home surface. A Illium theme color fills the window, with a focused native navigation palette centered as a whole in the browser's client area. The same palette overlays web pages with `Ctrl+L`, without changing the page's bounds. It contains a search field, navigation heading, grouped favorites/history with icons and category badges, and a result count/keyboard hint footer. It uses Cascadia Mono (with Windows font fallback), the active theme's colors, a compact 13-pixel logical font, 20% tighter spacing, a DPI-scaled maximum width of 680 logical pixels and a bounded, scrollable result list. The home window uses the theme's `background_opacity` (85% by default, also applying to its native controls), including live Ctrl+Alt+Shift+Y/U adjustments. Web pages always stay fully opaque, even when opacity changes while browsing. An explicit web URL on the command line bypasses home.
 
 While the home window is foreground, typing redirects focus and the first character to the search field even after selecting a suggestion. Editing shortcuts such as Ctrl+V work too. Other applications' input and Alt/Windows shortcuts are not intercepted; this does not apply to web pages.
 
@@ -87,15 +87,15 @@ not modified. OS-owned dialogs may still follow Windows language settings.
 | `Ctrl+R`, `Ctrl+F`, `Ctrl++/-/0` | WebView2 built-in reload, find and zoom shortcuts |
 | `Alt+F4` | Close |
 
-Winarchy gives each newly opened browser window on the active workspace foreground focus and centers the pointer after applying its tile geometry. This is a one-shot launch action, not a cursor warp on every resize. Both the browser and the daemon must be updated for this behavior.
+Illium gives each newly opened browser window on the active workspace foreground focus and centers the pointer after applying its tile geometry. This is a one-shot launch action, not a cursor warp on every resize. Both the browser and the daemon must be updated for this behavior.
 
-There is no caption or tab strip. Use Winarchy's window management or Windows' system menu (`Alt+Space`) to move the window. The palette is a native child panel placed above the WebView child in the window's z-order; it neither reserves page space nor allocates another WebView. It remains inside its browser window and inherits its minimize/move/resize lifecycle. Tabs are retained in the background; only the active tab's controller is visible. User-initiated HTTP(S) `target=_blank` / `window.open` requests open a new active tab. Unsolicited script popups are blocked instead of allocating controllers. These are URL-only popup opens, not a complete opener/window-object implementation; popup-based OAuth and scripted about:blank popups remain unsupported. Only one window is kept prepared; additional simultaneous windows use standalone hosts.
+There is no caption or tab strip. Use Illium's window management or Windows' system menu (`Alt+Space`) to move the window. The palette is a native child panel placed above the WebView child in the window's z-order; it neither reserves page space nor allocates another WebView. It remains inside its browser window and inherits its minimize/move/resize lifecycle. Tabs are retained in the background; only the active tab's controller is visible. User-initiated HTTP(S) `target=_blank` / `window.open` requests open a new active tab. Unsolicited script popups are blocked instead of allocating controllers. These are URL-only popup opens, not a complete opener/window-object implementation; popup-based OAuth and scripted about:blank popups remain unsupported. Only one window is kept prepared; additional simultaneous windows use standalone hosts.
 
 ## Leader key
 
 Press and release `Ctrl+B`, then type a key. No modifier needs to stay held.
 The compact native help panel sits at the **bottom-right of the browser's client
-area**, inset by 12 logical pixels, and follows the current Winarchy/Omarchy theme,
+area**, inset by 12 logical pixels, and follows the current Illium theme,
 including live updates: `surface` background, `overlay` borders, `text` labels,
 `subtext` hints and `accent` keys. It uses the URL palette's Cascadia Mono/font
 fallback and DPI conventions, with a 13-pixel logical font and 20% tighter
@@ -225,12 +225,12 @@ The page has no host-object/IPC bridge; web messaging is disabled. GPU, sandbox,
 
 ## Deterministic Windows acceptance test
 
-Use a disposable `WINARCHY_CONFIG_HOME` and copy `tests/browser/custom.txt` to its `browser/custom.txt` (the custom list alone is sufficient). This changes configuration only, not the WebView profile path.
+Use a disposable `ILLIUM_CONFIG_HOME` and copy `tests/browser/custom.txt` to its `browser/custom.txt` (the custom list alone is sufficient). This changes configuration only, not the WebView profile path.
 
 ```powershell
 python -m http.server 8765 --bind 127.0.0.1 --directory tests/browser
 # In another terminal:
-.\target\release\winarchy-browser.exe http://127.0.0.1:8765/index.html
+.\target\release\illium-browser.exe http://127.0.0.1:8765/index.html
 ```
 
 Check:
@@ -248,17 +248,17 @@ An automated UI smoke test is available after starting the fixture server:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/test-browser-desktop.ps1 `
-  -Exe "$PWD/target/release/winarchy-browser.exe"
+  -Exe "$PWD/target/release/illium-browser.exe"
 ```
 
-It uses disposable configuration and profile directories, checks palette centering on home and over a page, unchanged WebView bounds, Escape dismissal, theme-owned home opacity, live overrides/reset, invalid-theme retention, unified fuzzy matching, navigation, opaque pages even during opacity updates, history and add-only bookmark persistence, and closes only its own process. `-SkipFocusChecks` skips the first-character/Unicode focus-routing checks when foreground focus is unavailable; opacity and navigation checks still run. With an updated Winarchy running, add `-CheckTilingFocus` to check foreground focus and cursor centering after tiling (do not move the mouse during this check). It invokes the queued bookmark action directly, without injecting global keystrokes; manually verify the actual `Ctrl+D` accelerator as well. It retains its temporary logs for diagnosis.
+It uses disposable configuration and profile directories, checks palette centering on home and over a page, unchanged WebView bounds, Escape dismissal, theme-owned home opacity, live overrides/reset, invalid-theme retention, unified fuzzy matching, navigation, opaque pages even during opacity updates, history and add-only bookmark persistence, and closes only its own process. `-SkipFocusChecks` skips the first-character/Unicode focus-routing checks when foreground focus is unavailable; opacity and navigation checks still run. With an updated Illium running, add `-CheckTilingFocus` to check foreground focus and cursor centering after tiling (do not move the mouse during this check). It invokes the queued bookmark action directly, without injecting global keystrokes; manually verify the actual `Ctrl+D` accelerator as well. It retains its temporary logs for diagnosis.
 
 For the opt-in **real keyboard** leader checks, use an interactive desktop and
 leave the keyboard/mouse untouched while the test runs:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/test-browser-desktop.ps1 `
-  -Exe "$PWD/target/release/winarchy-browser.exe" -CheckLeader
+  -Exe "$PWD/target/release/illium-browser.exe" -CheckLeader
 ```
 
 This requires the updated local fixture and cannot be combined with
@@ -275,7 +275,7 @@ disable protection to run it. In that case, perform the same checks manually.
 A Windows-native palette regression is available without keyboard injection:
 
 ```powershell
-cargo test -p winarchy-browser --bin winarchy-browser --locked -- --ignored --nocapture
+cargo test -p illium-browser --bin illium-browser --locked -- --ignored --nocapture
 ```
 
 It requires an interactive Windows desktop and WebView2 (ignored by default).
@@ -289,7 +289,7 @@ For the new **non-keyboard tab smoke test**, with the same local fixture server:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/test-browser-tabs.ps1 `
-  -Exe "$PWD/target/release/winarchy-browser.exe"
+  -Exe "$PWD/target/release/illium-browser.exe"
 ```
 
 It starts its own standalone browser with a disposable profile/config; the
@@ -314,7 +314,7 @@ For resident lifecycle and latency/memory checks, close and stop any existing re
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/test-browser-resident.ps1 `
-  -Exe "$PWD/target/release/winarchy-browser.exe"
+  -Exe "$PWD/target/release/illium-browser.exe"
 ```
 
 This uses a disposable profile/config, copies filter lists and caches, compares a cold standalone launch with a prepared opening, measures the process trees, and tests extra windows, rebuilding the spare, and both deferred and idle shutdown. It refuses to use a resident it did not start. Its JSON result separates internal show time from IPC round-trip time. Repeat runs under controlled conditions before drawing performance conclusions.
@@ -343,7 +343,7 @@ Prepared mode keeps one browser host and its empty WebView ready. There is no po
 
 ## Validation performed
 
-- `cargo test -p winarchy-browser --locked`: seven tests pass (DuckDuckGo/address parsing, network/cosmetic rules, fixture rules, cache invalidation, persisted exceptions, fuzzy matching, merged/bounded history/bookmark persistence, legacy timestamp compatibility and relative dates).
+- `cargo test -p illium-browser --locked`: seven tests pass (DuckDuckGo/address parsing, network/cosmetic rules, fixture rules, cache invalidation, persisted exceptions, fuzzy matching, merged/bounded history/bookmark persistence, legacy timestamp compatibility and relative dates).
 - The centered-palette desktop smoke test passes on Windows via WSL interop, including foreground Unicode input routing, query selection reset, arrow selection, home Escape, single-click navigation, centered overlay, unchanged WebView bounds, page Escape, timestamps and opacity. The resident lifecycle test also passes with local fixture filters. Actual Ctrl+L from web inputs, outside-page clicks, mixed-DPI displays, light-theme visual appearance and screen-reader behavior still need manual validation.
 - Clippy with warnings denied for the browser's Linux, Windows GNU and Windows MSVC targets passes; Windows GNU release linking succeeds. GNU builds additionally require `WebView2Loader.dll` from the matching `webview2-com-sys` package next to the executable; the documented MSVC/release-CI build uses the static loader.
 - Workspace formatting and the CLI dependency-boundary check pass.
@@ -395,6 +395,6 @@ Still required before declaring the V1 validated:
 
 ## Upstream attribution
 
-`adblock-rust` 0.13.3 is maintained by Brave and licensed MPL-2.0. Winarchy uses the unmodified crate. Source and license: <https://github.com/brave/adblock-rust/tree/v0.13.3> and <https://crates.io/crates/adblock/0.13.3>. Other Rust dependencies retain their own licenses; the root MIT license does not replace them.
+`adblock-rust` 0.13.3 is maintained by Brave and licensed MPL-2.0. Illium uses the unmodified crate. Source and license: <https://github.com/brave/adblock-rust/tree/v0.13.3> and <https://crates.io/crates/adblock/0.13.3>. Other Rust dependencies retain their own licenses; the root MIT license does not replace them.
 
 EasyList and EasyPrivacy are maintained by the EasyList community. They are downloaded unmodified from <https://easylist.to/easylist/easylist.txt> and <https://easylist.to/easylist/easyprivacy.txt>, with upstream headers retained. Licensing information: <https://easylist.to/pages/licence.html> (GPLv3-or-later or CC BY-SA 3.0). No upstream list is embedded in the executable or checked into this repository. Review these terms when redistributing lists or packaged binaries.

@@ -1,11 +1,11 @@
 # Instant experience work log
 
-Branch: `feat/instant-experience`, in Winarchy and the applet collection.
+Branch: `feat/instant-experience`, in Illium and the applet collection.
 Baselines: `048f56d` / `75a3641`. Commits retain
 YannickHerrero <yannick.herrero@proton.me> as author.
 
 **Status:** implementation and automated validation below are complete; active
-Windows desktop acceptance and key-to-pixel benchmarks are not. Winarchy's
+Windows desktop acceptance and key-to-pixel benchmarks are not. Illium's
 `master` and the collection's `main` remain unchanged. A user-authorized test
 deployment is recorded below; do not fast-forward until the desktop gate passes.
 
@@ -146,7 +146,7 @@ feels instantaneous.
   changed calendar runtime files from collection `c0b157e`. Installed binaries
   were verified against the release artifacts using SHA-256.
 - Backed up replaced binaries and applet files outside the watched configuration:
-  `%LOCALAPPDATA%\Winarchy\backups\instant-20260922-141129`.
+  `%LOCALAPPDATA%\Illium\backups\instant-20260922-141129`.
   `deployment.json` records the affected paths. User settings were not replaced.
 - Gracefully restarted the daemon and checked IPC readiness: one bar, six clients,
   workspace 4 retained, no wallpaper error. New Apps/browser residents started.
@@ -169,7 +169,7 @@ and a hidden WebView2 test verified three controllers/tabs with the first select
 across two host openings. The release workspace build passed.
 
 The updated browser was deployed with backup at
-`%LOCALAPPDATA%\Winarchy\backups\browser-multi-20260922-143130`.
+`%LOCALAPPDATA%\Illium\backups\browser-multi-20260922-143130`.
 A fresh resident accepted all three saved URLs in one CLI invocation. The resulting
 tab list was checked: **all three original URLs restored in their original order**.
 Both browser and terminal now run updated binaries. No master/main merge occurred.

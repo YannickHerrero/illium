@@ -11,7 +11,7 @@ $local = [TimeZoneInfo]::ConvertTime($now, $localZone)
 # Columns are shared instants; the current local hour fixes today's origin.
 # Convert each instant independently, including across DST transitions.
 $start = $now.AddHours(-$local.Hour).AddMinutes(-$local.Minute).AddSeconds(-$local.Second)
-$zones = $env:WINARCHY_APPLET_ZONES
+$zones = $env:ILLIUM_APPLET_ZONES
 if ([string]::IsNullOrWhiteSpace($zones)) {
     $zones = 'London|GMT Standard Time;Paris|Romance Standard Time;Tokyo|Tokyo Standard Time'
 }

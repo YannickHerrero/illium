@@ -1,8 +1,8 @@
 //! Per-theme wallpaper memory, separate from distributed palettes and placement state.
 pub mod loader;
+use illium_theme::pack::plain_name;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path};
-use winarchy_theme::pack::plain_name;
 
 #[derive(Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Selections {
@@ -18,7 +18,7 @@ impl Selections {
             return Self::default();
         };
         state.themes.retain(|theme, image| {
-            winarchy_theme::valid_name(theme)
+            illium_theme::valid_name(theme)
                 && plain_name(theme)
                 && image.as_ref().is_none_or(|name| plain_name(name))
         });
@@ -33,13 +33,13 @@ impl Selections {
         theme: &str,
         name: Option<String>,
     ) -> Result<(), String> {
-        if !winarchy_theme::valid_name(theme)
+        if !illium_theme::valid_name(theme)
             || !plain_name(theme)
             || name.as_ref().is_some_and(|name| !plain_name(name))
         {
             return Err("invalid wallpaper selection".into());
         }
-        let theme = winarchy_theme::dynamic::selection_key(theme);
+        let theme = illium_theme::dynamic::selection_key(theme);
         let old = self.themes.insert(theme.into(), name);
         let result = (|| {
             let json = serde_json::to_string(self).map_err(|e| e.to_string())?;
@@ -63,10 +63,7 @@ impl Selections {
     /// Try the remembered image first, then the others. Missing/corrupt images
     /// must not make an otherwise valid theme unusable.
     pub fn candidates(&self, theme: &str, names: &[String]) -> Vec<String> {
-        match self
-            .themes
-            .get(winarchy_theme::dynamic::selection_key(theme))
-        {
+        match self.themes.get(illium_theme::dynamic::selection_key(theme)) {
             Some(None) => vec![],
             Some(Some(selected)) => names
                 .iter()
@@ -84,10 +81,10 @@ pub fn commit_choice(
     home: &Path,
     theme: &str,
     name: Option<String>,
-    snapshot: Option<&winarchy_theme::dynamic::Snapshot>,
+    snapshot: Option<&illium_theme::dynamic::Snapshot>,
     persist: bool,
 ) -> Result<(), String> {
-    let dynamic = winarchy_theme::dynamic::is_dynamic(theme);
+    let dynamic = illium_theme::dynamic::is_dynamic(theme);
     let path = home.join("wallpapers.json");
     let previous = if dynamic && persist && path.try_exists().map_err(|e| e.to_string())? {
         Some(crate::files::read_config(&path)?)
@@ -97,7 +94,7 @@ pub fn commit_choice(
     if persist {
         Selections::load(home).save_choice(home, theme, name)?;
     }
-    if dynamic && let Err(error) = winarchy_theme::dynamic::publish(home, snapshot) {
+    if dynamic && let Err(error) = illium_theme::dynamic::publish(home, snapshot) {
         if persist {
             let rollback = match previous {
                 Some(bytes) => std::str::from_utf8(&bytes)
@@ -159,15 +156,15 @@ mod tests {
     #[test]
     fn image_and_selection_edits_do_not_reload_configuration() {
         let home =
-            std::env::temp_dir().join(format!("winarchy-wallpaper-watch-{}", std::process::id()));
+            std::env::temp_dir().join(format!("illium-wallpaper-watch-{}", std::process::id()));
         crate::config::Config::install(&home).unwrap();
-        let dir = winarchy_theme::pack::wallpaper_dir(&home, "catppuccin-mocha").unwrap();
+        let dir = illium_theme::pack::wallpaper_dir(&home, "catppuccin-mocha").unwrap();
         std::fs::create_dir_all(&dir).unwrap();
         let before = crate::files::snapshot(&home).unwrap();
-        let fingerprint = winarchy_theme::pack::fingerprint(&home, "catppuccin-mocha").unwrap();
+        let fingerprint = illium_theme::pack::fingerprint(&home, "catppuccin-mocha").unwrap();
         std::fs::write(dir.join("new.jpg"), "not decoded by watcher").unwrap();
         assert_ne!(
-            winarchy_theme::pack::fingerprint(&home, "catppuccin-mocha").unwrap(),
+            illium_theme::pack::fingerprint(&home, "catppuccin-mocha").unwrap(),
             fingerprint
         );
         Selections::default()
@@ -179,7 +176,7 @@ mod tests {
     #[test]
     fn dynamic_variants_share_choice_but_not_static_themes() {
         let home =
-            std::env::temp_dir().join(format!("winarchy-dynamic-choice-{}", std::process::id()));
+            std::env::temp_dir().join(format!("illium-dynamic-choice-{}", std::process::id()));
         std::fs::create_dir_all(&home).unwrap();
         let names = vec!["a.png".into(), "b.png".into()];
         let mut state = Selections::default();
@@ -203,13 +200,13 @@ mod tests {
         crate::config::Config::install(&home).unwrap();
         let before_config = crate::files::snapshot(&home).unwrap();
         let pixels = image::RgbaImage::from_pixel(2, 2, image::Rgba([30, 90, 160, 255]));
-        let snapshot = winarchy_theme::dynamic::prepare(&home, "new.png", &pixels);
+        let snapshot = illium_theme::dynamic::prepare(&home, "new.png", &pixels);
         Selections::default()
             .save_choice(&home, "dynamic-dark", Some("old.png".into()))
             .unwrap();
         let before = std::fs::read(home.join("wallpapers.json")).unwrap();
         // A directory at the publication target makes atomic rename fail.
-        std::fs::create_dir(home.join(winarchy_theme::dynamic::FILE)).unwrap();
+        std::fs::create_dir(home.join(illium_theme::dynamic::FILE)).unwrap();
         assert!(
             commit_choice(
                 &home,
@@ -221,7 +218,7 @@ mod tests {
             .is_err()
         );
         assert_eq!(std::fs::read(home.join("wallpapers.json")).unwrap(), before);
-        std::fs::remove_dir(home.join(winarchy_theme::dynamic::FILE)).unwrap();
+        std::fs::remove_dir(home.join(illium_theme::dynamic::FILE)).unwrap();
         commit_choice(
             &home,
             "dynamic-dark",
@@ -230,10 +227,10 @@ mod tests {
             true,
         )
         .unwrap();
-        assert!(home.join(winarchy_theme::dynamic::FILE).is_file());
+        assert!(home.join(illium_theme::dynamic::FILE).is_file());
         assert_eq!(crate::files::snapshot(&home).unwrap(), before_config);
         commit_choice(&home, "dynamic-light", None, None, true).unwrap();
-        assert!(!home.join(winarchy_theme::dynamic::FILE).exists());
+        assert!(!home.join(illium_theme::dynamic::FILE).exists());
         assert!(
             Selections::load(&home)
                 .candidates("dynamic-dark", &["new.png".into()])
@@ -243,7 +240,7 @@ mod tests {
     }
     #[test]
     fn independent_choices_survive_restart() {
-        let home = std::env::temp_dir().join(format!("winarchy-wallpapers-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("illium-wallpapers-{}", std::process::id()));
         std::fs::create_dir_all(&home).unwrap();
         let mut state = Selections::default();
         state

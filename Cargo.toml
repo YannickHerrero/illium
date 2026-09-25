@@ -1,22 +1,22 @@
 [workspace]
-members = ["crates/winarchy-ipc", "crates/winarchy-theme", "crates/winarchy-config", "crates/winarchy-screensaver", "crates/winarchyctl", "crates/winarchy-apps", "crates/winarchy-terminal", "crates/winarchy-dictate", "crates/winarchy-browser"]
-default-members = [".", "crates/winarchy-ipc", "crates/winarchy-theme", "crates/winarchy-config", "crates/winarchy-screensaver", "crates/winarchyctl", "crates/winarchy-apps", "crates/winarchy-terminal", "crates/winarchy-dictate", "crates/winarchy-browser"]
+members = ["crates/illium-ipc", "crates/illium-theme", "crates/illium-config", "crates/illium-screensaver", "crates/illiumctl", "crates/illium-apps", "crates/illium-terminal", "crates/illium-dictate", "crates/illium-browser"]
+default-members = [".", "crates/illium-ipc", "crates/illium-theme", "crates/illium-config", "crates/illium-screensaver", "crates/illiumctl", "crates/illium-apps", "crates/illium-terminal", "crates/illium-dictate", "crates/illium-browser"]
 resolver = "3"
 
 [package]
-name = "winarchy"
+name = "illium"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
 description = "Keyboard-first tiling window manager and experimental shell for Windows 11"
-repository = "https://github.com/YannickHerrero/winarchy"
+repository = "https://github.com/YannickHerrero/illium"
 build = "build.rs"
 
 [dependencies]
-winarchy-ipc = { path = "crates/winarchy-ipc" }
-winarchy-theme = { path = "crates/winarchy-theme" }
-winarchy-config = { path = "crates/winarchy-config" }
-winarchy-screensaver = { path = "crates/winarchy-screensaver" }
+illium-ipc = { path = "crates/illium-ipc" }
+illium-theme = { path = "crates/illium-theme" }
+illium-config = { path = "crates/illium-config" }
+illium-screensaver = { path = "crates/illium-screensaver" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 # Keybinding edits rewrite the user's file in place, keeping comments and order.

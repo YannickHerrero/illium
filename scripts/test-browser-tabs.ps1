@@ -27,19 +27,19 @@ function Wait-For([scriptblock]$Condition, [string]$Message) {
         Start-Sleep -Milliseconds 100
     }
 }
-$root = Join-Path $env:TEMP ('winarchy-tabs-test-' + [guid]::NewGuid())
+$root = Join-Path $env:TEMP ('illium-tabs-test-' + [guid]::NewGuid())
 $config = Join-Path $root 'config'
 New-Item -ItemType Directory -Force (Join-Path $config 'browser'), (Join-Path $config 'themes') | Out-Null
 $origin = ([Uri]$TestUrl).GetLeftPart([UriPartial]::Authority)
 $rules = (Get-Content "$PSScriptRoot/../tests/browser/custom.txt" -Raw).Replace('http://127.0.0.1:8765', $origin)
 [IO.File]::WriteAllText((Join-Path $config 'browser/custom.txt'), $rules)
 Copy-Item "$PSScriptRoot/../config/themes/catppuccin-mocha.toml" (Join-Path $config 'themes/test.toml')
-[IO.File]::WriteAllText((Join-Path $config 'winarchy.toml'), 'theme = "test"')
-$oldHome = $env:WINARCHY_CONFIG_HOME
+[IO.File]::WriteAllText((Join-Path $config 'illium.toml'), 'theme = "test"')
+$oldHome = $env:ILLIUM_CONFIG_HOME
 $oldLocal = $env:LOCALAPPDATA
 $p = $null
 try {
-    $env:WINARCHY_CONFIG_HOME = $config
+    $env:ILLIUM_CONFIG_HOME = $config
     $env:LOCALAPPDATA = Join-Path $root 'local'
     $log = Join-Path $root 'startup.log'
     $p = Start-Process -FilePath $Exe -ArgumentList @('--standalone', $TestUrl) -RedirectStandardError $log -PassThru
@@ -87,6 +87,6 @@ try {
     Write-Host "PASS: popup opens a second tab, both controllers retained, only active view visible, full page bounds, per-tab history/filtering, clean shutdown. Logs: $root"
 } finally {
     if ($p -and !$p.HasExited) { [void]$p.CloseMainWindow() }
-    $env:WINARCHY_CONFIG_HOME = $oldHome
+    $env:ILLIUM_CONFIG_HOME = $oldHome
     $env:LOCALAPPDATA = $oldLocal
 }

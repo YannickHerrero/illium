@@ -32,7 +32,7 @@ fn initialize(identity: String) -> Result<(), String> {
         return Err("invalid recovery session identity".into());
     }
     PROPERTY
-        .set(native::wide(&format!("WinarchySession-{identity}")))
+        .set(native::wide(&format!("IlliumSession-{identity}")))
         .map_err(|_| "session already initialized")?;
     IDENTITY
         .set(identity)
@@ -56,7 +56,7 @@ fn lock_marker() -> Option<std::path::PathBuf> {
         .get()
         .map(|id| crate::config::Config::home().join(format!("session-{id}.locked")))
 }
-/// Tells the watchdog to lock Windows if the daemon dies while the Winarchy
+/// Tells the watchdog to lock Windows if the daemon dies while the Illium
 /// lock screen is shown.
 pub fn set_locked(locked: bool) {
     let Some(path) = lock_marker() else {
@@ -163,7 +163,7 @@ pub fn explorer(start: bool) -> Result<(), String> {
         Err("could not stop Explorer".into())
     }
 }
-/// Stops the session processes listed in the configuration, once Winarchy
+/// Stops the session processes listed in the configuration, once Illium
 /// holds the shell. Windows keeps shell surfaces such as the search host or
 /// the text input host running for a desktop that no longer exists here.
 /// Windows restarts several of them on demand, so this only covers startup.
@@ -217,7 +217,7 @@ impl Recovery {
         unsafe {
             let identity = format!("{:?}", CoCreateGuid().map_err(|e| e.to_string())?);
             initialize(identity.clone())?;
-            let name = native::wide(&format!("Local\\WinarchyRecovery-{identity}"));
+            let name = native::wide(&format!("Local\\IlliumRecovery-{identity}"));
             let ready = Owned::new(
                 CreateEventW(None, true, false, PCWSTR(name.as_ptr()))
                     .map_err(|e| e.to_string())?,
@@ -273,7 +273,7 @@ pub fn watchdog(pid: u32, identity: &str, started: u64) -> Result<(), String> {
         if creation_time(*process)? != started {
             return Err("daemon process identity changed".into());
         }
-        let name = native::wide(&format!("Local\\WinarchyRecovery-{identity}"));
+        let name = native::wide(&format!("Local\\IlliumRecovery-{identity}"));
         let ready = Owned::new(
             OpenEventW(EVENT_MODIFY_STATE, false, PCWSTR(name.as_ptr()))
                 .map_err(|e| e.to_string())?,

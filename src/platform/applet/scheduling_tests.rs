@@ -55,7 +55,7 @@ fn volume_polls_coalesce_and_user_slider_intent_takes_priority() {
 }
 #[test]
 fn reload_keeps_unchanged_workers_and_invalidates_nested_source_edits() {
-    let home = std::env::temp_dir().join(format!("winarchy-reload-applet-{}", std::process::id()));
+    let home = std::env::temp_dir().join(format!("illium-reload-applet-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&home);
     Config::install(&home).unwrap();
     let dir = home.join("applets/fixture");

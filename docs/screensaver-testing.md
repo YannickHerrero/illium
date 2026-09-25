@@ -2,7 +2,7 @@
 
 Automated tests cover config compatibility/validation, idle thresholds, activity taking precedence over timeout, resetting after loss of focus, cycle selection (including a single effect), bounded animation frames and effect progression. Cross-target checks compile the Slint UI and native Windows input integration. They do **not** replace these interactive checks on Windows 11.
 
-Use a disposable session with a known Winarchy password and a recovery console available. Winarchy's lock surface is not the Windows security boundary; use Win+L for a real unattended lock.
+Use a disposable session with a known Illium password and a recovery console available. Illium's lock surface is not the Windows security boundary; use Win+L for a real unattended lock.
 
 ## Timing and configuration
 
@@ -31,7 +31,7 @@ Use a disposable session with a known Winarchy password and a recovery console a
 
 ## V1 validation record
 
-- Linux: `cargo test -p winarchy -p winarchy-config -- --test-threads=1` passed: 163 tests, one existing opt-in test ignored.
+- Linux: `cargo test -p illium -p illium-config -- --test-threads=1` passed: 163 tests, one existing opt-in test ignored.
 - The parallel run hit an existing theme-picker render test's wall-clock timeout (`parallel_render_preserves_paint_order_and_reuses_frames`). It passed in the serial run; no unrelated test was changed.
 - Formatting, Clippy with warnings denied on Linux, and Windows GNU cross-target Clippy for all targets passed (including Slint compilation).
 - The interactive Windows checklist above remains **unverified** on this Linux host. In particular, compilation alone does not prove cursor, input-hook, multi-monitor or secure-desktop behavior.
@@ -46,9 +46,9 @@ The focused saver owns a Slint `FocusScope` as a fallback if Windows removes the
 
 ```sh
 cargo fmt --all --check
-cargo test -p winarchy -p winarchy-config
-cargo clippy -p winarchy -p winarchy-config --all-targets -- -D warnings
+cargo test -p illium -p illium-config
+cargo clippy -p illium -p illium-config --all-targets -- -D warnings
 # From a Linux host with the Windows GNU target installed:
-cargo check -p winarchy --target x86_64-pc-windows-gnu
-cargo clippy -p winarchy --target x86_64-pc-windows-gnu --all-targets -- -D warnings
+cargo check -p illium --target x86_64-pc-windows-gnu
+cargo clippy -p illium --target x86_64-pc-windows-gnu --all-targets -- -D warnings
 ```

@@ -2,16 +2,16 @@
 
 Source: https://github.com/omacom/omarchy/tree/86a2e5830eae4d660a66df8cf37f0a35bf4fe8a2/themes/catppuccin
 
-Pinned revision: `86a2e5830eae4d660a66df8cf37f0a35bf4fe8a2` (the same revision as Winarchy's picker reference).
-Winarchy palette/ANSI colors are unchanged; only image assets are imported.
-`catppuccin` in Omarchy corresponds to Winarchy's `catppuccin-mocha`.
+Pinned revision: `86a2e5830eae4d660a66df8cf37f0a35bf4fe8a2` (the same revision as Illium's picker reference).
+Illium palette/ANSI colors are unchanged; only image assets are imported.
+`catppuccin` in Omarchy corresponds to Illium's `catppuccin-mocha`.
 
 The preview is an unchanged screenshot of **Omarchy**, not a screenshot or a
-live rendering of Winarchy. Lock-screen previews and unlock icons are excluded.
+live rendering of Illium. Lock-screen previews and unlock icons are excluded.
 All files from the theme's `backgrounds/` folder are included, including the
 full-resolution Omarchy-branded wallpaper (not a standalone UI icon).
 
-WebP wallpapers are converted to PNG because Winarchy decodes PNG/JPEG only.
+WebP wallpapers are converted to PNG because Illium decodes PNG/JPEG only.
 Pillow 11.1.0 was used to decode to RGBA and save PNG, with no resizing, cropping
 or additional lossy compression. Dimensions and decoded RGBA pixels were
 verified against the WebP originals. Existing losses in a lossy WebP cannot be
@@ -24,9 +24,9 @@ The Omarchy repository provides the MIT notice reproduced in `LICENSE`
 https://github.com/catppuccin/catppuccin. These images retain their original
 content and branding. No separate artwork-specific credits/license files were
 present in these theme directories at this revision. The repository's license
-is not a claim that Winarchy owns third-party artwork or brands depicted in
+is not a claim that Illium owns third-party artwork or brands depicted in
 wallpapers/screenshots (including Totoro in the dark theme). Do not infer a new
-license for those underlying works from Winarchy's own MIT license; obtain any
+license for those underlying works from Illium's own MIT license; obtain any
 additional permissions needed for redistribution of third-party imagery.
 
 Upstream LICENSE SHA-256: `717ba1949502290f8e47688ae2e323acd06c8ca47aec9f7596b15f678c1af4a2`.

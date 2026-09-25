@@ -1,13 +1,13 @@
 //! Best-effort, lossless thumbnail cache, outside the watched configuration.
 //! Raw RGBA trades disk space for cheap reads (no PNG encode/decode on reopen).
 use super::render;
+use illium_theme::preview::Entry;
 use std::{
     fs,
     io::{Read, Write},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
-use winarchy_theme::preview::Entry;
 
 const WIDTH: u32 = 1536;
 const HEIGHT: u32 = 864;
@@ -23,10 +23,10 @@ fn root() -> Option<PathBuf> {
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|p| PathBuf::from(p).join(".cache")));
     // Bump when thumbnail dimensions, crop or filtering semantics change.
-    base.map(|p| p.join("winarchy/picker-thumbnails-v1"))
+    base.map(|p| p.join("illium/picker-thumbnails-v1"))
 }
 fn identity(entry: &Entry) -> Vec<u8> {
-    let mut key = b"winarchy-thumbnail-v1\0".to_vec();
+    let mut key = b"illium-thumbnail-v1\0".to_vec();
     key.extend_from_slice(&entry.size.to_le_bytes());
     key.extend_from_slice(&entry.modified.to_le_bytes());
     let path = std::path::absolute(&entry.path).unwrap_or_else(|_| entry.path.clone());

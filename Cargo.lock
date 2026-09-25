@@ -2359,6 +2359,152 @@ dependencies = [
 ]
 
 [[package]]
+name = "illium"
+version = "0.1.0"
+dependencies = [
+ "argon2",
+ "i-slint-compiler",
+ "i-slint-core",
+ "illium-config",
+ "illium-ipc",
+ "illium-screensaver",
+ "illium-theme",
+ "image",
+ "raw-window-handle",
+ "serde",
+ "serde_json",
+ "slint",
+ "slint-build",
+ "slint-interpreter",
+ "spin_on",
+ "tempfile",
+ "tiny-skia",
+ "toml 0.8.23",
+ "toml_edit 0.22.27",
+ "tracing",
+ "tracing-subscriber",
+ "windows 0.61.3",
+ "windows-core 0.61.2",
+ "winresource",
+]
+
+[[package]]
+name = "illium-apps"
+version = "0.1.0"
+dependencies = [
+ "illium-ipc",
+ "illium-theme",
+ "raw-window-handle",
+ "slint",
+ "slint-build",
+ "toml 0.8.23",
+ "windows 0.61.3",
+ "winresource",
+]
+
+[[package]]
+name = "illium-browser"
+version = "0.1.0"
+dependencies = [
+ "adblock",
+ "illium-ipc",
+ "illium-theme",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "url",
+ "webview2-com",
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "illium-config"
+version = "0.1.0"
+dependencies = [
+ "illium-ipc",
+ "illium-theme",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "toml 0.8.23",
+ "toml_edit 0.22.27",
+ "tracing",
+ "windows 0.61.3",
+]
+
+[[package]]
+name = "illium-dictate"
+version = "0.1.0"
+dependencies = [
+ "illium-ipc",
+ "illium-theme",
+ "openssl-sys",
+ "sha2",
+ "transcribe-rs",
+ "windows 0.61.3",
+]
+
+[[package]]
+name = "illium-ipc"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "windows 0.61.3",
+]
+
+[[package]]
+name = "illium-screensaver"
+version = "0.1.0"
+dependencies = [
+ "fontdue",
+ "illium-config",
+ "png 0.17.16",
+]
+
+[[package]]
+name = "illium-terminal"
+version = "0.1.0"
+dependencies = [
+ "alacritty_terminal",
+ "illium-ipc",
+ "illium-theme",
+ "notify",
+ "portable-pty",
+ "serde",
+ "toml 0.8.23",
+ "windows 0.61.3",
+ "windows-numerics 0.2.0",
+]
+
+[[package]]
+name = "illium-theme"
+version = "0.1.0"
+dependencies = [
+ "fast_image_resize",
+ "image",
+ "notify",
+ "serde",
+ "sha2",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "illiumctl"
+version = "0.1.0"
+dependencies = [
+ "argon2",
+ "illium-config",
+ "illium-ipc",
+ "illium-theme",
+ "rpassword",
+ "serde_json",
+ "tempfile",
+ "winresource",
+]
+
+[[package]]
 name = "image"
 version = "0.25.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6026,152 +6172,6 @@ name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
-
-[[package]]
-name = "winarchy"
-version = "0.1.0"
-dependencies = [
- "argon2",
- "i-slint-compiler",
- "i-slint-core",
- "image",
- "raw-window-handle",
- "serde",
- "serde_json",
- "slint",
- "slint-build",
- "slint-interpreter",
- "spin_on",
- "tempfile",
- "tiny-skia",
- "toml 0.8.23",
- "toml_edit 0.22.27",
- "tracing",
- "tracing-subscriber",
- "winarchy-config",
- "winarchy-ipc",
- "winarchy-screensaver",
- "winarchy-theme",
- "windows 0.61.3",
- "windows-core 0.61.2",
- "winresource",
-]
-
-[[package]]
-name = "winarchy-apps"
-version = "0.1.0"
-dependencies = [
- "raw-window-handle",
- "slint",
- "slint-build",
- "toml 0.8.23",
- "winarchy-ipc",
- "winarchy-theme",
- "windows 0.61.3",
- "winresource",
-]
-
-[[package]]
-name = "winarchy-browser"
-version = "0.1.0"
-dependencies = [
- "adblock",
- "serde",
- "serde_json",
- "tempfile",
- "url",
- "webview2-com",
- "winarchy-ipc",
- "winarchy-theme",
- "windows 0.62.2",
-]
-
-[[package]]
-name = "winarchy-config"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "toml 0.8.23",
- "toml_edit 0.22.27",
- "tracing",
- "winarchy-ipc",
- "winarchy-theme",
- "windows 0.61.3",
-]
-
-[[package]]
-name = "winarchy-dictate"
-version = "0.1.0"
-dependencies = [
- "openssl-sys",
- "sha2",
- "transcribe-rs",
- "winarchy-ipc",
- "winarchy-theme",
- "windows 0.61.3",
-]
-
-[[package]]
-name = "winarchy-ipc"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "windows 0.61.3",
-]
-
-[[package]]
-name = "winarchy-screensaver"
-version = "0.1.0"
-dependencies = [
- "fontdue",
- "png 0.17.16",
- "winarchy-config",
-]
-
-[[package]]
-name = "winarchy-terminal"
-version = "0.1.0"
-dependencies = [
- "alacritty_terminal",
- "notify",
- "portable-pty",
- "serde",
- "toml 0.8.23",
- "winarchy-ipc",
- "winarchy-theme",
- "windows 0.61.3",
- "windows-numerics 0.2.0",
-]
-
-[[package]]
-name = "winarchy-theme"
-version = "0.1.0"
-dependencies = [
- "fast_image_resize",
- "image",
- "notify",
- "serde",
- "sha2",
- "toml 0.8.23",
-]
-
-[[package]]
-name = "winarchyctl"
-version = "0.1.0"
-dependencies = [
- "argon2",
- "rpassword",
- "serde_json",
- "tempfile",
- "winarchy-config",
- "winarchy-ipc",
- "winarchy-theme",
- "winresource",
-]
 
 [[package]]
 name = "windows"

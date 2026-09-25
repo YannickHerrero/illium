@@ -2,7 +2,7 @@
 
 ## Windows already open at startup
 
-Starting Winarchy automatically enrolls eligible, already-visible application windows and tiles them in the current workspace (workspace 1 initially). You do not need to close and reopen your applications. Window rules still apply: ignored windows are untouched, dialogs generally float, and workspace assignments are respected. System/helper windows and applications that cannot be managed with your standard user token remain excluded.
+Starting Illium automatically enrolls eligible, already-visible application windows and tiles them in the current workspace (workspace 1 initially). You do not need to close and reopen your applications. Window rules still apply: ignored windows are untouched, dialogs generally float, and workspace assignments are respected. System/helper windows and applications that cannot be managed with your standard user token remain excluded.
 
 Minimized windows are not forcibly restored at startup. Restoring one enrolls it automatically. Minimizing an already-managed window removes it from the tiling calculation until it is restored, without losing its workspace membership.
 
@@ -10,55 +10,55 @@ Hooks are registered before the initial enumeration, so windows created or resto
 
 ## Applications and launcher
 
-Alt+Shift+Space opens a two-level menu in the launcher surface, filtered with the same fuzzy search. `Apps` lists the companion applications of `winarchy-apps.exe` (Files, Tasks, Screenshot), which the launcher also indexes by name. `System` holds Hibernate, Lock, Restart, Shut down, Stop Explorer or Start Explorer (whichever applies to the current shell state, see [recovery](recovery.md) before stopping it) and Quit Winarchy; power actions run the system `shutdown.exe`, and hibernation requires it to be enabled on the machine. `Appearance` groups the theme settings. Its `Theme` entry opens the visual theme carousel (also Ctrl+Alt+Shift+Space or `winarchyctl theme picker`): Left/Right or Tab/Shift+Tab browse, typing filters, Enter or a click on the selected preview applies, and Escape clears the filter before closing. Browsing does not apply a theme. Add preview images as described in [themes](themes.md). `Wallpaper` opens the same carousel for the active theme's images (`winarchyctl wallpaper picker`), with filename filtering and explicit confirmation; browsing never changes the wallpaper; `winarchyctl wallpaper clear` switches to the theme's plain color. `Increase opacity` and `Decrease opacity` show the current value and step it by five points, `Reset opacity` returns to the theme's value, and `Enable blur` / `Disable blur` flips [`background_blur`](configuration.md#winarchytoml); these four leave the menu open so they can be repeated. `Keybindings` (also Alt+Shift+? or `winarchyctl keybindings toggle`) lists every binding of `keybindings.toml` in the shipped order with a description; typing filters by description or chord, Up/Down select, Enter or the `Change` button opens a capture dialog. Press the new combination (at least one modifier), then Enter to apply; Backspace clears, Escape cancels. While the dialog is open no key reaches the desktop, so any chord can be recorded, configured ones included. A combination already bound to another action shows a warning: Enter replaces it and leaves the other action unbound, Escape keeps things as they are. A binding whose chord differs from the shipped default is marked `changed` and gets a `Reset` button; an unbound default stays listed as `Unbound` so it can be restored. Ctrl+Alt+Shift+W opens the wallpaper picker directly; `winarchyctl wallpaper next` remains available for cycling. Wallpaper choices are remembered per theme (see [themes](themes.md)). Enter descends into a submenu, Backspace on an empty query returns to the root, Escape closes. Win+Shift+S runs `winarchy-apps.exe shot` from the daemon's directory (`app shot` in `keybindings.toml`): the screen freezes dimmed, drag a rectangle to copy it to the clipboard as a bitmap, Escape or right click cancels. Alt+E opens the file manager (`app files`) and Alt+Shift+Escape the task manager (`app tasks`); see [apps.md](apps.md) for their keys. Alt+Enter executes the `terminal` alias. Alt+Space toggles the launcher. Type a subsequence of an application's name, use Up/Down, Enter to launch, Escape to dismiss. The index combines `apps.toml` aliases, `.lnk` files under the current-user and common Start Menu Programs directories, and packaged (Store/MSIX) applications from the Applications shell folder such as Microsoft Teams or Windows Terminal. Reload to refresh the index. Shortcuts are launched through ShellExecute, without requiring an Explorer process.
+Alt+Shift+Space opens a two-level menu in the launcher surface, filtered with the same fuzzy search. `Apps` lists the companion applications of `illium-apps.exe` (Files, Tasks, Screenshot), which the launcher also indexes by name. `System` holds Hibernate, Lock, Restart, Shut down, Stop Explorer or Start Explorer (whichever applies to the current shell state, see [recovery](recovery.md) before stopping it) and Quit Illium; power actions run the system `shutdown.exe`, and hibernation requires it to be enabled on the machine. `Appearance` groups the theme settings. Its `Theme` entry opens the visual theme carousel (also Ctrl+Alt+Shift+Space or `illiumctl theme picker`): Left/Right or Tab/Shift+Tab browse, typing filters, Enter or a click on the selected preview applies, and Escape clears the filter before closing. Browsing does not apply a theme. Add preview images as described in [themes](themes.md). `Wallpaper` opens the same carousel for the active theme's images (`illiumctl wallpaper picker`), with filename filtering and explicit confirmation; browsing never changes the wallpaper; `illiumctl wallpaper clear` switches to the theme's plain color. `Increase opacity` and `Decrease opacity` show the current value and step it by five points, `Reset opacity` returns to the theme's value, and `Enable blur` / `Disable blur` flips [`background_blur`](configuration.md#illiumtoml); these four leave the menu open so they can be repeated. `Keybindings` (also Alt+Shift+? or `illiumctl keybindings toggle`) lists every binding of `keybindings.toml` in the shipped order with a description; typing filters by description or chord, Up/Down select, Enter or the `Change` button opens a capture dialog. Press the new combination (at least one modifier), then Enter to apply; Backspace clears, Escape cancels. While the dialog is open no key reaches the desktop, so any chord can be recorded, configured ones included. A combination already bound to another action shows a warning: Enter replaces it and leaves the other action unbound, Escape keeps things as they are. A binding whose chord differs from the shipped default is marked `changed` and gets a `Reset` button; an unbound default stays listed as `Unbound` so it can be restored. Ctrl+Alt+Shift+W opens the wallpaper picker directly; `illiumctl wallpaper next` remains available for cycling. Wallpaper choices are remembered per theme (see [themes](themes.md)). Enter descends into a submenu, Backspace on an empty query returns to the root, Escape closes. Win+Shift+S runs `illium-apps.exe shot` from the daemon's directory (`app shot` in `keybindings.toml`): the screen freezes dimmed, drag a rectangle to copy it to the clipboard as a bitmap, Escape or right click cancels. Alt+E opens the file manager (`app files`) and Alt+Shift+Escape the task manager (`app tasks`); see [apps.md](apps.md) for their keys. Alt+Enter executes the `terminal` alias. Alt+Space toggles the launcher. Type a subsequence of an application's name, use Up/Down, Enter to launch, Escape to dismiss. The index combines `apps.toml` aliases, `.lnk` files under the current-user and common Start Menu Programs directories, and packaged (Store/MSIX) applications from the Applications shell folder such as Microsoft Teams or Windows Terminal. Reload to refresh the index. Shortcuts are launched through ShellExecute, without requiring an Explorer process.
 
 `spawn` takes an alias, not an arbitrary shell expression:
 
 ```powershell
-winarchyctl spawn terminal
-winarchyctl spawn browser
+illiumctl spawn terminal
+illiumctl spawn browser
 ```
 
 ## Workspaces
 
-Alt+1…9 switches between nine global Winarchy workspaces. These are unrelated to Windows Virtual Desktops. Inactive clients are parked off screen (or hidden, see `conceal` in [configuration](configuration.md#wmtoml)) rather than minimized. Alt+Shift+number moves the focused client and follows it. Alt+S visits the next occupied workspace; Alt+D toggles the two most recently selected workspaces. Selecting the current workspace does not overwrite history.
+Alt+1…9 switches between nine global Illium workspaces. These are unrelated to Windows Virtual Desktops. Inactive clients are parked off screen (or hidden, see `conceal` in [configuration](configuration.md#wmtoml)) rather than minimized. Alt+Shift+number moves the focused client and follows it. Alt+S visits the next occupied workspace; Alt+D toggles the two most recently selected workspaces. Selecting the current workspace does not overwrite history.
 
 ```powershell
-winarchyctl workspace 4
-winarchyctl window move-workspace 2          # do not follow
-winarchyctl window move-workspace 2 --follow
-winarchyctl workspace next-active
-winarchyctl workspace recent
+illiumctl workspace 4
+illiumctl window move-workspace 2          # do not follow
+illiumctl window move-workspace 2 --follow
+illiumctl workspace next-active
+illiumctl workspace recent
 ```
 
 The bar lists the occupied workspaces plus the active one and highlights the active one; empty workspaces are not shown. Workspaces have a monitor association; focusing a client on a monitor updates that association. Switching workspaces is global, not independently per monitor.
 
 ## Spaces
 
-A space is a named set of the nine workspaces, for example one per project or activity. Switching space swaps every workspace at once: the windows of the other spaces keep running, parked like those of an inactive workspace, and each space remembers its active workspace, recent workspace, monitor associations, split ratios and focused window. Winarchy always has at least one space; the first is called `dev`. Spaces, their names and the windows' memberships survive daemon restarts through `state.json`.
+A space is a named set of the nine workspaces, for example one per project or activity. Switching space swaps every workspace at once: the windows of the other spaces keep running, parked like those of an inactive workspace, and each space remembers its active workspace, recent workspace, monitor associations, split ratios and focused window. Illium always has at least one space; the first is called `dev`. Spaces, their names and the windows' memberships survive daemon restarts through `state.json`.
 
-**Ctrl+Alt+Tab** (or `winarchyctl space picker`) opens the space picker over the blurred wallpaper. It lists every space with the applications of its windows and preselects the most recent one, so Enter goes back and forth. **Up/Down**, **Tab/Shift+Tab**, Ctrl+Alt+Tab again or hovering move the selection; **Enter** or a click switches. **N** creates a space (type its name, Enter) and switches to it, empty. **E** renames the selected space. **D** then **D** again deletes it: no window is closed, its windows join the current space on the same workspace numbers (deleting the current space first switches to the recent one). **Escape** cancels a prompt, then closes the picker.
+**Ctrl+Alt+Tab** (or `illiumctl space picker`) opens the space picker over the blurred wallpaper. It lists every space with the applications of its windows and preselects the most recent one, so Enter goes back and forth. **Up/Down**, **Tab/Shift+Tab**, Ctrl+Alt+Tab again or hovering move the selection; **Enter** or a click switches. **N** creates a space (type its name, Enter) and switches to it, empty. **E** renames the selected space. **D** then **D** again deletes it: no window is closed, its windows join the current space on the same workspace numbers (deleting the current space first switches to the recent one). **Escape** cancels a prompt, then closes the picker.
 
 Names are 1 to 24 characters without spaces or quotes, and must be unique.
 
 ```powershell
-winarchyctl space create perso               # and switch to it
-winarchyctl space switch dev
-winarchyctl space next                       # creation order, wrapping
-winarchyctl space recent
-winarchyctl space rename perso maison
-winarchyctl space delete maison
-winarchyctl window move-space dev            # keeps its workspace number
-winarchyctl window move-space dev --follow
+illiumctl space create perso               # and switch to it
+illiumctl space switch dev
+illiumctl space next                       # creation order, wrapping
+illiumctl space recent
+illiumctl space rename perso maison
+illiumctl space delete maison
+illiumctl window move-space dev            # keeps its workspace number
+illiumctl window move-space dev --follow
 ```
 
 The `space` bar module shows the current space's name once there are at least two spaces; clicking it opens the picker. The exposé only shows the windows of the current space.
 
 ## Exposé
 
-**Alt+Tab** (or `winarchyctl expose toggle`) shows every managed window of every workspace as a card over the blurred wallpaper of the active monitor, grouped by workspace in tiling order, with a workspace badge, the application's icon and the window title. Each card is a live preview composed by the Desktop Window Manager: video keeps playing and terminals keep scrolling, on every workspace, because inactive windows are parked off screen rather than hidden. Minimized windows show their last frame dimmed; with `conceal = "hide"` the windows of inactive workspaces have no surface and their cards show icon and title only. The focused window is selected on opening and outlined in the accent color.
+**Alt+Tab** (or `illiumctl expose toggle`) shows every managed window of every workspace as a card over the blurred wallpaper of the active monitor, grouped by workspace in tiling order, with a workspace badge, the application's icon and the window title. Each card is a live preview composed by the Desktop Window Manager: video keeps playing and terminals keep scrolling, on every workspace, because inactive windows are parked off screen rather than hidden. Minimized windows show their last frame dimmed; with `conceal = "hide"` the windows of inactive workspaces have no surface and their cards show icon and title only. The focused window is selected on opening and outlined in the accent color.
 
-Typing filters by title or application name with the launcher's subsequence matching; Backspace edits, Ctrl+U clears. **Left/Right** (or Alt+Tab / Alt+Shift+Tab while the exposé is open), **Up/Down** and hovering move the selection. **Enter** or a click switches to the window's workspace if needed and focuses it. A middle click or the configured `window close` chord (Alt+Q by default) closes the selected window and removes its card; a window closed by other means disappears too. **Escape** clears the filter first, then closes the exposé and restores the previous focus. Any other Winarchy command (a workspace switch, the launcher) closes it as well.
+Typing filters by title or application name with the launcher's subsequence matching; Backspace edits, Ctrl+U clears. **Left/Right** (or Alt+Tab / Alt+Shift+Tab while the exposé is open), **Up/Down** and hovering move the selection. **Enter** or a click switches to the window's workspace if needed and focuses it. A middle click or the configured `window close` chord (Alt+Q by default) closes the selected window and removes its card; a window closed by other means disappears too. **Escape** clears the filter first, then closes the exposé and restores the previous focus. Any other Illium command (a workspace switch, the launcher) closes it as well.
 
 Existing keybinding files are not overwritten on upgrade. Add this line under `[keybindings]`, then reload with Alt+Shift+R:
 
@@ -68,7 +68,7 @@ Existing keybinding files are not overwritten on upgrade. Add this line under `[
 
 ## Workspace switcher
 
-**Alt+Shift+S** (or `winarchyctl workspace switcher toggle`) opens a horizontal
+**Alt+Shift+S** (or `illiumctl workspace switcher toggle`) opens a horizontal
 carousel of all nine workspaces in the current space. The active workspace is
 initially selected and marked with a dot. Each card is a miniature desktop:
 wallpaper and live DWM previews in their tiled/floating positions, including
@@ -100,13 +100,13 @@ reload with **Alt+Shift+R**:
 "Alt+Shift+S" = "workspace switcher toggle"
 ```
 
-`winarchyctl status` reports `workspace_switcher` and
+`illiumctl status` reports `workspace_switcher` and
 `workspace_switcher_selected` (null when closed). The daemon and CLI must both
 be upgraded to recognize the new command.
 
 ## Status bar applets
 
-**Ctrl+Alt+B** (or `winarchyctl bar hints`) toggles keyboard hints on the active
+**Ctrl+Alt+B** (or `illiumctl bar hints`) toggles keyboard hints on the active
 workspace's monitor. Release Ctrl/Alt, then press a displayed **1–9** or **A–Z**
 to open that applet. **Left/Right** cycle the highlighted hint; **Enter** opens it.
 The top number row works without Shift on AZERTY (`&`, `é`, etc.); numpad 1–9
@@ -136,25 +136,25 @@ Existing keybinding files are not overwritten on upgrade. Add this line under
 
 ## Lock screen
 
-**Ctrl+Alt+L** (or `winarchyctl lock`) covers every monitor with the blurred wallpaper, a clock and, on the active monitor, a password field. The password is Winarchy's own, not the Windows one. Set it once, from a console:
+**Ctrl+Alt+L** (or `illiumctl lock`) covers every monitor with the blurred wallpaper, a clock and, on the active monitor, a password field. The password is Illium's own, not the Windows one. Set it once, from a console:
 
 ```
-winarchyctl lock set-password
+illiumctl lock set-password
 ```
 
 Only its Argon2 hash is stored, in `lock-password` in the configuration folder; it is read at each lock, so no reload is needed. Without it, Ctrl+Alt+L locks Windows instead.
 
-While locked, no Winarchy binding or command runs (except `status`), and the Windows key, Alt+Tab, Alt+Esc, Ctrl+Esc and other Ctrl or Alt chords are swallowed. Ctrl+Alt still types AltGr characters. Win+L keeps the regular Windows lock.
+While locked, no Illium binding or command runs (except `status`), and the Windows key, Alt+Tab, Alt+Esc, Ctrl+Esc and other Ctrl or Alt chords are swallowed. Ctrl+Alt still types AltGr characters. Win+L keeps the regular Windows lock.
 
-This screen is a window over the open session, not a Windows security boundary: Ctrl+Alt+Del cannot be intercepted. Winarchy therefore calls the Windows lock as soon as it may be bypassed: another application takes the foreground (for example Task Manager opened from Ctrl+Alt+Del), five wrong passwords, or the daemon exits while locked (the recovery watchdog locks Windows). For a long absence, Win+L remains the safer choice.
+This screen is a window over the open session, not a Windows security boundary: Ctrl+Alt+Del cannot be intercepted. Illium therefore calls the Windows lock as soon as it may be bypassed: another application takes the foreground (for example Task Manager opened from Ctrl+Alt+Del), five wrong passwords, or the daemon exits while locked (the recovery watchdog locks Windows). For a long absence, Win+L remains the safer choice.
 
 ### Lock screensaver
 
-After **30 seconds without keyboard or mouse activity while locked**, the lock surfaces play Omarchy's screensaver: the [TerminalTextEffects](https://github.com/ChrisBuilds/terminaltexteffects) effects over the Winarchy logo, drawn like Omarchy's full-screen terminal (JetBrains Mono at 18 pt, black background). Like `tte --random-effect`, each monitor plays a random effect to its end, then starts another one (never the same twice in a row unless only one is enabled). All 37 effects of TTE 0.15.0 are ported natively with their default options, colors and timing (120 frames per second); no Python runtime is involved.
+After **30 seconds without keyboard or mouse activity while locked**, the lock surfaces play Omarchy's screensaver: the [TerminalTextEffects](https://github.com/ChrisBuilds/terminaltexteffects) effects over the Illium logo, drawn like Omarchy's full-screen terminal (JetBrains Mono at 18 pt, black background). Like `tte --random-effect`, each monitor plays a random effect to its end, then starts another one (never the same twice in a row unless only one is enabled). All 37 effects of TTE 0.15.0 are ported natively with their default options, colors and timing (120 frames per second); no Python runtime is involved.
 
 A key, mouse movement, button or wheel returns to the password screen **without unlocking**. The waking input is swallowed; a held waking key does not type repeats into the password field. Partial password text is cleared when entering the animation, but failed attempts are not reset. The cursor is hidden only during the animation and restored on exit.
 
-Optional settings in `winarchy.toml` (omitting the table uses these defaults):
+Optional settings in `illium.toml` (omitting the table uses these defaults):
 
 ```toml
 [screensaver]
@@ -165,9 +165,9 @@ effects = ["beams", "binarypath", "blackhole", "bouncyballs", "bubbles", "burn",
 
 Effect names are `tte`'s (`color-shift` is still accepted for `colorshift`). The effects list must be nonempty; duplicates are removed and unknown names are rejected. Settings are captured when locking, so reload configuration before the next lock to apply changes. Set `enabled = false` to keep the static password screen. This does not configure desktop auto-lock or Windows' own screensaver.
 
-To browse the effects without locking, open **Alt+Shift+Space → Screen savers**: the list on the left, the selected effect playing on the right. ↑/↓ (or Ctrl+N / Ctrl+P) select, Enter plays it full screen, where Ctrl+N / Ctrl+P switch effects and Escape returns to the list; Escape in the list closes it. `winarchyctl screensaver demo [effect]` opens the same list, or one effect full screen.
+To browse the effects without locking, open **Alt+Shift+Space → Screen savers**: the list on the left, the selected effect playing on the right. ↑/↓ (or Ctrl+N / Ctrl+P) select, Enter plays it full screen, where Ctrl+N / Ctrl+P switch effects and Escape returns to the list; Escape in the list closes it. `illiumctl screensaver demo [effect]` opens the same list, or one effect full screen.
 
-Frames are drawn at each monitor's physical resolution with no animation work while idle, unlocked or after handing over to the Windows lock. If the mouse hook cannot be installed, animation stays disabled rather than risk swallowing only part of a wake gesture. Unlike Omarchy's pre-lock screensaver, this runs **inside the existing Winarchy lock surface** and adds no security boundary.
+Frames are drawn at each monitor's physical resolution with no animation work while idle, unlocked or after handing over to the Windows lock. If the mouse hook cannot be installed, animation stays disabled rather than risk swallowing only part of a wake gesture. Unlike Omarchy's pre-lock screensaver, this runs **inside the existing Illium lock surface** and adds no security boundary.
 
 See [the Windows validation checklist](screensaver-testing.md) for interactive checks.
 
@@ -189,16 +189,16 @@ Alt+H/J/K/L and arrows choose the geometrically nearest neighbor in that directi
 - Alt+Q: post WM_CLOSE; save dialogs are the application's responsibility.
 
 ```powershell
-winarchyctl window focus left
-winarchyctl window move down
-winarchyctl window set-tiling
-winarchyctl window toggle-float
-winarchyctl window toggle-fullscreen
-winarchyctl window close
-winarchyctl launcher toggle
-winarchyctl config reload
-winarchyctl status
-winarchyctl quit
+illiumctl window focus left
+illiumctl window move down
+illiumctl window set-tiling
+illiumctl window toggle-float
+illiumctl window toggle-fullscreen
+illiumctl window close
+illiumctl launcher toggle
+illiumctl config reload
+illiumctl status
+illiumctl quit
 ```
 
-`status` returns JSON for diagnostics, including actual client rectangles. CLI exit codes: 0 success, 1 daemon/operation/transport failure, 2 invalid command syntax. Elevated applications and secure Windows desktops cannot reliably be controlled by a non-elevated WM. Do not run Winarchy elevated merely to work around this boundary.
+`status` returns JSON for diagnostics, including actual client rectangles. CLI exit codes: 0 success, 1 daemon/operation/transport failure, 2 invalid command syntax. Elevated applications and secure Windows desktops cannot reliably be controlled by a non-elevated WM. Do not run Illium elevated merely to work around this boundary.

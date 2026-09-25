@@ -1,5 +1,5 @@
 ﻿param([string]$Action = "", [switch]$FunctionsOnly)
-# Slow discovery/actions only. Native Winarchy sampling supplies live traffic.
+# Slow discovery/actions only. Native Illium sampling supplies live traffic.
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 $script:error_text = ""
@@ -84,7 +84,7 @@ function New-ProfileXml([string]$ssid, [string]$key) {
 function Add-Profile([string]$ssid, [string]$key, [string]$interface) {
   $xml = New-ProfileXml $ssid $key
   # A private directory avoids a predictable shared file containing a cleartext key.
-  $directory = Join-Path $env:TEMP ("winarchy-wifi-" + [Guid]::NewGuid().ToString("N"))
+  $directory = Join-Path $env:TEMP ("illium-wifi-" + [Guid]::NewGuid().ToString("N"))
   $acl = New-Object Security.AccessControl.DirectorySecurity
   $acl.SetAccessRuleProtection($true, $false)
   $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User

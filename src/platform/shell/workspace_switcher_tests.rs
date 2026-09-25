@@ -145,7 +145,7 @@ fn headless_workspace_switcher_navigation_rendering_and_lifecycle() {
         pixels.iter().any(|p| p.blue > 180 && p.red > 80),
         "accent and labels must render"
     );
-    if let Some(path) = std::env::var_os("WINARCHY_WORKSPACE_RENDER") {
+    if let Some(path) = std::env::var_os("ILLIUM_WORKSPACE_RENDER") {
         let image = image::RgbaImage::from_fn(w as u32, h as u32, |x, y| {
             let p = pixels[y as usize * w + x as usize];
             image::Rgba([p.red, p.green, p.blue, p.alpha])

@@ -4,7 +4,7 @@ The picker ports Omarchy's `shell/plugins/image-picker/ImagePicker.qml` and
 `ImagePickerModel.js` at revision `86a2e5830eae4d660a66df8cf37f0a35bf4fe8a2`
 (PR https://github.com/omacom/omarchy/pull/6231). See
 `docs/licenses/omarchy.md` for the upstream notice. This is a visual port, not a
-redesign. Winarchy also reuses this labeled/filterable carousel for the active
+redesign. Illium also reuses this labeled/filterable carousel for the active
 theme's wallpapers, displaying exact filenames and confirming through the
 existing wallpaper command. This deliberately uses the theme selector's variant,
 not Omarchy's label-free background-switcher invocation. No duplicate Slint
@@ -58,7 +58,7 @@ physical DPI; no responsive redesign. PNG/JPEG `themes/<id>/preview.*` takes
 priority over the first alphabetically sorted wallpaper. No asset means no
 card. At the owner's subsequent request, the two built-in themes include the
 corresponding Omarchy previews and wallpapers with pinned provenance; other
-packs can supply their own images without rebuilding Winarchy.
+packs can supply their own images without rebuilding Illium.
 
 Decode/resize/masking happen outside the UI thread. No downloads, shell
 scripts, videos, configuration schema extension or new UI dependencies in CLI.
@@ -87,14 +87,14 @@ current view. Asset edits must not restart providers or reload application lists
   no pixels yet are not clickable. Completion/confirmation remains generation
   checked. Cache hits do not spawn extra threads.
 - Persist lossless 1536×864 RGBA thumbnails in
-  `%LOCALAPPDATA%\winarchy\picker-thumbnails-v1` on Windows (under
-  `$XDG_CACHE_HOME/winarchy/`, or `~/.cache/winarchy/`, for Linux CPU tests).
+  `%LOCALAPPDATA%\illium\picker-thumbnails-v1` on Windows (under
+  `$XDG_CACHE_HOME/illium/`, or `~/.cache/illium/`, for Linux CPU tests).
   Cache identities include the absolute source path, source size/mtime and
   thumbnail format version. Full identities and exact file lengths are checked
   on read; writes use temporary files. Missing, truncated or unwritable cache
   files fall back to the original PNG/JPEG. Originals are never modified.
   The disk cache is pruned by oldest write time to 256 MiB after writes and may
-  be deleted while Winarchy is stopped. It is outside the watched config tree.
+  be deleted while Illium is stopped. It is outside the watched config tree.
 - Existing RAM thumbnail, raster and Slint-image caches each remain bounded to
   64 MiB; initial-view retention is separately bounded to 64 MiB, with shared
   frames rather than duplicated CPU pixels. An in-flight view is capped at
@@ -106,8 +106,8 @@ current view. Asset edits must not restart providers or reload application lists
 Build/run the CPU benchmark in release mode:
 
 ```text
-cargo run -p winarchy --release --example profile_picker -- <config-home>
-cargo run -p winarchy --release --example profile_picker -- <config-home> <wallpaper-theme>
+cargo run -p illium --release --example profile_picker -- <config-home>
+cargo run -p illium --release --example profile_picker -- <config-home> <wallpaper-theme>
 ```
 
 It reports catalog time, first available CPU pixels and all-card preparation

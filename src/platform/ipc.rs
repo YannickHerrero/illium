@@ -1,10 +1,10 @@
 use super::{Event, EventSender};
 use crate::request::{ReplyTo, Ticket};
+pub use illium_ipc::client::{client, pipe_name};
 use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-pub use winarchy_ipc::client::{client, pipe_name};
 fn dispatch(tx: &EventSender, command: crate::command::Command) -> Result<String, String> {
     let (sender, rx) = std::sync::mpsc::channel();
     let ticket = Arc::new(Ticket::new(Instant::now() + Duration::from_secs(5)));
@@ -25,9 +25,9 @@ fn dispatch(tx: &EventSender, command: crate::command::Command) -> Result<String
     }
 }
 pub fn start(tx: EventSender) -> Result<(), String> {
-    let file = winarchy_ipc::server::create_pipe(&pipe_name()?)?;
+    let file = illium_ipc::server::create_pipe(&pipe_name()?)?;
     std::thread::spawn(move || {
-        winarchy_ipc::server::accept_loop(
+        illium_ipc::server::accept_loop(
             &file,
             |line| line.parse().and_then(|command| dispatch(&tx, command)),
             |e| tracing::debug!(e, "IPC"),

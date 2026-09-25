@@ -15,8 +15,8 @@ pub(super) struct Pending {
 }
 impl Shell {
     fn wallpaper_keys(&self) -> Result<Vec<(String, Key)>, String> {
-        let dir = winarchy_theme::pack::wallpaper_dir(&self.home, &self.theme)?;
-        Ok(winarchy_theme::pack::fingerprint(&self.home, &self.theme)?
+        let dir = illium_theme::pack::wallpaper_dir(&self.home, &self.theme)?;
+        Ok(illium_theme::pack::fingerprint(&self.home, &self.theme)?
             .into_iter()
             .map(|(name, size, modified)| {
                 let key = Key {
@@ -24,7 +24,7 @@ impl Shell {
                     size,
                     modified,
                     screens: self.wallpaper_sizes.clone(),
-                    dynamic_home: winarchy_theme::dynamic::is_dynamic(&self.theme)
+                    dynamic_home: illium_theme::dynamic::is_dynamic(&self.theme)
                         .then(|| self.home.clone()),
                 };
                 (name, key)
@@ -59,8 +59,8 @@ impl Shell {
         }
     }
     fn clear_wallpaper(&mut self) -> Result<(), String> {
-        if winarchy_theme::dynamic::is_dynamic(&self.theme) {
-            winarchy_theme::dynamic::publish(&self.home, None)?;
+        if illium_theme::dynamic::is_dynamic(&self.theme) {
+            illium_theme::dynamic::publish(&self.home, None)?;
             self.wallpaper_palette_dirty = true;
         }
         self.wallpaper_loader.cancel();
@@ -191,7 +191,7 @@ impl Shell {
                     .unwrap_or_default(),
             );
         }
-        self.wallpaper_palette_dirty = winarchy_theme::dynamic::is_dynamic(&self.theme);
+        self.wallpaper_palette_dirty = illium_theme::dynamic::is_dynamic(&self.theme);
         self.show_wallpaper(Some(name.clone()), images, blur, Some(key.clone()));
         self.wallpaper_error = None;
         tracing::info!(
@@ -270,7 +270,7 @@ impl Shell {
                 p.persist
                     && p.selections == crate::files::read_config(&self.home.join("wallpapers.json"))
                     && p.candidates.front().is_some_and(|(_, key)| {
-                        winarchy_theme::pack::wallpaper_dir(&self.home, &self.theme)
+                        illium_theme::pack::wallpaper_dir(&self.home, &self.theme)
                             .is_ok_and(|dir| key.path.parent() == Some(dir.as_path()))
                     })
             })

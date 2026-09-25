@@ -12,7 +12,7 @@ impl Offscreen {
             CreateWindowExW(
                 WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
                 w!("STATIC"),
-                w!("Winarchy thumbnail test"),
+                w!("Illium thumbnail test"),
                 WS_POPUP | WS_VISIBLE,
                 x,
                 -10000,

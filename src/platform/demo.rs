@@ -27,9 +27,9 @@ impl Pending {
             committed: false,
         };
         for (name, args) in [
-            ("winarchy-terminal.exe", vec!["--demo", "build"]),
-            ("winarchy-terminal.exe", vec!["--demo", "fetch"]),
-            ("winarchy-browser.exe", vec!["--demo"]),
+            ("illium-terminal.exe", vec!["--demo", "build"]),
+            ("illium-terminal.exe", vec!["--demo", "fetch"]),
+            ("illium-browser.exe", vec!["--demo"]),
         ] {
             let child = Command::new(executable.with_file_name(name))
                 .args(args)
@@ -62,7 +62,7 @@ impl Pending {
         for id in native::enumerate() {
             if let Some(role) = self.role(id)
                 && native::visible(id)
-                && !unsafe { GetPropW(native::hwnd(id), w!("WinarchyDemoReady")) }.is_invalid()
+                && !unsafe { GetPropW(native::hwnd(id), w!("IlliumDemoReady")) }.is_invalid()
             {
                 windows[role] = id;
             }
@@ -72,7 +72,7 @@ impl Pending {
         }
         if now >= self.deadline {
             return Err(
-                "Demo startup timed out (30s); update all Winarchy executables together".into(),
+                "Demo startup timed out (30s); update all Illium executables together".into(),
             );
         }
         Ok(None)

@@ -27,7 +27,7 @@ pub struct Frame {
 #[derive(Debug)]
 pub struct Prepared {
     pub frames: Vec<Arc<Frame>>,
-    pub palette: Option<winarchy_theme::dynamic::Snapshot>,
+    pub palette: Option<illium_theme::dynamic::Snapshot>,
     bytes: usize,
 }
 type Pixels = Arc<Prepared>;
@@ -216,7 +216,7 @@ fn prepare(key: &Key, cancelled: &dyn Fn() -> bool) -> ResultPixels {
         }
         bytes += size as usize;
     }
-    let pixels = winarchy_theme::pack::decode(&key.path)?;
+    let pixels = illium_theme::pack::decode(&key.path)?;
     let decoded = started.elapsed();
     if cancelled() {
         return Err("wallpaper request superseded".into());
@@ -227,7 +227,7 @@ fn prepare(key: &Key, cancelled: &dyn Fn() -> bool) -> ResultPixels {
             .file_name()
             .and_then(|s| s.to_str())
             .ok_or("invalid wallpaper filename")?;
-        Some(winarchy_theme::dynamic::prepare(home, source, &pixels))
+        Some(illium_theme::dynamic::prepare(home, source, &pixels))
     } else {
         None
     };
@@ -243,7 +243,7 @@ fn prepare(key: &Key, cancelled: &dyn Fn() -> bool) -> ResultPixels {
             frames.push(frames[previous].clone());
             continue;
         }
-        let fitted = winarchy_theme::pack::cover(&pixels, width, height)?;
+        let fitted = illium_theme::pack::cover(&pixels, width, height)?;
         frames.push(Arc::new(Frame {
             width,
             height,
@@ -413,7 +413,7 @@ mod tests {
         key.dynamic_home = Some(home.clone());
         let first = prepare(&key, &|| false).unwrap();
         assert!(first.palette.is_some());
-        assert!(!home.join(winarchy_theme::dynamic::FILE).exists());
+        assert!(!home.join(illium_theme::dynamic::FILE).exists());
         assert!(!home.join("wallpapers.json").exists());
         key.screens = vec![(8, 4), (4, 8)];
         assert_eq!(first.palette, prepare(&key, &|| false).unwrap().palette);
@@ -426,7 +426,7 @@ mod tests {
     fn tiny_images_prepare_once_for_identical_monitor_sizes() {
         let mut key = key("unused");
         key.path = std::env::temp_dir().join(format!(
-            "winarchy-wallpaper-fixture-{}.png",
+            "illium-wallpaper-fixture-{}.png",
             std::process::id()
         ));
         // Cross-compiled tests cannot access the build host's manifest path.

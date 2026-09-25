@@ -5,7 +5,7 @@ Initial milestones below are implemented as an opt-in candidate. See
 The user's WezTerm alias/configuration has not been replaced.
 
 Primary metric: request to visible window, independently of WSL readiness.
-A separate `winarchy-terminal.exe` in this workspace opens **WSL only**, never
+A separate `illium-terminal.exe` in this workspace opens **WSL only**, never
 Herdr. A resident process retains graphics/font resources but no idle WSL
 session. Every new window owns a fresh PTY; closing it terminates that child.
 No tabs, splits, plugins, SSH client or session persistence.
@@ -26,8 +26,8 @@ Do not put the grid in the shell's Slint software renderer. Keep PTY creation,
 reading, writing and teardown off the UI thread. Render only on damage, at most
 once per frame; do not animate the cursor or poll while idle.
 
-Configuration: `%USERPROFILE%/.config/winarchy/terminal.toml` (respecting
-`WINARCHY_CONFIG_HOME`) for font, padding, scrollback and WSL distribution.
+Configuration: `%USERPROFILE%/.config/illium/terminal.toml` (respecting
+`ILLIUM_CONFIG_HOME`) for font, padding, scrollback and WSL distribution.
 Colors come from the existing selected palette; opacity is an optional theme
 field, defaulting to 85% opacity. Preserve Ctrl+1..9 CSI-u and leave Alt+Enter to the
 window manager. Test Unicode, alternate screen, bracketed paste, mouse modes,

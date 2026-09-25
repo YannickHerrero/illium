@@ -8,7 +8,7 @@ use windows::Win32::{
     },
 };
 
-/// Winarchy intentionally does not provide an elevated command-execution broker.
+/// Illium intentionally does not provide an elevated command-execution broker.
 pub fn require_standard_user() -> Result<(), String> {
     unsafe {
         let mut token = HANDLE::default();
@@ -27,7 +27,7 @@ pub fn require_standard_user() -> Result<(), String> {
         result.map_err(|e| e.to_string())?;
         if elevation.TokenIsElevated != 0 {
             return Err(
-                "Do not run Winarchy as administrator; start it with a standard user token".into(),
+                "Do not run Illium as administrator; start it with a standard user token".into(),
             );
         }
         Ok(())

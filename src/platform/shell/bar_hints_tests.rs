@@ -243,7 +243,7 @@ fn hint_sessions_reject_stale_input_and_wait_for_all_centers() {
     use crate::{bar_hints::Input, config::Config, layout::Rect};
     let adapter = Rc::new(RefCell::new(None));
     slint::platform::set_platform(Box::new(Headless(adapter))).unwrap();
-    let home = std::env::temp_dir().join(format!("winarchy-hints-test-{}", std::process::id()));
+    let home = std::env::temp_dir().join(format!("illium-hints-test-{}", std::process::id()));
     Config::install(&home).unwrap();
     let c = Config::load(&home).unwrap();
     let r = Rect {

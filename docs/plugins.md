@@ -1,7 +1,7 @@
 # Local plugin packages (experimental)
 
-The first plugin-manager slice is a shared Rust API (`winarchy::plugins`) and
-`winarchyctl plugin`. There is no GUI, catalogue download, GitHub installation,
+The first plugin-manager slice is a shared Rust API (`illium::plugins`) and
+`illiumctl plugin`. There is no GUI, catalogue download, GitHub installation,
 installer hook, automatic migration or update checker yet.
 
 **Upgrade the daemon together with the CLI.** Older daemons ignore the new
@@ -12,10 +12,10 @@ the implementation does not deploy or alter your real installation automatically
 ## Inventory
 
 ```powershell
-winarchyctl plugin list
-winarchyctl plugin list --json
-winarchyctl plugin inspect applet devlauncher
-winarchyctl plugin inspect theme dracula
+illiumctl plugin list
+illiumctl plugin list --json
+illiumctl plugin inspect applet devlauncher
+illiumctl plugin inspect theme dracula
 ```
 
 Discovery is local, read-only and works offline, including plugins outside any
@@ -79,27 +79,27 @@ There is no sandbox or signature verification.
 
 ## Operations
 
-These commands use `%USERPROFILE%\.config\winarchy`, or `WINARCHY_CONFIG_HOME`.
-The selected directory must already be a valid initialized Winarchy configuration.
+These commands use `%USERPROFILE%\.config\illium`, or `ILLIUM_CONFIG_HOME`.
+The selected directory must already be a valid initialized Illium configuration.
 Local management also runs on Linux/WSL with an explicit config home; Windows
 commands such as `theme set` still require the Windows CLI and running daemon.
 
 ```powershell
 # Installs files, but does not activate the applet or alter the bar.
-winarchyctl plugin install C:\Packages\todo-package
+illiumctl plugin install C:\Packages\todo-package
 
 # Existing placement is retained; a new standalone applet defaults to right.
-winarchyctl plugin enable applet todo --section drawer
-winarchyctl plugin disable applet todo
-winarchyctl plugin enable applet todo
+illiumctl plugin enable applet todo --section drawer
+illiumctl plugin disable applet todo
+illiumctl plugin enable applet todo
 
 # For this first implementation, disable before updating/removing.
-winarchyctl plugin disable applet todo
-winarchyctl plugin update C:\Packages\todo-package-v2
-winarchyctl plugin enable applet todo
+illiumctl plugin disable applet todo
+illiumctl plugin update C:\Packages\todo-package-v2
+illiumctl plugin enable applet todo
 
-winarchyctl plugin disable applet todo
-winarchyctl plugin uninstall applet todo
+illiumctl plugin disable applet todo
+illiumctl plugin uninstall applet todo
 ```
 
 `--section` is used only when adding a previously unreferenced standalone applet.
@@ -115,7 +115,7 @@ and refuses an already enabled attachment on that target. `time` may be hosted b
 Existing unmanaged and bundled applets may also be enabled/disabled; this does
 not adopt them into package management.
 
-Disabling an applet stops its Winarchy scheduling on reload, not services it has
+Disabling an applet stops its Illium scheduling on reload, not services it has
 started: dev servers, a dictation model or a Claude statusline relay remain outside
 this lifecycle. An already running provider/action may finish. Disable persists a configuration
 change; it is not an acknowledgment that the daemon has finished reloading.
@@ -126,17 +126,17 @@ such as CPU or the clock itself are bar configuration, not removable plugins.
 For themes:
 
 ```powershell
-winarchyctl plugin install C:\Packages\sample-theme
-winarchyctl theme set sample-theme
+illiumctl plugin install C:\Packages\sample-theme
+illiumctl theme set sample-theme
 # Switch away before updating/uninstalling the active theme.
-winarchyctl theme set catppuccin-mocha
-winarchyctl plugin update C:\Packages\sample-theme-v2
-winarchyctl plugin uninstall theme sample-theme
+illiumctl theme set catppuccin-mocha
+illiumctl plugin update C:\Packages\sample-theme-v2
+illiumctl plugin uninstall theme sample-theme
 ```
 
 Applying a theme remains the existing `theme set` operation. Built-in packages
 cannot be installed over, updated or uninstalled. Missing built-in files would
-otherwise be recreated by Winarchy's defaults installer.
+otherwise be recreated by Illium's defaults installer.
 
 ## Preservation and receipts
 
@@ -177,12 +177,12 @@ so the last valid configuration stays active. Startup, new manager mutations and
 normal configuration snapshots refuse an interrupted transaction rather than
 accepting its partial files. A successful operation or rollback clears the gate.
 This is **not a database transaction or a power-loss durability guarantee**.
-Do not concurrently edit package/config files or operate multiple Winarchy
+Do not concurrently edit package/config files or operate multiple Illium
 versions during management.
 
 If interrupted or rollback fails:
 
-1. Stop Winarchy and any manager process. Preserve the entire configuration and
+1. Stop Illium and any manager process. Preserve the entire configuration and
    `.plugins` directory before attempting recovery.
 2. Read `.plugins/pending.json`: `backup` points to the transaction directory;
    `paths[i]` is relative to config home and `existed[i]` describes its prior state.
@@ -190,7 +190,7 @@ If interrupted or rollback fails:
    For paths that did not exist, remove only artifacts confirmed to belong to this
    transaction. Inspect any concurrent user edits first; do not overwrite them.
 4. Once the prior configuration/receipts are restored, archive the journal and
-   remove `.plugins/pending.json`, then validate/restart Winarchy.
+   remove `.plugins/pending.json`, then validate/restart Illium.
 
 `removed-i` holds the actual renamed originals when that publication step began;
 `before-i` is the pre-publication backup. Completed and rolled-back journals remain
@@ -208,9 +208,9 @@ These checks are not a sandbox against a malicious concurrent filesystem writer.
 ## Tests
 
 ```sh
-cargo test -p winarchy --lib plugins::
-cargo test -p winarchy --lib disabled_direct_and_attached
-cargo test -p winarchyctl
+cargo test -p illium --lib plugins::
+cargo test -p illium --lib disabled_direct_and_attached
+cargo test -p illiumctl
 ```
 
 Tests initialize temporary configuration homes and never execute providers. They
@@ -222,9 +222,9 @@ An optional test uses real local Todo/theme runtime sources, copying only into
 its temporary homes (no modification of the sources or installed configuration):
 
 ```sh
-WINARCHY_TODO_SOURCE=/path/to/winarchy-applet-collection/todo \
-WINARCHY_THEME_SOURCE=/path/to/winarchy-themes/dracula \
-  cargo test -p winarchy --lib local_collection_packages -- --ignored
+ILLIUM_TODO_SOURCE=/path/to/illium-applet-collection/todo \
+ILLIUM_THEME_SOURCE=/path/to/illium-themes/dracula \
+  cargo test -p illium --lib local_collection_packages -- --ignored
 ```
 
 Actual popup rendering, running-provider cancellation and desktop hot reload

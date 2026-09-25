@@ -1,4 +1,4 @@
-use winarchy::{
+use illium::{
     command::{Command, Direction},
     config::{Config, Rule},
     layout::{Rect, fibonacci, neighbor},
@@ -229,7 +229,7 @@ fn rule_all_fields_required() {
 }
 #[test]
 fn semantic_invalid_config() {
-    let p = std::env::temp_dir().join(format!("winarchy-semantic-{}", std::process::id()));
+    let p = std::env::temp_dir().join(format!("illium-semantic-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&p);
     Config::install(&p).unwrap();
     for (name, invalid) in [
@@ -239,7 +239,7 @@ fn semantic_invalid_config() {
         ),
         ("keybindings.toml", "[keybindings]\n'Alt+A+B'='quit'"),
         ("rules.toml", "[[rules]]\nworkspace=10"),
-        ("winarchy.toml", "theme='../bad'"),
+        ("illium.toml", "theme='../bad'"),
         ("themes/catppuccin-mocha.toml", "name='broken'"),
     ] {
         let file = p.join(name);

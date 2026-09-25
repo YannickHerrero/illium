@@ -31,16 +31,16 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          New-Item -ItemType Directory dist/winarchy
-          Copy-Item target/release/winarchy.exe,target/release/winarchyctl.exe,target/release/winarchy-apps.exe,target/release/winarchy-terminal.exe,target/release/winarchy-dictate.exe,target/release/winarchy-browser.exe,README.md,LICENSE dist/winarchy
-          Copy-Item -Recurse config,docs dist/winarchy
-          New-Item -ItemType Directory dist/winarchy/scripts
-          Copy-Item scripts/update-browser-filters.ps1,scripts/measure-browser.ps1 dist/winarchy/scripts
-          Compress-Archive dist/winarchy/* dist/winarchy-windows-x64.zip
+          New-Item -ItemType Directory dist/illium
+          Copy-Item target/release/illium.exe,target/release/illiumctl.exe,target/release/illium-apps.exe,target/release/illium-terminal.exe,target/release/illium-dictate.exe,target/release/illium-browser.exe,README.md,LICENSE dist/illium
+          Copy-Item -Recurse config,docs dist/illium
+          New-Item -ItemType Directory dist/illium/scripts
+          Copy-Item scripts/update-browser-filters.ps1,scripts/measure-browser.ps1 dist/illium/scripts
+          Compress-Archive dist/illium/* dist/illium-windows-x64.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: winarchy-windows-x64
-          path: dist/winarchy-windows-x64.zip
+          name: illium-windows-x64
+          path: dist/illium-windows-x64.zip
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [dependencies, windows]
@@ -50,8 +50,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: winarchy-windows-x64
-      - run: sha256sum winarchy-windows-x64.zip > SHA256SUMS
-      - run: gh release create "$GITHUB_REF_NAME" winarchy-windows-x64.zip SHA256SUMS --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+          name: illium-windows-x64
+      - run: sha256sum illium-windows-x64.zip > SHA256SUMS
+      - run: gh release create "$GITHUB_REF_NAME" illium-windows-x64.zip SHA256SUMS --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

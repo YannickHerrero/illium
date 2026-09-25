@@ -16,6 +16,6 @@ focusable = false
 # command = ["python", "provider.py"]
 # provider = "builtin:clock"   # or "builtin:system", instead of a script
 
-# Passed to the provider as WINARCHY_APPLET_<KEY> environment variables.
+# Passed to the provider as ILLIUM_APPLET_<KEY> environment variables.
 [settings]
 greeting = "Hello"

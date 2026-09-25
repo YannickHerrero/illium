@@ -7,14 +7,14 @@ use crate::{
     layout::Rect,
     platform::{Event, EventSender, dpi, native},
 };
+use illium_config::screensaver::Effect;
+use illium_screensaver::player::Player;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::{
     cell::Cell,
     rc::Rc,
     time::{Duration, Instant},
 };
-use winarchy_config::screensaver::Effect;
-use winarchy_screensaver::player::Player;
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, HWND_TOPMOST};
 
 #[derive(Clone, Debug)]

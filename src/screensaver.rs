@@ -1,8 +1,8 @@
-//! Pure lock-idle state; the animation is `winarchy_screensaver`'s player,
+//! Pure lock-idle state; the animation is `illium_screensaver`'s player,
 //! one per monitor like Omarchy's one terminal per monitor.
+use illium_config::screensaver::Screensaver;
+use illium_screensaver::player::Player;
 use std::time::{Duration, Instant};
-use winarchy_config::screensaver::Screensaver;
-use winarchy_screensaver::player::Player;
 
 pub struct Saver {
     config: Screensaver,
@@ -106,7 +106,7 @@ impl Saver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use winarchy_config::screensaver::Effect;
+    use illium_config::screensaver::Effect;
     const SURFACE: Surface = Surface {
         width: 640,
         height: 360,

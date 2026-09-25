@@ -1,0 +1,22 @@
+[package]
+name = "illium-config"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Illium configuration, applet manifests and local plugin packages, shared by the daemon and illiumctl"
+repository = "https://github.com/YannickHerrero/illium"
+
+[dependencies]
+illium-ipc = { path = "../illium-ipc" }
+illium-theme = { path = "../illium-theme" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+# Plugin enablement rewrites bar.toml in place, keeping comments and order.
+toml_edit = "0.22"
+sha2 = "0.10"
+tempfile = "3"
+tracing = "0.1"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = ["Win32_UI_Input_KeyboardAndMouse"] }
