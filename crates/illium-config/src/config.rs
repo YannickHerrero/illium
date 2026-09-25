@@ -570,7 +570,7 @@ mod tests {
     #[test]
     fn japanese_workspace_numbers_are_optional() {
         let original = include_str!("../../../config/defaults/bar.toml");
-        let legacy = original.replace("japanese_workspace_numbers = true\n", "");
+        let legacy = original.replace("japanese_workspace_numbers = true", "");
         assert!(
             !toml::from_str::<Bar>(&legacy)
                 .unwrap()
