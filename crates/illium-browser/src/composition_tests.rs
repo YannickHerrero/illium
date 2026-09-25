@@ -24,6 +24,27 @@ fn per_pixel_home_and_owned_palettes_keep_text_and_pages_opaque() {
                     let p = app.picker.borrow();
                     (p.panel, p.edit)
                 };
+                // The GDI line fits exactly inside Slint's padded, rounded
+                // field: no spare layered pixels below the baseline.
+                let mut edit_rect = RECT::default();
+                let mut panel_rect = RECT::default();
+                GetWindowRect(edit, &mut edit_rect).unwrap();
+                GetWindowRect(panel, &mut panel_rect).unwrap();
+                let dc = GetDC(Some(edit));
+                let font = HFONT(SendMessageW(edit, WM_GETFONT, None, None).0 as *mut _);
+                let previous = SelectObject(dc, font.into());
+                let mut metrics = TEXTMETRICW::default();
+                assert!(GetTextMetricsW(dc, &mut metrics).as_bool());
+                SelectObject(dc, previous);
+                ReleaseDC(Some(edit), dc);
+                assert_eq!(edit_rect.bottom - edit_rect.top, metrics.tmHeight);
+                let scale = GetDpiForWindow(panel) as i32;
+                let line_center = edit_rect.top + edit_rect.bottom - 2 * panel_rect.top;
+                assert!(
+                    (line_center - 60 * scale / 96).abs() <= 2,
+                    "input must be vertically centered"
+                );
+                assert!(edit_rect.left - panel_rect.left >= 47 * scale / 96);
                 assert_eq!(GetWindow(panel, GW_OWNER).unwrap(), app.hwnd);
                 assert_ne!(
                     GetWindowLongPtrW(panel, GWL_EXSTYLE) & WS_EX_TOOLWINDOW.0 as isize,

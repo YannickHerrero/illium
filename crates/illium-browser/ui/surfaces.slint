@@ -38,13 +38,23 @@ export component BrowserSurface inherits Window {
             text: root.heading; color: root.accent;
             overflow: elide; vertical-alignment: center;
         }
-        if root.kind == 1: Text {
-            x: 14px; y: 19px; width: 22px; height: 23px;
-            text: "⌕"; color: root.accent;
+        if root.kind == 1: Rectangle {
+            x: 16px; y: 12px; width: max(1px, parent.width - 80px); height: 36px;
+            background: root.surface;
+            border-radius: 6px;
+            border-width: 1px;
+            border-color: root.accent.with-alpha(0.45);
+            // Draw the magnifier, rather than relying on a font's symbol coverage.
+            Path {
+                x: 12px; y: 9px; width: 18px; height: 18px;
+                viewbox-width: 20; viewbox-height: 20;
+                commands: "M 8 2 A 6 6 0 1 0 8 14 A 6 6 0 1 0 8 2 M 12.5 12.5 L 18 18";
+                fill: transparent; stroke: root.accent; stroke-width: 1.5px;
+            }
         }
         if root.kind == 1: Text {
-            x: parent.width - 48px; y: 19px; width: 38px; height: 23px;
-            text: "Esc"; color: root.subtext;
+            x: parent.width - 48px; y: 12px; width: 38px; height: 36px;
+            text: "Esc"; color: root.subtext; vertical-alignment: center;
         }
         if root.kind != 0: Rectangle {
             x: 1px; y: root.kind == 1 ? 60px : 48px;

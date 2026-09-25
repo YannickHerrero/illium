@@ -47,6 +47,7 @@ pub struct Picker {
     pub edit: HWND,
     pub list: HWND,
     font: HFONT,
+    line_height: i32,
     pub visible: bool,
     pub home: bool,
     pub library: Rc<RefCell<Library>>,
@@ -129,6 +130,7 @@ impl Picker {
             edit,
             list,
             font: HFONT::default(),
+            line_height: 13,
             visible: false,
             home: false,
             library,
@@ -189,6 +191,20 @@ impl Picker {
             let _ = DeleteObject(self.font.into());
         }
         self.font = font;
+        // A single-line EDIT only paints its font line reliably on its layered
+        // child surface. Give it exactly that height; Slint supplies the padding
+        // and rounded field background instead of exposing an unpainted strip.
+        self.line_height = (13 * GetDpiForWindow(parent) as i32 / 96).max(1);
+        let dc = GetDC(Some(self.edit));
+        if !dc.is_invalid() {
+            let previous = SelectObject(dc, font.into());
+            let mut metrics = TEXTMETRICW::default();
+            if GetTextMetricsW(dc, &mut metrics).as_bool() {
+                self.line_height = metrics.tmHeight.max(1);
+            }
+            SelectObject(dc, previous);
+            ReleaseDC(Some(self.edit), dc);
+        }
     }
     pub unsafe fn text(&self) -> String {
         let mut text = vec![0; GetWindowTextLengthW(self.edit) as usize + 1];
@@ -426,10 +442,10 @@ impl Picker {
         let _ = SetWindowPos(
             self.edit,
             None,
-            p(48),
-            p(24),
-            (width - p(130)).max(1),
-            p(28),
+            p(60),
+            p(15) + (p(45) - self.line_height) / 2,
+            (width - p(155)).max(1),
+            self.line_height,
             SWP_NOZORDER | SWP_NOACTIVATE,
         );
         let _ = InvalidateRect(Some(self.panel), None, false);
