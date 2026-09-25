@@ -94,7 +94,8 @@ fn per_pixel_home_and_owned_palettes_keep_text_and_pages_opaque() {
                         {
                             let leader = app.leader_panel.borrow();
                             assert_eq!(GetWindow(leader.hwnd, GW_OWNER).unwrap(), app.hwnd);
-                            leader.paint(&app.leader.borrow().state);
+                            let menu = app.leader.borrow().state.menu();
+                            leader.paint(menu);
                             leader.assert_alpha(179);
                         }
                         app.leader.borrow_mut().state.cancel();

@@ -5,7 +5,7 @@ use crate::{
     native::wide,
     surface::{PaletteRow, Surface, place_popup},
 };
-use illium_browser::leader::{Leader, Menu, Target};
+use illium_browser::leader::{Menu, Target};
 use slint::{ModelRc, VecModel};
 use std::{cell::RefCell, time::Instant};
 use windows::{
@@ -111,9 +111,8 @@ impl LeaderPanel {
     pub unsafe fn assert_alpha(&self, background: u8) {
         self.surface.borrow_mut().assert_alpha(background, true);
     }
-    pub unsafe fn paint(&self, leader: &Leader) {
+    pub unsafe fn paint(&self, menu: Option<Menu>) {
         let mut surface = self.surface.borrow_mut();
-        let menu = leader.menu();
         surface.ui.set_heading(
             format!(
                 "LEADER › {}",

@@ -133,11 +133,13 @@ pub(crate) unsafe fn picker_pointer(msg: u32, wp: WPARAM, lp: LPARAM) {
     }
 }
 pub(crate) unsafe fn paint_leader() {
-    if let Some(app) = snapshot()
-        && let Ok(panel) = app.leader_panel.try_borrow()
-        && let Ok(input) = app.leader.try_borrow()
-    {
-        panel.paint(&input.state);
+    if let Some(app) = snapshot() {
+        let menu = app.leader.try_borrow().map(|input| input.state.menu());
+        if let Ok(panel) = app.leader_panel.try_borrow()
+            && let Ok(menu) = menu
+        {
+            panel.paint(menu);
+        }
     }
 }
 unsafe fn sync_leader(app: &App) {
@@ -163,9 +165,10 @@ unsafe fn sync_leader(app: &App) {
     } else {
         let _ = KillTimer(Some(app.hwnd), LEADER_TIMER);
     }
-    app.leader_panel
-        .borrow()
-        .layout(app.hwnd, app.leader.borrow().state.menu());
+    // Positioning the popup can dispatch the low-level keyboard hook (for
+    // example the action key's release). Do not hold LeaderInput across it.
+    let menu = app.leader.borrow().state.menu();
+    app.leader_panel.borrow().layout(app.hwnd, menu);
 }
 unsafe fn leader_notice(app: &App, message: &str) {
     app.leader_panel.borrow_mut().notice = Some((
@@ -781,10 +784,11 @@ unsafe fn layout(app: &App) {
     if let Ok(picker) = app.picker.try_borrow() {
         picker.layout(app.hwnd);
     }
+    let menu = app.leader.try_borrow().map(|input| input.state.menu());
     if let Ok(panel) = app.leader_panel.try_borrow()
-        && let Ok(input) = app.leader.try_borrow()
+        && let Ok(menu) = menu
     {
-        panel.layout(app.hwnd, input.state.menu());
+        panel.layout(app.hwnd, menu);
     }
 }
 unsafe fn palette(show: bool) {
