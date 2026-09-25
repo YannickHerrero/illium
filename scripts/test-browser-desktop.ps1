@@ -7,8 +7,8 @@ param(
     [switch]$CheckTilingFocus,
     # Allows palette/navigation checks when the desktop cannot grant foreground focus.
     [switch]$SkipFocusChecks,
-    # Exercise the experimental accent blur with the same home/page opacity checks.
-    # This does not verify the visual blur produced by Windows composition.
+    # Exercise accent blur with composition/navigation checks.
+    # Rendered alpha is tested by the Rust composition regression, not this script.
     [switch]$BackgroundBlur,
     # Opt-in real keyboard input, restricted to this test's foreground window.
     # Do not use the keyboard/mouse while running this check.
@@ -32,7 +32,19 @@ public static class BrowserTest {
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr pid);
     [DllImport("user32.dll")] public static extern bool GetGUIThreadInfo(uint id, ref GuiThreadInfo info);
     [DllImport("user32.dll", EntryPoint="SendMessageW", CharSet=CharSet.Unicode)] public static extern IntPtr GetText(IntPtr h, uint m, IntPtr w, System.Text.StringBuilder text);
-    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll", EntryPoint="GetForegroundWindow")] private static extern IntPtr NativeForegroundWindow();
+    [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h, uint flags);
+    // Treat focus in an owned palette as focus in its browser.
+    public static IntPtr GetForegroundWindow() { return GetAncestor(NativeForegroundWindow(), 3); }
+    [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint cmd);
+    [DllImport("user32.dll", EntryPoint="GetWindowLongPtrW")] public static extern IntPtr GetWindowStyle(IntPtr h, int index);
+    public static IntPtr OwnedPanel(IntPtr owner, string cls) {
+        IntPtr panel = IntPtr.Zero;
+        while ((panel = FindWindowEx(IntPtr.Zero, panel, cls, null)) != IntPtr.Zero) {
+            if (GetWindow(panel, 4) == owner) return panel;
+        }
+        return IntPtr.Zero;
+    }
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out Rect r);
     [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr h);
@@ -95,7 +107,7 @@ try {
         }
         Write-Host 'PASS: new browser focused and pointer centered after tiling.'
     }
-    $panel = [BrowserTest]::GetDlgItem($window, 104)
+    $panel = [BrowserTest]::OwnedPanel($window, 'IlliumNavigationPalette')
     $edit = [BrowserTest]::GetDlgItem($panel, 101)
     $list = [BrowserTest]::GetDlgItem($panel, 102)
     if (![BrowserTest]::IsWindowVisible($edit)) { throw 'Home input is not visible' }
@@ -114,12 +126,21 @@ try {
     }
     Assert-CenteredPalette
     [uint32]$key=0; [byte]$alpha=0; [uint32]$flags=0
-    if (![BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -or $alpha -ne 191) { throw 'Home alpha did not use the theme 75%' }
+    function Assert-Composition {
+        foreach ($surface in @($window, $panel)) {
+            $style = [BrowserTest]::GetWindowStyle($surface, -20).ToInt64()
+            if (($style -band 0x00200000) -eq 0 -or ($style -band 0x00080000) -ne 0) {
+                throw 'Expected per-pixel DirectComposition, not global layered alpha'
+            }
+        }
+    }
+    Assert-Composition
     [IO.File]::WriteAllText($opacityPath, "theme = 'test'`nopacity = 0.60`n")
-    Wait-For { [BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -and $alpha -eq 153 } 'Home did not follow live 60% override'
+    Start-Sleep -Milliseconds 300
+    Assert-Composition
     [IO.File]::WriteAllText($themePath, $theme.Replace('= 0.75', '= 2.0'))
     Start-Sleep -Milliseconds 300
-    if (![BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -or $alpha -ne 153) { throw 'Invalid theme changed the last valid opacity' }
+    Assert-Composition # pixel-level retention is covered by theme/renderer tests
     [IO.File]::WriteAllText($themePath, $theme)
     if (!$SkipFocusChecks) {
     [void][BrowserTest]::SetForegroundWindow($window)
@@ -180,7 +201,7 @@ try {
         Add-Type -AssemblyName System.Windows.Forms, UIAutomationClient, UIAutomationTypes, System.Drawing
         [void][BrowserTest]::SetForegroundWindow($window)
         Wait-For { [BrowserTest]::GetForegroundWindow() -eq $window } 'Leader test requires foreground focus'
-        $leaderPanel = [BrowserTest]::FindWindowEx($window,[IntPtr]::Zero,'IlliumLeaderPanel',$null)
+        $leaderPanel = [BrowserTest]::OwnedPanel($window,'IlliumLeaderPanel')
         if ($leaderPanel -eq [IntPtr]::Zero) { throw 'Leader panel missing' }
         function Send-LeaderKeys([string]$keys) {
             if ([BrowserTest]::GetForegroundWindow() -ne $window) { throw 'Focus left the test browser; refusing keyboard input' }
@@ -309,10 +330,11 @@ try {
     [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, 'about:blank')
     Start-Sleep -Milliseconds 200
     [void][BrowserTest]::PostMessage($edit,0x0100,[IntPtr]13,[IntPtr]::Zero)
-    Wait-For { [BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) } 'Home did not return'
-    Wait-For { [BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -and $alpha -eq 115 } 'Returning home lost the override set while browsing'
+    Wait-For { [BrowserTest]::IsWindowVisible($edit) -and ![BrowserTest]::IsWindowVisible($web) } 'Home did not return'
+    Assert-Composition
     Remove-Item $opacityPath
-    Wait-For { [BrowserTest]::GetLayeredWindowAttributes($window,[ref]$key,[ref]$alpha,[ref]$flags) -and $alpha -eq 191 } 'Clearing override did not restore theme opacity'
+    Start-Sleep -Milliseconds 300
+    Assert-Composition
     if ($CheckLeader) {
         [void][BrowserTest]::SetText($edit,0x000C,[IntPtr]::Zero,'home query')
         Send-LeaderKeys '^b'
@@ -333,8 +355,10 @@ try {
     # A single result click opens it; no double click is required.
     [void][BrowserTest]::SetText($edit, 0x000C, [IntPtr]::Zero, $TestUrl)
     Wait-For { [BrowserTest]::SendMessage($list,0x018B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -eq 1 } 'Fixture bookmark not found'
-    [void][BrowserTest]::PostMessage($list,0x0201,[IntPtr]1,[IntPtr]0x00200020)
-    [void][BrowserTest]::PostMessage($list,0x0202,[IntPtr]::Zero,[IntPtr]0x00200020)
+    $dpi = [BrowserTest]::GetDpiForWindow($panel)
+    $point = ([int](110*$dpi/96) -shl 16) -bor [int](40*$dpi/96)
+    [void][BrowserTest]::PostMessage($panel,0x0201,[IntPtr]1,[IntPtr]$point)
+    [void][BrowserTest]::PostMessage($panel,0x0202,[IntPtr]::Zero,[IntPtr]$point)
     Wait-For { ![BrowserTest]::IsWindowVisible($panel) } 'Single click did not navigate'
     if ($CheckTabs) {
         function Window-Title {
@@ -437,7 +461,7 @@ try {
         Assert-TabViews 2 1
         Write-Host 'PASS: hidden tabs, preserved input, fuzzy picker, empty results, tab leader/standard shortcuts, duplicate, close, reopen, pin, mute and final-tab home.'
     }
-    Write-Host "PASS: centered home/overlay, Escape, home opacity, fuzzy suggestions, navigation, opaque page, history and bookmark persistence. Logs: $root"
+    Write-Host "PASS: centered owned palettes, Escape, non-layered composition, fuzzy suggestions, navigation, history and bookmark persistence. Logs: $root"
 } finally {
     $env:ILLIUM_CONFIG_HOME = $oldHome
     $env:LOCALAPPDATA = $oldLocal

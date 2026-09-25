@@ -13,7 +13,7 @@ theme = "catppuccin-mocha"
 background_blur = false
 ```
 
-`background_blur` (optional, default `false`) blurs what lies behind the translucent backgrounds of the native terminal, Files and Tasks, for a frosted-glass look with [`background_opacity`](themes.md). It applies live to open and hidden windows and survives theme switches; `illiumctl blur toggle` flips it. It uses the Windows accent blur, which stays visible on unfocused windows, and needs Windows' "Transparency effects" setting (Settings > Personalization > Colors) to be on. The browser's native home now requests this effect experimentally; its GDI/layered composition still needs visual validation (see [browser](browser.md#home-history-and-bookmarks)). Web pages and their overlay palettes, the status bar and external applications are not blurred.
+`background_blur` (optional, default `false`) blurs what lies behind the translucent backgrounds of the native terminal, Files and Tasks, for a frosted-glass look with [`background_opacity`](themes.md). It applies live to open and hidden windows and survives theme switches; `illiumctl blur toggle` flips it. It uses the Windows accent blur, which stays visible on unfocused windows, and needs Windows' "Transparency effects" setting (Settings > Personalization > Colors) to be on. The [browser](browser.md#home-history-and-bookmarks) applies it to its Slint/DirectComposition home and navigation, tab and leader palettes, including palettes over web pages. Palette text and native input remain opaque. Web pages themselves, the status bar and external applications are not blurred.
 
 ## wm.toml
 

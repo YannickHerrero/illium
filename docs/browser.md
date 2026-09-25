@@ -51,30 +51,35 @@ Initial Windows smoke measurements with EasyList/EasyPrivacy, not a benchmark: a
 
 ## Home, history and bookmarks
 
-Launching without an argument (including `Alt+B`), or submitting an empty address / `about:blank`, shows a native home surface. A Illium theme color fills the window, with a focused native navigation palette centered as a whole in the browser's client area. The same palette overlays web pages with `Ctrl+L`, without changing the page's bounds. It contains a search field, navigation heading, grouped favorites/history with icons and category badges, and a result count/keyboard hint footer. It uses Cascadia Mono (with Windows font fallback), the active theme's colors, a compact 13-pixel logical font, 20% tighter spacing, a DPI-scaled maximum width of 680 logical pixels and a bounded, scrollable result list. The home window uses the theme's `background_opacity` (85% by default, also applying to its native controls), including live Ctrl+Alt+Shift+Y/U adjustments. Web pages always stay fully opaque, even when opacity changes while browsing. An explicit web URL on the command line bypasses home.
+Launching without an argument (including `Alt+B`), or submitting an empty address / `about:blank`, shows a native home surface. A Illium theme color fills the window, with a focused native navigation palette centered as a whole in the browser's client area. The same palette overlays web pages with `Ctrl+L`, without changing the page's bounds. It contains a search field, navigation heading, grouped favorites/history with icons and category badges, and a result count/keyboard hint footer. It uses Cascadia Mono (with Windows font fallback), the active theme's colors, a compact 13-pixel logical font, 20% tighter spacing, a DPI-scaled maximum width of 680 logical pixels and a bounded, scrollable result list. Home and palette backgrounds use the theme's `background_opacity` (85% by default), including live Ctrl+Alt+Shift+Y/U adjustments. Text and the native search control remain opaque. Web pages always stay fully opaque, even when opacity changes while browsing. An explicit web URL on the command line bypasses home.
 
 While the home window is foreground, typing redirects focus and the first character to the search field even after selecting a suggestion. Editing shortcuts such as Ctrl+V work too. Other applications' input and Alt/Windows shortcuts are not intercepted; this does not apply to web pages.
 
-Experimental home blur: the native home host now requests the shared Windows
-accent blur when `background_blur = true` in `illium.toml`, including live theme
-updates. It disables the effect on navigation to a web page and reapplies it on
-returning home. Home palettes share the host's effect; palettes over web pages
-remain opaque. This is a GDI/layered-window prototype, not the terminal's
-DirectComposition renderer: global opacity still affects text and controls, and
-visual blur compatibility must be checked on Windows before treating it as
-supported. Windows Transparency effects must be enabled and home opacity must
-be below 1 to see through the background.
+Home, navigation, tabs and leader use Slint scenes, rendered on demand with the
+software renderer and uploaded to premultiplied-alpha DirectComposition swap
+chains. The HWNDs use `WS_EX_NOREDIRECTIONBITMAP`, like the terminal; there is no
+`WS_EX_LAYERED` global alpha. Slint draws opaque glyphs over translucent
+backgrounds. The search field remains a native, opaque EDIT control to preserve
+Windows Unicode input, selection and clipboard behavior. A hidden LISTBOX keeps
+the selection/automation model; visible rows and hit testing belong to Slint.
 
-Run `scripts/test-browser-desktop.ps1` with `-BackgroundBlur` to exercise the
-existing opacity/navigation regression checks with this setting enabled. These
-checks do **not** prove that Windows visually renders the blur. Manually compare
-home with blur on/off over a detailed background, toggle it live, inspect the
-navigation/tab/leader palettes, navigate to a page (which must remain opaque),
-and return home. Also check unfocused, resized and reopened windows.
+`background_blur = true` applies the shared Windows accent blur independently
+to home and each palette, including palettes above web pages and live updates.
+The host disables blur and becomes opaque when showing WebView2; palette effects
+never alter a web controller's opacity or bounds. Windows Transparency effects
+must be enabled and background opacity must be below 1 to see the effect.
+
+Run the ignored Windows binary test
+`per_pixel_home_and_owned_palettes_keep_text_and_pages_opaque` for rendered-alpha,
+light/dark theme, navigation, palette ownership and minimize/restore regressions.
+It checks premultiplied pixels and opaque glyphs, not a desktop screenshot.
+`scripts/test-browser-desktop.ps1 -BackgroundBlur` exercises the interactive
+navigation checks; visual blur, mixed-DPI behavior and accessibility still need
+manual validation.
 
 The field suggests up to eight local results, matching case-insensitive ordered subsequences against titles and URLs. Contiguous matches rank higher; equally ranked favorites precede recent history. The eight best matches are displayed in favorite/history groups, preserving relevance within each group. With empty input, favorites come first, then recent history. No remote suggestions, page prefetches or second WebView are used. Typing and pressing Enter submits the input as typed; select a suggestion with arrows first to open it, or click it. Editing the query clears the selection. On web pages, Escape closes the palette and returns page focus; clicking the page also dismisses it when WebView receives focus. On home, Escape clears the query and keeps the palette visible.
 
-`Ctrl+D` adds the current page to favorites without opening the search field or moving focus. Repeating it does not remove or duplicate the bookmark. Favorites and history share the same fuzzy results list, with each URL shown only once. An already-open home refreshes its data when it regains focus. Successful top-level web navigations record the title, URL and last-visit timestamp; history is deduplicated and limited to 500 entries. History rows show relative visit ages (minutes, hours, days), calculated when painted without a background timer. Older libraries remain readable: entries without a timestamp show their title until revisited. Data is stored as plain JSON in `browser/library.json`; embedded URL username/password credentials are removed, but paths and query strings remain. There is no private browsing mode yet. Close the browser and remove this file to erase history and bookmarks. Updates are merged under a file lock across windows; no idle polling/indexer is added.
+`Ctrl+D` adds the current page to favorites without opening the search field or moving focus. Repeating it does not remove or duplicate the bookmark. Favorites and history share the same fuzzy results list, with each URL shown only once. An already-open home refreshes its data when it regains focus. Successful top-level web navigations record the title, URL and last-visit timestamp; history is deduplicated and limited to 500 entries. History rows show relative visit ages (minutes, hours, days), calculated when the palette is refreshed without a background timer. Older libraries remain readable: entries without a timestamp show their title until revisited. Data is stored as plain JSON in `browser/library.json`; embedded URL username/password credentials are removed, but paths and query strings remain. There is no private browsing mode yet. Close the browser and remove this file to erase history and bookmarks. Updates are merged under a file lock across windows; no idle polling/indexer is added.
 
 ## UI language
 
@@ -106,7 +111,7 @@ not modified. OS-owned dialogs may still follow Windows language settings.
 
 Illium gives each newly opened browser window on the active workspace foreground focus and centers the pointer after applying its tile geometry. This is a one-shot launch action, not a cursor warp on every resize. Both the browser and the daemon must be updated for this behavior.
 
-There is no caption or tab strip. Use Illium's window management or Windows' system menu (`Alt+Space`) to move the window. The palette is a native child panel placed above the WebView child in the window's z-order; it neither reserves page space nor allocates another WebView. It remains inside its browser window and inherits its minimize/move/resize lifecycle. Tabs are retained in the background; only the active tab's controller is visible. User-initiated HTTP(S) `target=_blank` / `window.open` requests open a new active tab. Unsolicited script popups are blocked instead of allocating controllers. These are URL-only popup opens, not a complete opener/window-object implementation; popup-based OAuth and scripted about:blank popups remain unsupported. Only one window is kept prepared; additional simultaneous windows use standalone hosts.
+There is no caption or tab strip. Use Illium's window management or Windows' system menu (`Alt+Space`) to move the window. Palettes are owned, non-activating tool windows with independent Slint/DirectComposition surfaces above WebView2; they neither reserve page space nor allocate another WebView. It remains inside its browser window and inherits its minimize/move/resize lifecycle. Tabs are retained in the background; only the active tab's controller is visible. User-initiated HTTP(S) `target=_blank` / `window.open` requests open a new active tab. Unsolicited script popups are blocked instead of allocating controllers. These are URL-only popup opens, not a complete opener/window-object implementation; popup-based OAuth and scripted about:blank popups remain unsupported. Only one window is kept prepared; additional simultaneous windows use standalone hosts.
 
 ## Leader key
 
@@ -268,7 +273,7 @@ powershell -ExecutionPolicy Bypass -File scripts/test-browser-desktop.ps1 `
   -Exe "$PWD/target/release/illium-browser.exe"
 ```
 
-It uses disposable configuration and profile directories, checks palette centering on home and over a page, unchanged WebView bounds, Escape dismissal, theme-owned home opacity, live overrides/reset, invalid-theme retention, unified fuzzy matching, navigation, opaque pages even during opacity updates, history and add-only bookmark persistence, and closes only its own process. `-SkipFocusChecks` skips the first-character/Unicode focus-routing checks when foreground focus is unavailable; opacity and navigation checks still run. With an updated Illium running, add `-CheckTilingFocus` to check foreground focus and cursor centering after tiling (do not move the mouse during this check). It invokes the queued bookmark action directly, without injecting global keystrokes; manually verify the actual `Ctrl+D` accelerator as well. It retains its temporary logs for diagnosis.
+It uses disposable configuration and profile directories, checks owned-palette centering on home and over a page, unchanged WebView bounds, Escape dismissal, absence of global layered alpha during theme overrides/reset, unified fuzzy matching, navigation, history and add-only bookmark persistence, and closes only its own process. Actual per-pixel alpha is checked by the Rust composition test, not `GetLayeredWindowAttributes`. `-SkipFocusChecks` skips the first-character/Unicode focus-routing checks when foreground focus is unavailable; composition-style and navigation checks still run. With an updated Illium running, add `-CheckTilingFocus` to check foreground focus and cursor centering after tiling (do not move the mouse during this check). It invokes the queued bookmark action directly, without injecting global keystrokes; manually verify the actual `Ctrl+D` accelerator as well. It retains its temporary logs for diagnosis.
 
 For the opt-in **real keyboard** leader checks, use an interactive desktop and
 leave the keyboard/mouse untouched while the test runs:
@@ -361,7 +366,7 @@ Prepared mode keeps one browser host and its empty WebView ready. There is no po
 ## Validation performed
 
 - `cargo test -p illium-browser --locked`: seven tests pass (DuckDuckGo/address parsing, network/cosmetic rules, fixture rules, cache invalidation, persisted exceptions, fuzzy matching, merged/bounded history/bookmark persistence, legacy timestamp compatibility and relative dates).
-- The centered-palette desktop smoke test passes on Windows via WSL interop, including foreground Unicode input routing, query selection reset, arrow selection, home Escape, single-click navigation, centered overlay, unchanged WebView bounds, page Escape, timestamps and opacity. The resident lifecycle test also passes with local fixture filters. Actual Ctrl+L from web inputs, outside-page clicks, mixed-DPI displays, light-theme visual appearance and screen-reader behavior still need manual validation.
+- The three Windows Rust regressions pass after the Slint/DirectComposition migration: rendered background/glyph alpha in light and dark themes, opaque host behind pages, navigation/tab/leader surfaces, unchanged WebView bounds, owned-palette minimize/restore, Unicode editor, tab filtering/closing/reopening, and two resident demo rebuilds with isolated data. The PowerShell desktop smoke and screenshot attempt were blocked by antivirus on the development machine; they were not bypassed. Earlier GDI desktop/resident smoke results do not validate the new compositor. Actual Ctrl+L from web inputs, outside-page clicks, mixed-DPI displays, light-theme visual appearance and screen-reader behavior still need manual validation.
 - Clippy with warnings denied for the browser's Linux, Windows GNU and Windows MSVC targets passes; Windows GNU release linking succeeds. GNU builds additionally require `WebView2Loader.dll` from the matching `webview2-com-sys` package next to the executable; the documented MSVC/release-CI build uses the static loader.
 - Workspace formatting and the CLI dependency-boundary check pass.
 - Both PowerShell scripts parse; the updater successfully downloads upstream lists into a temporary config. Loading these lists, restoring their cache and matching a known blocked/allowed URL were smoke-tested on Linux.
