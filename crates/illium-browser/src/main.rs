@@ -10,6 +10,8 @@ mod native;
 mod picker;
 #[cfg(windows)]
 mod resident;
+#[cfg(windows)]
+mod surface;
 
 fn main() {
     #[cfg(windows)]

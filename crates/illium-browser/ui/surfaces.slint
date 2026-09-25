@@ -1,0 +1,103 @@
+export struct PaletteRow {
+    title: string,
+    detail: string,
+    badge: string,
+    group: string,
+}
+
+export component BrowserSurface inherits Window {
+    no-frame: true;
+    background: transparent;
+    default-font-family: "Cascadia Mono";
+    default-font-size: 13px;
+    in property <color> bg;
+    in property <color> surface;
+    in property <color> text-color;
+    in property <color> subtext;
+    in property <color> accent;
+    in property <color> border;
+    in property <float> background-opacity: 0.85;
+    // 0 = home background, 1 = navigation/tabs, 2 = leader.
+    in property <int> kind;
+    in property <string> heading;
+    in property <string> footer;
+    in property <[PaletteRow]> rows;
+    in property <int> selected: -1;
+    in property <length> row-height: 70px;
+    in property <int> columns: 1;
+    in-out property <length> scroll-offset;
+    callback activate(int);
+
+    Rectangle {
+        background: (root.kind == 0 ? root.bg : root.surface).with-alpha(root.background-opacity);
+        border-width: root.kind == 0 ? 0px : 1px;
+        border-color: root.border;
+        if root.kind != 0: Text {
+            x: 20px; y: root.kind == 1 ? 64px : 12px;
+            width: parent.width - 40px; height: 28px;
+            text: root.heading; color: root.accent;
+            overflow: elide; vertical-alignment: center;
+        }
+        if root.kind == 1: Text {
+            x: 14px; y: 19px; width: 22px; height: 23px;
+            text: "⌕"; color: root.accent;
+        }
+        if root.kind == 1: Text {
+            x: parent.width - 48px; y: 19px; width: 38px; height: 23px;
+            text: "Esc"; color: root.subtext;
+        }
+        if root.kind != 0: Rectangle {
+            x: 1px; y: root.kind == 1 ? 60px : 48px;
+            width: parent.width - 2px; height: 1px; background: root.border;
+        }
+        if root.kind != 0: Rectangle {
+            x: 20px; y: root.kind == 1 ? 93px : 52px;
+            width: parent.width - 40px;
+            height: max(0px, parent.height - self.y - 44px);
+            clip: true;
+            if root.rows.length == 0 && root.kind == 1: Text {
+                x: 8px; y: 8px; width: parent.width - 16px; height: 24px;
+                text: "No local results · Enter to search"; color: root.subtext;
+                overflow: elide;
+            }
+            for row[index] in root.rows: Rectangle {
+                x: mod(index, root.columns) * self.width;
+                y: floor(index / root.columns) * root.row-height - root.scroll-offset;
+                width: parent.width / root.columns;
+                height: root.row-height;
+                background: index == root.selected ? root.border.with-alpha(0.85) : transparent;
+                Text {
+                    x: 8px; y: 0px; width: parent.width - 120px; height: 19px;
+                    text: row.group; color: root.subtext; overflow: elide;
+                }
+                Text {
+                    x: parent.width - 112px; y: 0px; width: 104px; height: 19px;
+                    text: row.badge; color: root.subtext; horizontal-alignment: right;
+                    overflow: elide;
+                }
+                Text {
+                    x: 8px; y: root.kind == 2 ? 0px : 22px;
+                    width: parent.width - 16px; height: 23px;
+                    text: row.title; color: index == root.selected ? root.accent : root.text-color;
+                    overflow: elide; vertical-alignment: center;
+                }
+                Text {
+                    x: 8px; y: 45px; width: parent.width - 16px; height: 20px;
+                    text: row.detail; color: root.subtext; overflow: elide;
+                }
+                if root.kind == 1: TouchArea {
+                    clicked => { root.activate(index); }
+                }
+            }
+        }
+        if root.kind != 0: Rectangle {
+            x: 1px; y: parent.height - 42px; width: parent.width - 2px; height: 1px;
+            background: root.border;
+        }
+        if root.kind != 0: Text {
+            x: 20px; y: parent.height - 38px; width: parent.width - 40px; height: 32px;
+            text: root.footer; color: root.subtext; overflow: elide;
+            vertical-alignment: center;
+        }
+    }
+}

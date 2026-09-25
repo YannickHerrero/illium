@@ -2411,10 +2411,13 @@ dependencies = [
  "illium-theme",
  "serde",
  "serde_json",
+ "slint",
+ "slint-build",
  "tempfile",
  "url",
  "webview2-com",
  "windows 0.62.2",
+ "winresource",
 ]
 
 [[package]]

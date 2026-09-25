@@ -15,11 +15,14 @@ use windows::{
         Foundation::*,
         Graphics::Gdi::*,
         System::{Com::*, LibraryLoader::*, Threading::GetCurrentThreadId},
-        UI::{Controls::*, HiDpi::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
+        UI::{HiDpi::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
     },
     core::*,
 };
 
+#[cfg(test)]
+#[path = "composition_tests.rs"]
+mod composition_tests;
 #[cfg(test)]
 #[path = "native_tests.rs"]
 mod tests;
@@ -38,7 +41,7 @@ pub fn show_error(message: &str) {
 const PALETTE: u32 = WM_APP + 1;
 const HISTORY: u32 = WM_APP + 2;
 const PICKER_CHANGED: u32 = WM_APP + 3;
-const SUBMIT: u32 = WM_APP + 4;
+pub(crate) const SUBMIT: u32 = WM_APP + 4;
 const BOOKMARK: u32 = WM_APP + 5;
 const LIBRARY_CHANGED: u32 = WM_APP + 6;
 // WM_APP + 7 is the resident pipe wakeup, handled by the same message loop.
@@ -87,6 +90,7 @@ struct App {
     popups: Rc<RefCell<VecDeque<(TabId, String)>>>,
     background_opacity: f32,
     background_blur: bool,
+    home_surface: Rc<RefCell<crate::surface::Surface>>,
 }
 thread_local! { static APP: RefCell<Option<App>> = const { RefCell::new(None) }; }
 pub(crate) fn wide(s: &str) -> Vec<u16> {
@@ -111,19 +115,29 @@ fn color(s: &str) -> COLORREF {
 fn snapshot() -> Option<App> {
     APP.with(|a| a.borrow().clone())
 }
-pub(crate) unsafe fn paint_picker(dc: HDC) {
+unsafe fn browser_foreground(app: &App) -> bool {
+    GetAncestor(GetForegroundWindow(), GA_ROOTOWNER) == app.hwnd
+}
+pub(crate) unsafe fn paint_picker() {
     if let Some(app) = snapshot()
         && let Ok(picker) = app.picker.try_borrow()
     {
-        picker.paint(dc);
+        picker.paint();
     }
 }
-pub(crate) unsafe fn paint_leader(dc: HDC) {
+pub(crate) unsafe fn picker_pointer(msg: u32, wp: WPARAM, lp: LPARAM) {
+    if let Some(app) = snapshot()
+        && let Ok(picker) = app.picker.try_borrow()
+    {
+        picker.pointer(msg, wp, lp);
+    }
+}
+pub(crate) unsafe fn paint_leader() {
     if let Some(app) = snapshot()
         && let Ok(panel) = app.leader_panel.try_borrow()
         && let Ok(input) = app.leader.try_borrow()
     {
-        panel.paint(dc, &input.state);
+        panel.paint(&input.state);
     }
 }
 unsafe fn sync_leader(app: &App) {
@@ -167,7 +181,7 @@ unsafe fn leader_notice(app: &App, message: &str) {
 unsafe extern "system" fn leader_hook(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     if code == HC_ACTION as i32
         && let Some(app) = snapshot()
-        && GetForegroundWindow() == app.hwnd
+        && browser_foreground(&app)
     {
         let key = &*(lp.0 as *const KBDLLHOOKSTRUCT);
         let down = matches!(wp.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
@@ -193,7 +207,7 @@ unsafe fn leader_key(vk: u32, scan: u32, down: bool, repeat: bool, from_hook: bo
     let Some(app) = snapshot() else {
         return false;
     };
-    if GetForegroundWindow() != app.hwnd {
+    if !browser_foreground(&app) {
         return false;
     }
     let mut input = app.leader.borrow_mut();
@@ -762,11 +776,16 @@ unsafe fn layout(app: &App) {
     if let Some(c) = &app.controller {
         let _ = c.SetBounds(rect);
     }
-    // Keep the native palette above the WebView child without resizing the page.
-    app.picker.borrow().layout(app.hwnd);
-    app.leader_panel
-        .borrow()
-        .layout(app.hwnd, app.leader.borrow().state.menu());
+    // Owned surfaces follow the client area without changing WebView bounds.
+    // Activating a native EDIT can synchronously reposition its owner.
+    if let Ok(picker) = app.picker.try_borrow() {
+        picker.layout(app.hwnd);
+    }
+    if let Ok(panel) = app.leader_panel.try_borrow()
+        && let Ok(input) = app.leader.try_borrow()
+    {
+        panel.layout(app.hwnd, input.state.menu());
+    }
 }
 unsafe fn palette(show: bool) {
     if let Some(app) = snapshot() {
@@ -809,6 +828,7 @@ unsafe fn apply_theme(theme: &illium_theme::Theme) -> AppResult<()> {
     let _ = DeleteObject(previous.0.into());
     let _ = DeleteObject(previous.1.into());
     if let Some(app) = snapshot() {
+        app.home_surface.borrow().theme(theme);
         apply_opacity(&app);
         app.picker.borrow_mut().set_theme(theme);
         app.leader_panel.borrow_mut().set_theme(theme);
@@ -837,22 +857,18 @@ unsafe fn apply_theme(theme: &illium_theme::Theme) -> AppResult<()> {
     Ok(())
 }
 unsafe fn apply_opacity(app: &App) {
-    // This is an accent-blur prototype on the existing GDI/layered host,
-    // not the terminal's per-pixel DirectComposition rendering. Never apply
-    // desktop blur to web content, including when a palette overlays a page.
-    if !app.home {
-        illium_theme::blur::set(app.hwnd.0 as isize, false);
-    }
-    let style = GetWindowLongPtrW(app.hwnd, GWL_EXSTYLE);
-    if app.home {
-        SetWindowLongPtrW(app.hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED.0 as isize);
-        let alpha = (app.background_opacity * 255.0).round() as u8;
-        let _ = SetLayeredWindowAttributes(app.hwnd, COLORREF(0), alpha, LWA_ALPHA);
-        illium_theme::blur::set(app.hwnd.0 as isize, app.background_blur);
-    } else {
-        // WebView2 pages must never inherit the native home's layered alpha.
-        SetWindowLongPtrW(app.hwnd, GWL_EXSTYLE, style & !(WS_EX_LAYERED.0 as isize));
-    }
+    // Per-pixel scene alpha, never SetLayeredWindowAttributes: native input,
+    // palette glyphs and WebView children must remain fully opaque.
+    app.home_surface
+        .borrow()
+        .ui
+        .set_background_opacity(if app.home {
+            app.background_opacity
+        } else {
+            1.0
+        });
+    illium_theme::blur::set(app.hwnd.0 as isize, app.home && app.background_blur);
+    let _ = InvalidateRect(Some(app.hwnd), None, false);
 }
 unsafe fn home_mode(home: bool) {
     APP.with(|a| {
@@ -894,8 +910,8 @@ unsafe fn route_home_input(msg: &mut MSG) {
         && (!app.picker.borrow().visible
             || (msg.hwnd != panel && !IsChild(panel, msg.hwnd).as_bool())))
         || msg.hwnd == edit
-        || GetForegroundWindow() != app.hwnd
-        || (msg.hwnd != app.hwnd && !IsChild(app.hwnd, msg.hwnd).as_bool())
+        || !browser_foreground(&app)
+        || GetAncestor(msg.hwnd, GA_ROOTOWNER) != app.hwnd
     {
         return;
     }
@@ -935,16 +951,9 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         // Keep WS_THICKFRAME for resizing/tiling, but let the page occupy the
         // entire frame instead of leaving Windows' non-client strip at the top.
         WM_NCCALCSIZE if wp.0 != 0 => LRESULT(0),
-        // A layered (translucent home) window can fall back to classic frame
-        // painting when deactivated, despite its client area covering the frame.
-        // Keep activation bookkeeping, but suppress that non-client repaint.
-        // Illium's separate focus ring and resize hit-testing remain intact.
-        WM_NCACTIVATE if GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED.0 as isize != 0 => {
-            DefWindowProcW(hwnd, msg, wp, LPARAM(-1))
-        }
-        WM_NCPAINT if GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED.0 as isize != 0 => {
-            LRESULT(0)
-        }
+        // DirectComposition owns every client pixel; suppress classic frames.
+        WM_NCACTIVATE => DefWindowProcW(hwnd, msg, wp, LPARAM(-1)),
+        WM_NCPAINT => LRESULT(0),
         WM_NCHITTEST => {
             let hit = DefWindowProcW(hwnd, msg, wp, lp);
             if hit.0 == HTCAPTION as isize {
@@ -955,9 +964,11 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         }
         WM_PAINT => {
             let mut paint = PAINTSTRUCT::default();
-            let dc = BeginPaint(hwnd, &mut paint);
-            if let Some(app) = snapshot() {
-                FillRect(dc, &paint.rcPaint, app.brush);
+            BeginPaint(hwnd, &mut paint);
+            if let Some(app) = snapshot()
+                && let Err(e) = app.home_surface.borrow_mut().paint()
+            {
+                eprintln!("Home composition failed: {e}");
             }
             let _ = EndPaint(hwnd, &paint);
             LRESULT(0)
@@ -977,7 +988,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             }
             LRESULT(0)
         }
-        WM_ACTIVATE if wp.0 & 0xffff == WA_INACTIVE as usize => {
+        WM_ACTIVATE
+            if wp.0 & 0xffff == WA_INACTIVE as usize
+                && GetAncestor(HWND(lp.0 as *mut _), GA_ROOTOWNER) != hwnd =>
+        {
             if let Some(app) = snapshot() {
                 let mut input = app.leader.borrow_mut();
                 input.state.cancel();
@@ -987,6 +1001,12 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
                 drop(input);
                 app.leader_panel.borrow_mut().notice = None;
                 sync_leader(&app);
+            }
+            DefWindowProcW(hwnd, msg, wp, lp)
+        }
+        WM_WINDOWPOSCHANGED => {
+            if let Some(app) = snapshot() {
+                layout(&app);
             }
             DefWindowProcW(hwnd, msg, wp, lp)
         }
@@ -1011,16 +1031,6 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
                 rect.bottom - rect.top,
                 SWP_NOZORDER | SWP_NOACTIVATE,
             );
-            LRESULT(0)
-        }
-        WM_DRAWITEM => {
-            if wp.0 == LIST_ID
-                && let Some(app) = snapshot()
-                && let Ok(picker) = app.picker.try_borrow()
-            {
-                picker.draw_item(&*(lp.0 as *const DRAWITEMSTRUCT));
-                return LRESULT(1);
-            }
             LRESULT(0)
         }
         WM_COMMAND => {
@@ -1093,9 +1103,6 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
                         a.brush.0
                     } as isize);
                 }
-                let mut rect = RECT::default();
-                let _ = GetClientRect(hwnd, &mut rect);
-                FillRect(dc, &rect, a.brush);
                 return LRESULT(1);
             }
             DefWindowProcW(hwnd, msg, wp, lp)
@@ -1154,6 +1161,7 @@ impl Drop for Resources {
         unsafe {
             release_window();
         }
+        crate::surface::release_graphics();
     }
 }
 impl Resources {
@@ -1283,7 +1291,7 @@ fn run_inner(
             return Err(windows::core::Error::from_thread().into());
         }
         let hwnd = CreateWindowExW(
-            Default::default(),
+            WS_EX_NOREDIRECTIONBITMAP,
             class,
             w!("Illium Browser"),
             WS_POPUP
@@ -1301,6 +1309,9 @@ fn run_inner(
             Some(instance),
             None,
         )?;
+        let home_surface = crate::surface::Surface::new(hwnd, 0)?;
+        home_surface.theme(&theme);
+        let home_surface = Rc::new(RefCell::new(home_surface));
         let tabs = Rc::new(RefCell::new(Tabs::default()));
         let picker = Rc::new(RefCell::new(Picker::new(
             hwnd,
@@ -1331,6 +1342,7 @@ fn run_inner(
                 popups: Rc::new(RefCell::new(VecDeque::new())),
                 background_opacity: theme.background_opacity,
                 background_blur: theme.background_blur,
+                home_surface,
             })
         });
         home_mode(start_home);
