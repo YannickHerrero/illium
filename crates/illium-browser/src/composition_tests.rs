@@ -24,8 +24,8 @@ fn per_pixel_home_and_owned_palettes_keep_text_and_pages_opaque() {
                     let p = app.picker.borrow();
                     (p.panel, p.edit)
                 };
-                // The GDI line fits exactly inside Slint's padded, rounded
-                // field: no spare layered pixels below the baseline.
+                // The invisible native line and its Slint mirror share the
+                // same physical bounds, including IME candidate positioning.
                 let mut edit_rect = RECT::default();
                 let mut panel_rect = RECT::default();
                 GetWindowRect(edit, &mut edit_rect).unwrap();
@@ -82,12 +82,37 @@ fn per_pixel_home_and_owned_palettes_keep_text_and_pages_opaque() {
                         apply_theme(&theme).unwrap();
                         app.home_surface.borrow_mut().assert_alpha(255, false);
                         app.picker.borrow().assert_alpha(179);
+                        let _ = SetWindowTextW(edit, w!("Mirror Été 日本語"));
+                        SendMessageW(edit, 0x00b1, Some(WPARAM(0)), Some(LPARAM(0)));
+                        let plain = app.picker.borrow().input_pixels();
+                        let opaque = plain.as_slice().iter().filter(|p| p.a == 255).count();
+                        assert!(
+                            opaque > 0,
+                            "native glyphs must survive alpha extraction in both themes"
+                        );
+                        assert!(
+                            plain.as_slice().iter().any(|p| p.a == 0),
+                            "input background must be transparent"
+                        );
+                        assert!(
+                            plain
+                                .as_slice()
+                                .iter()
+                                .all(|p| p.r <= p.a && p.g <= p.a && p.b <= p.a)
+                        );
+                        SendMessageW(edit, 0x00b1, Some(WPARAM(0)), Some(LPARAM(-1)));
+                        let selected = app.picker.borrow().input_pixels();
+                        assert!(
+                            selected.as_slice().iter().filter(|p| p.a == 255).count() > opaque,
+                            "native selection must appear in the mirror"
+                        );
+                        let _ = SetWindowTextW(edit, w!(""));
                         let mut edit_alpha = 0;
                         GetLayeredWindowAttributes(edit, None, Some(&mut edit_alpha), None)
                             .unwrap();
                         assert_eq!(
-                            edit_alpha, 255,
-                            "native input must never inherit theme alpha"
+                            edit_alpha, 0,
+                            "native input must remain visually hidden in every theme"
                         );
                         app.leader.borrow_mut().state.input(Key::Leader, false);
                         sync_leader(&app);
@@ -109,6 +134,66 @@ fn per_pixel_home_and_owned_palettes_keep_text_and_pages_opaque() {
                 // Native Unicode editing and native selection coexist with Slint rows.
                 let _ = SetWindowTextW(edit, w!("Été 日本語"));
                 assert_eq!(app.picker.borrow().text(), "Été 日本語");
+                SendMessageW(edit, 0x00b1, Some(WPARAM(0)), Some(LPARAM(-1)));
+                SendMessageW(
+                    edit,
+                    0x00c2,
+                    Some(WPARAM(1)),
+                    Some(LPARAM(w!("Replacement").0 as isize)),
+                );
+                assert_eq!(app.picker.borrow().text(), "Replacement");
+                SendMessageW(edit, WM_UNDO, None, None);
+                assert_eq!(app.picker.borrow().text(), "Été 日本語");
+                // A click delivered to the alpha-zero child's parent must land
+                // in the real EDIT, not in an independent Slint text editor.
+                let click = LPARAM(((30 * scale / 96) << 16 | (49 * scale / 96)) as isize);
+                app.picker
+                    .borrow()
+                    .pointer(WM_LBUTTONDOWN, WPARAM(1), click);
+                app.picker.borrow().pointer(WM_LBUTTONUP, WPARAM(0), click);
+                assert_eq!(GetFocus(), edit);
+                let selection = SendMessageW(edit, 0x00b0, None, None).0 as u32;
+                assert_eq!(
+                    selection & 0xffff,
+                    selection >> 16,
+                    "click collapses native selection"
+                );
+                app.picker
+                    .borrow()
+                    .pointer(WM_LBUTTONDBLCLK, WPARAM(1), click);
+                app.picker.borrow().pointer(WM_LBUTTONUP, WPARAM(0), click);
+                let selection = SendMessageW(edit, 0x00b0, None, None).0 as u32;
+                assert!(
+                    selection & 0xffff < selection >> 16,
+                    "double click selects a native word"
+                );
+                let long = wide(&"https://example.org/été/日本語/".repeat(30));
+                let _ = SetWindowTextW(edit, PCWSTR(long.as_ptr()));
+                SendMessageW(
+                    edit,
+                    0x00b1,
+                    Some(WPARAM(long.len() - 1)),
+                    Some(LPARAM((long.len() - 1) as isize)),
+                );
+                SendMessageW(edit, 0x00b7, None, None); // EM_SCROLLCARET
+                let scrolled = app.picker.borrow().input_pixels();
+                // Some Windows EDIT versions return zero for
+                // EM_GETFIRSTVISIBLELINE even when a single line is scrolled.
+                let first_x = SendMessageW(edit, 0x00d6, Some(WPARAM(0)), None).0 as i16;
+                assert!(first_x < 0, "native input scrolls horizontally");
+                assert!(scrolled.as_slice().iter().any(|p| p.a == 255));
+                SendMessageW(
+                    edit,
+                    WM_TIMER,
+                    Some(WPARAM(crate::input_mirror::BLINK_TIMER)),
+                    None,
+                );
+                let blinked = app.picker.borrow().input_pixels();
+                assert_ne!(
+                    scrolled.as_slice(),
+                    blinked.as_slice(),
+                    "mirrored caret must blink at its native scrolled position"
+                );
                 let _ = SetWindowTextW(edit, w!(""));
                 app.picker.borrow_mut().refresh(app.hwnd);
                 app.picker.borrow().choose(1);

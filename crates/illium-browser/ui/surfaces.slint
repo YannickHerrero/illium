@@ -27,6 +27,13 @@ export component BrowserSurface inherits Window {
     in property <int> columns: 1;
     in-out property <length> scroll-offset;
     callback activate(int);
+    in property <image> input-image;
+    in property <length> input-x;
+    in property <length> input-y;
+    in property <length> input-width;
+    in property <length> input-height;
+    in property <bool> input-empty;
+    in property <string> input-placeholder;
 
     Rectangle {
         background: (root.kind == 0 ? root.bg : root.surface).with-alpha(root.background-opacity);
@@ -40,7 +47,9 @@ export component BrowserSurface inherits Window {
         }
         if root.kind == 1: Rectangle {
             x: 16px; y: 12px; width: max(1px, parent.width - 80px); height: 36px;
-            background: root.surface;
+            // The palette already supplies the theme alpha. Do not stack a
+            // second background here, which would make the field more opaque.
+            background: transparent;
             border-radius: 6px;
             border-width: 1px;
             border-color: root.accent.with-alpha(0.45);
@@ -51,6 +60,17 @@ export component BrowserSurface inherits Window {
                 commands: "M 8 2 A 6 6 0 1 0 8 14 A 6 6 0 1 0 8 2 M 12.5 12.5 L 18 18";
                 fill: transparent; stroke: root.accent; stroke-width: 1.5px;
             }
+        }
+        if root.kind == 1 && root.input-empty: Text {
+            x: root.input-x + 2px; y: root.input-y;
+            width: max(0px, root.input-width - 2px); height: root.input-height;
+            text: root.input-placeholder; color: root.subtext;
+            vertical-alignment: center; overflow: elide;
+        }
+        if root.kind == 1: Image {
+            x: root.input-x; y: root.input-y;
+            width: root.input-width; height: root.input-height;
+            source: root.input-image;
         }
         if root.kind == 1: Text {
             x: parent.width - 48px; y: 12px; width: 38px; height: 36px;

@@ -51,7 +51,7 @@ Initial Windows smoke measurements with EasyList/EasyPrivacy, not a benchmark: a
 
 ## Home, history and bookmarks
 
-Launching without an argument (including `Alt+B`), or submitting an empty address / `about:blank`, shows a native home surface. A Illium theme color fills the window, with a focused native navigation palette centered as a whole in the browser's client area. The same palette overlays web pages with `Ctrl+L`, without changing the page's bounds. It contains a search field, navigation heading, grouped favorites/history with icons and category badges, and a result count/keyboard hint footer. It uses Cascadia Mono (with Windows font fallback), the active theme's colors, a compact 13-pixel logical font, 20% tighter spacing, a DPI-scaled maximum width of 680 logical pixels and a bounded, scrollable result list. Home and palette backgrounds use the theme's `background_opacity` (85% by default), including live Ctrl+Alt+Shift+Y/U adjustments. Text and the native search control remain opaque. Web pages always stay fully opaque, even when opacity changes while browsing. An explicit web URL on the command line bypasses home.
+Launching without an argument (including `Alt+B`), or submitting an empty address / `about:blank`, shows a native home surface. A Illium theme color fills the window, with a focused native navigation palette centered as a whole in the browser's client area. The same palette overlays web pages with `Ctrl+L`, without changing the page's bounds. It contains a search field, navigation heading, grouped favorites/history with icons and category badges, and a result count/keyboard hint footer. It uses Cascadia Mono (with Windows font fallback), the active theme's colors, a compact 13-pixel logical font, 20% tighter spacing, a DPI-scaled maximum width of 680 logical pixels and a bounded, scrollable result list. Home and palette backgrounds use the theme's `background_opacity` (85% by default), including live Ctrl+Alt+Shift+Y/U adjustments. Text remains opaque; the search field shares the palette's translucent background in both light and dark themes. Web pages always stay fully opaque, even when opacity changes while browsing. An explicit web URL on the command line bypasses home.
 
 While the home window is foreground, typing redirects focus and the first character to the search field even after selecting a suggestion. Editing shortcuts such as Ctrl+V work too. Other applications' input and Alt/Windows shortcuts are not intercepted; this does not apply to web pages.
 
@@ -59,9 +59,17 @@ Home, navigation, tabs and leader use Slint scenes, rendered on demand with the
 software renderer and uploaded to premultiplied-alpha DirectComposition swap
 chains. The HWNDs use `WS_EX_NOREDIRECTIONBITMAP`, like the terminal; there is no
 `WS_EX_LAYERED` global alpha. Slint draws opaque glyphs over translucent
-backgrounds. The search field remains a native, opaque EDIT control to preserve
-Windows Unicode input, selection and clipboard behavior. A hidden LISTBOX keeps
-the selection/automation model; visible rows and hit testing belong to Slint.
+backgrounds. The search field retains a native EDIT at alpha zero, focusable and
+accessible at its real screen position, to preserve Windows Unicode input,
+selection, clipboard, undo, horizontal scrolling and IME candidate placement.
+Its native text and selection are printed against black and white to recover
+premultiplied coverage, then mirrored into the Slint scene without a background.
+Grayscale antialiasing avoids ClearType fringes on translucent pixels; no color
+key or second editable text model is used. Slint displays the placeholder and
+mirrors the native caret rectangle using the Windows blink interval. Pointer
+input over the field is forwarded to the EDIT; native capture handles dragging.
+The caret timer stops on focus loss or palette hiding. A hidden LISTBOX keeps
+the result selection/automation model; visible rows and hit testing belong to Slint.
 
 `background_blur = true` applies the shared Windows accent blur independently
 to home and each palette, including palettes above web pages and live updates.
@@ -74,8 +82,8 @@ Run the ignored Windows binary test
 light/dark theme, navigation, palette ownership and minimize/restore regressions.
 It checks premultiplied pixels and opaque glyphs, not a desktop screenshot.
 `scripts/test-browser-desktop.ps1 -BackgroundBlur` exercises the interactive
-navigation checks; visual blur, mixed-DPI behavior and accessibility still need
-manual validation.
+navigation checks; visual blur, mixed-DPI behavior, real IME composition and
+accessibility still need manual validation.
 
 The field suggests up to eight local results, matching case-insensitive ordered subsequences against titles and URLs. Contiguous matches rank higher; equally ranked favorites precede recent history. The eight best matches are displayed in favorite/history groups, preserving relevance within each group. With empty input, favorites come first, then recent history. No remote suggestions, page prefetches or second WebView are used. Typing and pressing Enter submits the input as typed; select a suggestion with arrows first to open it, or click it. Editing the query clears the selection. On web pages, Escape closes the palette and returns page focus; clicking the page also dismisses it when WebView receives focus. On home, Escape clears the query and keeps the palette visible.
 

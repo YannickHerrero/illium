@@ -1,8 +1,9 @@
-//! Slint navigation/tab palette with an opaque native EDIT for Windows text input.
-//! The hidden LISTBOX retains native selection and automation data;
-//! Slint draws the rows with per-pixel alpha, never a global window opacity.
+//! Slint navigation/tab palette with a visually hidden native EDIT for input.
+//! Native text/selection pixels are mirrored into the per-pixel-alpha scene;
+//! Windows retains editing, accessibility, shaping, scrolling and IME placement.
 #![allow(unsafe_op_in_unsafe_fn)]
 use super::native::wide;
+use crate::input_mirror::{self, InputMirror};
 use crate::surface::{PaletteRow, Surface, place_popup};
 use illium_browser::library::{Library, Suggestion};
 use illium_browser::tabs::{self, Tab, TabId, Tabs};
@@ -20,7 +21,16 @@ pub const EDIT_ID: usize = 101;
 pub const LIST_ID: usize = 102;
 unsafe extern "system" fn panel_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     match msg {
-        WM_COMMAND | WM_CTLCOLOREDIT => SendMessageW(
+        WM_CTLCOLOREDIT => input_mirror::control_color(HWND(lp.0 as *mut _), HDC(wp.0 as *mut _))
+            .unwrap_or_else(|| {
+                SendMessageW(
+                    GetWindow(hwnd, GW_OWNER).unwrap_or_default(),
+                    msg,
+                    Some(wp),
+                    Some(lp),
+                )
+            }),
+        WM_COMMAND => SendMessageW(
             GetWindow(hwnd, GW_OWNER).unwrap_or_default(),
             msg,
             Some(wp),
@@ -35,7 +45,8 @@ unsafe extern "system" fn panel_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARA
         }
         WM_ERASEBKGND => LRESULT(1),
         WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
-        WM_MOUSEMOVE | WM_LBUTTONDOWN | WM_LBUTTONUP | WM_MOUSEWHEEL => {
+        WM_MOUSEMOVE | WM_LBUTTONDOWN | WM_LBUTTONUP | WM_LBUTTONDBLCLK | WM_RBUTTONDOWN
+        | WM_RBUTTONUP | WM_CONTEXTMENU | WM_MOUSEWHEEL => {
             super::native::picker_pointer(msg, wp, lp);
             LRESULT(0)
         }
@@ -57,6 +68,7 @@ pub struct Picker {
     tab_rows: Vec<Tab>,
     theme: illium_theme::Theme,
     surface: RefCell<Surface>,
+    input_mirror: RefCell<InputMirror>,
     status: RefCell<String>,
 }
 impl Picker {
@@ -68,6 +80,7 @@ impl Picker {
     ) -> Result<Self> {
         let class = w!("IlliumNavigationPalette");
         RegisterClassW(&WNDCLASSW {
+            style: CS_DBLCLKS,
             lpfnWndProc: Some(panel_proc),
             hInstance: instance,
             lpszClassName: class,
@@ -102,9 +115,12 @@ impl Picker {
             Some(instance),
             None,
         )?;
-        // GDI input has its own opaque child surface; it must not draw into
-        // the palette's absent redirection bitmap or inherit theme opacity.
-        SetLayeredWindowAttributes(edit, COLORREF(0), 255, LWA_ALPHA)?;
+        // Keep a visible/focusable/accessibility-exposed HWND at the real input
+        // location (including for IME candidate windows), but no native pixels.
+        // Alpha-zero layered children pass pointer input to the panel, which
+        // forwards it back to the EDIT using its native coordinate system.
+        SetLayeredWindowAttributes(edit, COLORREF(0), 0, LWA_ALPHA)?;
+        let input_mirror = RefCell::new(InputMirror::new(edit)?);
         let list = CreateWindowExW(
             Default::default(),
             w!("LISTBOX"),
@@ -140,6 +156,7 @@ impl Picker {
             tab_rows: vec![],
             theme: theme.clone(),
             surface: RefCell::new(surface),
+            input_mirror,
             status: RefCell::new(String::new()),
         };
         picker.set_font(parent);
@@ -174,7 +191,9 @@ impl Picker {
             DEFAULT_CHARSET,
             OUT_DEFAULT_PRECIS,
             CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY,
+            // Grayscale coverage is compositable on arbitrary backgrounds;
+            // ClearType's subpixel colors assume an opaque final background.
+            ANTIALIASED_QUALITY,
             DEFAULT_PITCH.0 as u32,
             w!("Cascadia Mono"),
         );
@@ -191,9 +210,8 @@ impl Picker {
             let _ = DeleteObject(self.font.into());
         }
         self.font = font;
-        // A single-line EDIT only paints its font line reliably on its layered
-        // child surface. Give it exactly that height; Slint supplies the padding
-        // and rounded field background instead of exposing an unpainted strip.
+        // Keep the native line at the same physical location and size as its
+        // mirror. Slint supplies the surrounding padding and transparent field.
         self.line_height = (13 * GetDpiForWindow(parent) as i32 / 96).max(1);
         let dc = GetDC(Some(self.edit));
         if !dc.is_invalid() {
@@ -205,6 +223,9 @@ impl Picker {
             SelectObject(dc, previous);
             ReleaseDC(Some(self.edit), dc);
         }
+    }
+    pub fn composing(&self) -> bool {
+        self.input_mirror.borrow().composing()
     }
     pub unsafe fn text(&self) -> String {
         let mut text = vec![0; GetWindowTextLengthW(self.edit) as usize + 1];
@@ -232,6 +253,7 @@ impl Picker {
             let _ = SetFocus(Some(self.edit));
         }
         SendMessageW(self.edit, 0x00B1, Some(WPARAM(0)), Some(LPARAM(-1)));
+        self.input_mirror.borrow().wake();
     }
     pub unsafe fn show_tabs(&mut self, parent: HWND) {
         self.tabs_mode = true;
@@ -247,6 +269,7 @@ impl Picker {
         let _ = SetWindowTextW(self.edit, w!(""));
         self.refresh_tabs(parent, false);
         let _ = SetFocus(Some(self.edit));
+        self.input_mirror.borrow().wake();
     }
     pub unsafe fn selected_tab(&self) -> Option<TabId> {
         if !self.tabs_mode {
@@ -320,6 +343,7 @@ impl Picker {
     }
     pub unsafe fn hide(&mut self) {
         self.visible = false;
+        self.input_mirror.borrow().sleep();
         let _ = ShowWindow(self.panel, SW_HIDE);
     }
     pub unsafe fn status(&self, value: &str) {
@@ -453,14 +477,94 @@ impl Picker {
     }
     #[cfg(test)]
     pub unsafe fn assert_alpha(&self, background: u8) {
+        self.sync_input();
         self.surface.borrow_mut().assert_alpha(background, true);
     }
+    #[cfg(test)]
+    pub unsafe fn input_pixels(&self) -> slint::SharedPixelBuffer<slint::Rgba8Pixel> {
+        self.sync_input();
+        self.surface
+            .borrow()
+            .ui
+            .get_input_image()
+            .to_rgba8_premultiplied()
+            .unwrap()
+    }
+    unsafe fn sync_input(&self) {
+        let mut rect = RECT::default();
+        let _ = GetWindowRect(self.edit, &mut rect);
+        let mut origin = POINT {
+            x: rect.left,
+            y: rect.top,
+        };
+        let _ = ScreenToClient(self.panel, &mut origin);
+        let scale = GetDpiForWindow(self.panel) as f32 / 96.;
+        let (r, g, b) = illium_theme::rgb(&self.theme.text).unwrap();
+        let color = COLORREF(r as u32 | (g as u32) << 8 | (b as u32) << 16);
+        let composing = self.composing();
+        match self.input_mirror.borrow_mut().image(color) {
+            Ok(image) => {
+                let surface = self.surface.borrow();
+                let ui = &surface.ui;
+                ui.set_input_image(image);
+                ui.set_input_x(origin.x as f32 / scale);
+                ui.set_input_y(origin.y as f32 / scale);
+                ui.set_input_width((rect.right - rect.left) as f32 / scale);
+                ui.set_input_height((rect.bottom - rect.top) as f32 / scale);
+                ui.set_input_empty(GetWindowTextLengthW(self.edit) == 0 && !composing);
+                ui.set_input_placeholder(if self.tabs_mode {
+                    "Fuzzy-find an open tab…".into()
+                } else {
+                    "Search or enter an address…".into()
+                });
+            }
+            Err(e) => eprintln!("Input composition failed: {e}"),
+        }
+    }
     pub unsafe fn paint(&self) {
+        self.sync_input();
         if let Err(e) = self.surface.borrow_mut().paint() {
             eprintln!("Palette composition failed: {e}");
         }
     }
     pub unsafe fn pointer(&self, msg: u32, wp: WPARAM, lp: LPARAM) {
+        let mut point = POINT {
+            x: lp.0 as i16 as i32,
+            y: (lp.0 >> 16) as i16 as i32,
+        };
+        if msg == WM_CONTEXTMENU {
+            if lp.0 == -1 {
+                SendMessageW(self.edit, msg, Some(WPARAM(self.edit.0 as usize)), Some(lp));
+                return;
+            }
+            let _ = ScreenToClient(self.panel, &mut point);
+        }
+        let mut panel = RECT::default();
+        let _ = GetClientRect(self.panel, &mut panel);
+        let in_field = point.x >= self.px(20)
+            && point.x < panel.right - self.px(80)
+            && point.y >= self.px(15)
+            && point.y < self.px(60);
+        if in_field && msg != WM_MOUSEWHEEL {
+            let _ = SetCursor(LoadCursorW(None, IDC_IBEAM).ok());
+            if matches!(msg, WM_LBUTTONDOWN | WM_LBUTTONDBLCLK | WM_RBUTTONDOWN) {
+                let _ = SetFocus(Some(self.edit));
+            }
+            if msg == WM_CONTEXTMENU {
+                SendMessageW(self.edit, msg, Some(WPARAM(self.edit.0 as usize)), Some(lp));
+            } else {
+                let _ = ClientToScreen(self.panel, &mut point);
+                let _ = ScreenToClient(self.edit, &mut point);
+                point.y = point.y.clamp(0, self.line_height - 1);
+                let local =
+                    LPARAM(((point.y as u16 as u32) << 16 | point.x as u16 as u32) as isize);
+                SendMessageW(self.edit, msg, Some(wp), Some(local));
+            }
+            return;
+        }
+        if matches!(msg, WM_RBUTTONDOWN | WM_RBUTTONUP | WM_CONTEXTMENU) {
+            return;
+        }
         let surface = self.surface.borrow();
         if msg == WM_MOUSEWHEEL {
             let delta = ((wp.0 >> 16) as i16) as f32 / 120. * 70.4;

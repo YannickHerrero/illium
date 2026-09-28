@@ -3,6 +3,8 @@
 #[cfg(windows)]
 mod browser_view;
 #[cfg(windows)]
+mod input_mirror;
+#[cfg(windows)]
 mod leader_panel;
 #[cfg(windows)]
 mod native;

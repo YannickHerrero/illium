@@ -1,6 +1,6 @@
 //! Slint software scenes presented with per-pixel alpha through DirectComposition.
-//! Like the terminal, HWNDs have no GDI redirection bitmap. Native EDIT controls
-//! remain opaque children; only scene backgrounds carry the theme opacity.
+//! Like the terminal, HWNDs have no GDI redirection bitmap. Native input is
+//! mirrored without its background; only scene backgrounds carry theme opacity.
 #![allow(unsafe_op_in_unsafe_fn)]
 use slint::platform::{
     Platform, PointerEventButton, WindowAdapter, WindowEvent,
@@ -210,8 +210,22 @@ impl Surface {
             "background alpha: {} != {background}",
             sample.alpha
         );
+        if self.ui.get_kind() == 1 {
+            // Field padding must carry exactly the same alpha as the palette,
+            // not an opaque (or twice-composited) second background. This is
+            // independent of RGB/luminance, so it catches light-theme regressions.
+            let scale = GetDpiForWindow(self.hwnd) as f32 / 96.;
+            for (x, y) in [(20., 30.), (55., 14.)] {
+                let index = (y * scale) as usize * self.size.0 as usize + (x * scale) as usize;
+                assert!(
+                    self.pixels[index].alpha.abs_diff(background) <= 1,
+                    "input background alpha: {} != {background}",
+                    self.pixels[index].alpha
+                );
+            }
+        }
         if glyphs {
-            // Exclude border/separators and native EDIT. This region contains
+            // Exclude border/separators and input. This region contains
             // only Slint text over the translucent palette background.
             let width = self.size.0 as usize;
             let opaque = self.pixels.chunks(width).enumerate().any(|(y, row)| {
