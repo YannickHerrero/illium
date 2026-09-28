@@ -1610,7 +1610,11 @@ fn run_inner(
                 }
                 continue;
             }
-            let picker_key = (msg.hwnd == edit || msg.hwnd == list) && msg.message == WM_KEYDOWN;
+            // Enter/Escape/arrows belong to an active IME composition, not
+            // palette submission/dismissal/result navigation.
+            let picker_key = (msg.hwnd == edit || msg.hwnd == list)
+                && msg.message == WM_KEYDOWN
+                && !picker.borrow().composing();
             let ctrl = GetKeyState(VK_CONTROL.0 as i32) < 0;
             if msg.message == BOOKMARK
                 || (picker_key

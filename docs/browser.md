@@ -68,7 +68,9 @@ Grayscale antialiasing avoids ClearType fringes on translucent pixels; no color
 key or second editable text model is used. Slint displays the placeholder and
 mirrors the native caret rectangle using the Windows blink interval. Pointer
 input over the field is forwarded to the EDIT; native capture handles dragging.
-The caret timer stops on focus loss or palette hiding. A hidden LISTBOX keeps
+The caret timer stops on focus loss or palette hiding. During IME composition,
+Enter, Escape and arrow keys stay with the native editor instead of submitting,
+dismissing or navigating the palette. A hidden LISTBOX keeps
 the result selection/automation model; visible rows and hit testing belong to Slint.
 
 `background_blur = true` applies the shared Windows accent blur independently
