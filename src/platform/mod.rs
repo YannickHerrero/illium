@@ -1476,6 +1476,40 @@ impl Manager {
             Err(error) => tracing::error!(%error, "Windows lock failed"),
         }
     }
+    fn check_lock_foreground(&mut self, reported: isize) {
+        if !self.shell.lock.opened || self.shell.lock.released {
+            return;
+        }
+        let current = unsafe { GetForegroundWindow().0 as isize };
+        let ready = self.shell.lock.focus_ready();
+        if !crate::lockscreen::foreground_is_current(reported, current, ready) {
+            tracing::debug!(
+                reported,
+                current,
+                ready,
+                "ignoring transitional lock foreground event"
+            );
+            return;
+        }
+        if self.shell.lock.owns(current) || current == session::sink() {
+            return;
+        }
+        let mut pid = 0;
+        unsafe { GetWindowThreadProcessId(native::hwnd(current), Some(&mut pid)) };
+        if pid == std::process::id() {
+            return;
+        }
+        let process = native::process(current).map(|(_, name)| name);
+        tracing::warn!(
+            reported,
+            current,
+            pid,
+            ?process,
+            ready,
+            "external foreground while locked"
+        );
+        self.lock_windows("another window took the foreground");
+    }
     fn finish_lock(&mut self, outcome: shell::lockscreen::Outcome) {
         use shell::lockscreen::Outcome;
         match outcome {
@@ -1487,6 +1521,9 @@ impl Manager {
                 self.restore_focus(restore);
             }
             Outcome::Fallback => self.lock_windows("too many wrong passwords"),
+            Outcome::CheckFocus => {
+                self.check_lock_foreground(unsafe { GetForegroundWindow().0 as isize });
+            }
         }
     }
     fn finish_editor(&mut self, outcome: shell::keybindings::Outcome) {
@@ -1590,15 +1627,7 @@ impl Manager {
                 }
                 EVENT_SYSTEM_FOREGROUND => {
                     self.shell.workspace_switcher.lost_focus(id);
-                    if self.shell.lock.opened && !self.shell.lock.owns(id) {
-                        let mut pid = 0;
-                        unsafe {
-                            GetWindowThreadProcessId(native::hwnd(id), Some(&mut pid));
-                        }
-                        if pid != std::process::id() && id != session::sink() {
-                            self.lock_windows("another window took the foreground");
-                        }
-                    }
+                    self.check_lock_foreground(id);
                     if (self.shell.hints.opened || self.bar_restore.is_some())
                         && Some(id) != self.bar_restore
                     {

@@ -61,6 +61,11 @@ pub fn blocked(vk: u32, modifiers: u8) -> bool {
     let (ctrl, alt) = (modifiers & CTRL != 0, modifiers & ALT != 0);
     ctrl != alt || (alt && matches!(vk, TAB | ESCAPE))
 }
+/// Foreground notifications are queued: only the current owner matters once
+/// placement has completed. A null foreground is not an accessible application.
+pub fn foreground_is_current(reported: isize, current: isize, ready: bool) -> bool {
+    ready && current != 0 && reported == current
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -71,6 +76,13 @@ mod tests {
             .hash_password(password.as_bytes())
             .unwrap()
             .to_string()
+    }
+    #[test]
+    fn foreground_requires_completed_placement_and_current_owner() {
+        assert!(!foreground_is_current(10, 20, true)); // delayed event
+        assert!(!foreground_is_current(10, 10, false)); // opening/repositioning
+        assert!(!foreground_is_current(0, 0, true)); // desktop transition
+        assert!(foreground_is_current(10, 10, true)); // real foreground owner
     }
     #[test]
     fn five_failures_exhaust_and_success_resets() {

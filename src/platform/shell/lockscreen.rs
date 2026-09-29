@@ -32,6 +32,8 @@ pub enum Input {
     Submit(String),
     /// Focused Slint surface fallback when Windows drops the keyboard hook.
     Wake,
+    /// Validate the foreground after asynchronous surface placement.
+    CheckFocus,
     /// The Windows lock took over: the surfaces can go.
     Release,
 }
@@ -41,6 +43,7 @@ pub enum Outcome {
     Unlock,
     /// Hand over to the Windows lock.
     Fallback,
+    CheckFocus,
 }
 pub struct Lock {
     views: Vec<LockView>,
@@ -187,6 +190,12 @@ impl Lock {
             }
         }
         self.pending_window = false;
+        let _ = self
+            .tx
+            .send(Event::Lock(self.epoch.get(), Input::CheckFocus));
+    }
+    pub fn focus_ready(&self) -> bool {
+        self.opened && !self.pending_window
     }
     /// The surface that takes the password, 0 while closed.
     pub fn primary_hwnd(&self) -> isize {
@@ -339,6 +348,7 @@ impl Lock {
         match input {
             Input::Release => Outcome::Unlock,
             _ if self.released => Outcome::None,
+            Input::CheckFocus => Outcome::CheckFocus,
             Input::Wake => {
                 self.wake();
                 Outcome::None
