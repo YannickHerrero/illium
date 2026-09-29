@@ -11,6 +11,13 @@ mod bar_hints_tests;
 mod bar_tests;
 #[cfg(test)]
 mod native_surface_tests;
+#[test]
+fn system_menu_lock_uses_illium_command() {
+    let entries = Shell::meta_system().unwrap();
+    assert!(entries.iter().any(|(label, entry)| {
+        label == "Lock" && matches!(entry, MetaEntry::Run(crate::command::Command::Lock))
+    }));
+}
 pub(super) fn color(s: &str) -> slint::Color {
     let c = u32::from_str_radix(&s[1..], 16).unwrap_or_default();
     slint::Color::from_rgb_u8((c >> 16) as u8, (c >> 8) as u8, c as u8)
@@ -1017,7 +1024,6 @@ impl Shell {
     fn meta_system() -> Result<Vec<(String, MetaEntry)>, String> {
         use crate::command::Command;
         let shutdown = super::security::os_executable("shutdown.exe", true)?;
-        let rundll = super::security::os_executable("rundll32.exe", true)?;
         let run = |line: String| {
             MetaEntry::Run(Command::LaunchTarget {
                 target: line,
@@ -1029,13 +1035,7 @@ impl Shell {
                 "Hibernate".into(),
                 run(format!("\"{}\" /h", shutdown.display())),
             ),
-            (
-                "Lock".into(),
-                run(format!(
-                    "\"{}\" user32.dll,LockWorkStation",
-                    rundll.display()
-                )),
-            ),
+            ("Lock".into(), MetaEntry::Run(Command::Lock)),
             (
                 "Restart".into(),
                 run(format!("\"{}\" /r /t 0", shutdown.display())),
