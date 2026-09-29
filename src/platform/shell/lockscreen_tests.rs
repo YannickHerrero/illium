@@ -23,6 +23,16 @@ fn focused_key_wakes_without_hook_and_cannot_type_or_submit() {
     let mut lock = Lock::new(tx);
     lock.opened = true;
     lock.epoch.set(7);
+    assert_eq!(lock.input(7, Input::Release), Outcome::None);
+    assert!(lock.opened, "unsolicited release cannot unlock the session");
+    lock.released = true;
+    assert_eq!(lock.input(6, Input::Release), Outcome::None);
+    assert_eq!(
+        lock.input(7, Input::Submit("ignored".into())),
+        Outcome::None
+    );
+    assert!(lock.opened, "stale release cannot close the surfaces");
+    lock.released = false;
     let view = lock.view().unwrap();
     view.set_primary(true);
     view.set_ready(true);

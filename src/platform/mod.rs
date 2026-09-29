@@ -1520,6 +1520,12 @@ impl Manager {
                 tracing::info!("screen unlocked");
                 self.restore_focus(restore);
             }
+            Outcome::WindowsLocked => {
+                self.shell.lock.close();
+                session::set_locked(false);
+                tracing::info!("Windows lock confirmed; Illium lock surfaces closed");
+                // Never restore an application over a secure-desktop handover.
+            }
             Outcome::Fallback => self.lock_windows("too many wrong passwords"),
             Outcome::CheckFocus => {
                 self.check_lock_foreground(unsafe { GetForegroundWindow().0 as isize });

@@ -44,6 +44,7 @@ pub enum Outcome {
     /// Hand over to the Windows lock.
     Fallback,
     CheckFocus,
+    WindowsLocked,
 }
 pub struct Lock {
     views: Vec<LockView>,
@@ -138,6 +139,9 @@ impl Lock {
         primary: usize,
         backdrops: Vec<slint::Image>,
     ) -> Result<(), String> {
+        if self.released {
+            return Ok(());
+        }
         while self.views.len() < monitors.len() {
             let view = self.view()?;
             self.views.push(view);
@@ -169,7 +173,11 @@ impl Lock {
     }
     pub fn arrange(&mut self) {
         let shown = &self.views[..self.monitors.len().min(self.views.len())];
-        if !self.opened || !self.pending_window || shown.iter().any(|v| id(v.window()) == 0) {
+        if !self.opened
+            || self.released
+            || !self.pending_window
+            || shown.iter().any(|v| id(v.window()) == 0)
+        {
             return;
         }
         for (index, (view, monitor)) in shown.iter().zip(&self.monitors).enumerate() {
@@ -331,13 +339,15 @@ impl Lock {
         }
         input::SAVING.store(false, Ordering::SeqCst);
     }
-    /// The Windows lock was requested; the surfaces close once it covers the
-    /// desktop, so nothing shows in between.
+    /// Keep the surfaces and input protection until Windows confirms the lock.
     pub fn release_later(&mut self) {
         self.stop_saver();
         self.released = true;
+        self.check_release_later();
+    }
+    fn check_release_later(&self) {
         let (tx, epoch) = (self.tx.clone(), self.epoch.get());
-        slint::Timer::single_shot(std::time::Duration::from_millis(1500), move || {
+        slint::Timer::single_shot(std::time::Duration::from_millis(250), move || {
             let _ = tx.send(Event::Lock(epoch, Input::Release));
         });
     }
@@ -346,7 +356,18 @@ impl Lock {
             return Outcome::None;
         }
         match input {
-            Input::Release => Outcome::Unlock,
+            Input::Release if self.released => {
+                match super::super::session::workstation_locked() {
+                    Ok(true) => return Outcome::WindowsLocked,
+                    Ok(false) => {}
+                    Err(error) => {
+                        tracing::debug!(%error, "Windows lock not confirmed; keeping lock surfaces")
+                    }
+                }
+                self.check_release_later();
+                Outcome::None
+            }
+            Input::Release => Outcome::None,
             _ if self.released => Outcome::None,
             Input::CheckFocus => Outcome::CheckFocus,
             Input::Wake => {

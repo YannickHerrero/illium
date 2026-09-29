@@ -80,6 +80,35 @@ pub fn set_locked(locked: bool) {
 pub fn lock_workstation() -> Result<(), String> {
     unsafe { windows::Win32::System::Shutdown::LockWorkStation() }.map_err(|e| e.to_string())
 }
+/// LockWorkStation only accepts an asynchronous request. Keep Illium's
+/// surfaces until Windows reports that this session is actually locked.
+pub fn workstation_locked() -> Result<bool, String> {
+    use windows::Win32::System::RemoteDesktop::*;
+    unsafe {
+        let mut buffer = windows::core::PWSTR::null();
+        let mut bytes = 0;
+        WTSQuerySessionInformationW(
+            None,
+            WTS_CURRENT_SESSION,
+            WTSSessionInfoEx,
+            &mut buffer,
+            &mut bytes,
+        )
+        .map_err(|e| e.to_string())?;
+        let result = if buffer.is_null() || (bytes as usize) < std::mem::size_of::<WTSINFOEXW>() {
+            Err("incomplete Windows session information".into())
+        } else {
+            let info = &*buffer.0.cast::<WTSINFOEXW>();
+            if info.Level != 1 {
+                Err("unsupported Windows session information level".into())
+            } else {
+                Ok(info.Data.WTSInfoExLevel1.SessionFlags == WTS_SESSIONSTATE_LOCK as i32)
+            }
+        };
+        WTSFreeMemory(buffer.0.cast());
+        result
+    }
+}
 fn creation_time(h: HANDLE) -> Result<u64, String> {
     unsafe {
         let (mut created, mut exited, mut kernel, mut user) = (
