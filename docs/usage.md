@@ -136,7 +136,7 @@ Existing keybinding files are not overwritten on upgrade. Add this line under
 
 ## Lock screen
 
-**Ctrl+Alt+L** (or `illiumctl lock`) covers every monitor with the blurred wallpaper, a clock and, on the active monitor, a password field. The password is Illium's own, not the Windows one. Set it once, from a console:
+**Ctrl+Alt+L** (or `illiumctl lock`, or **Lock** in the system menu) covers every monitor with the blurred wallpaper, a clock and, on the active monitor, a password field. The password is Illium's own, not the Windows one. Set it once, from a console:
 
 ```
 illiumctl lock set-password
@@ -146,7 +146,9 @@ Only its Argon2 hash is stored, in `lock-password` in the configuration folder; 
 
 While locked, no Illium binding or command runs (except `status`), and the Windows key, Alt+Tab, Alt+Esc, Ctrl+Esc and other Ctrl or Alt chords are swallowed. Ctrl+Alt still types AltGr characters. Win+L keeps the regular Windows lock.
 
-This screen is a window over the open session, not a Windows security boundary: Ctrl+Alt+Del cannot be intercepted. Illium therefore calls the Windows lock as soon as it may be bypassed: another application takes the foreground (for example Task Manager opened from Ctrl+Alt+Del), five wrong passwords, or the daemon exits while locked (the recovery watchdog locks Windows). For a long absence, Win+L remains the safer choice.
+This screen is a window over the open session, not a Windows security boundary: Ctrl+Alt+Del cannot be intercepted. Illium therefore calls the Windows lock as soon as it may be bypassed: another application actually owns the foreground after lock surface placement (for example Task Manager opened from Ctrl+Alt+Del), five wrong passwords, or the daemon exits while locked (the recovery watchdog locks Windows). Delayed foreground events are ignored if their window no longer owns the foreground; placement is followed by a fresh foreground check. On handover, Illium keeps its surfaces until Windows confirms the session is locked, without restoring application focus. For a long absence, Win+L remains the safer choice.
+
+For troubleshooting and desktop checks, see [lock screen validation](lockscreen-testing.md).
 
 ### Lock screensaver
 

@@ -34,7 +34,7 @@ pub enum Input {
     Wake,
     /// Validate the foreground after asynchronous surface placement.
     CheckFocus,
-    /// The Windows lock took over: the surfaces can go.
+    /// Check whether Windows has confirmed the requested session lock.
     Release,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
