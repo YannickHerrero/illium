@@ -283,7 +283,9 @@ Performance probes (release builds): `cargo run -p illium-theme --release --exam
 
 Do not run the ignored tests concurrently: they share the current user's daemon and desktop. From WSL, compile with `cargo xwin test --target x86_64-pc-windows-msvc --no-run`, copy the reported executables to Windows and run them there.
 
-`ipc_desktop_smoke` creates disposable native windows and checks discovery, directional moves, floating and fullscreen geometry, workspace membership and visibility, launcher toggling, theme changes and reload behaviour through IPC. `crash_restores_hidden_windows` and `replacement_crash_restores_explorer` kill a daemon and check that the watchdog restores hidden windows and Explorer. `desktop_smoke` asserts real foreground changes and application launches and needs an unlocked, interactive desktop.
+`ipc_desktop_smoke` creates disposable native windows and checks discovery, directional moves, floating and fullscreen geometry (covering the entire monitor), concealment of other clients during fullscreen and their restoration on exit, workspace membership and visibility, launcher toggling, theme changes and reload behaviour through IPC.
+
+Fullscreen manual regression (requires an interactive Windows desktop): with both `conceal = "park"` and `conceal = "hide"`, open a translucent terminal above tiled and floating windows. Press Alt+F: the terminal must cover the entire monitor, its bar must disappear and only the wallpaper may show through. Exit fullscreen and check that all clients and the bar return, including the floating windows' original rectangles. Repeat with top/bottom bars, a secondary monitor, workspace changes, and closing or minimizing the fullscreen client. These visual checks cannot be validated by a cross-compilation alone. `crash_restores_hidden_windows` and `replacement_crash_restores_explorer` kill a daemon and check that the watchdog restores hidden windows and Explorer. `desktop_smoke` asserts real foreground changes and application launches and needs an unlocked, interactive desktop.
 
 ## Theme and wallpaper picker checks
 

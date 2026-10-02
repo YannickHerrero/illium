@@ -7,7 +7,7 @@ pub struct Client {
     pub workspace: u8,
     pub floating: bool,
     pub fullscreen: bool,
-    /// Hidden by Illium because its workspace is inactive.
+    /// Concealed by Illium for an inactive workspace or another fullscreen client.
     pub hidden: bool,
     /// Rectangle before the client was parked off screen.
     pub parked: Option<Rect>,

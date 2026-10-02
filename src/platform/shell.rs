@@ -1146,6 +1146,17 @@ impl Shell {
             self.bars[monitor].set_hint_request(self.hints.generation as i32);
         }
     }
+    /// Keep the wallpaper, but remove the topmost bar on the fullscreen monitor.
+    pub fn set_fullscreen_monitor(&self, monitor: Option<usize>) {
+        for (index, bar) in self.bars.iter().enumerate() {
+            let window = id(bar.window());
+            let visible = monitor != Some(index);
+            if window != 0 && native::visible(window) != visible {
+                native::show(window, visible);
+            }
+        }
+    }
+
     pub fn refresh(&self, m: &Model, c: &Config, applets: &super::applet::Runtime) {
         // Freeze both numbering and geometry for the entire selection session.
         if self.hints.opened {

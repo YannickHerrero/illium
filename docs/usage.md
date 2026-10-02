@@ -187,7 +187,7 @@ Alt+H/J/K/L and arrows choose the geometrically nearest neighbor in that directi
 
 - Alt+T: return to tiling.
 - Alt+Shift+T: toggle floating; first float is centered at two-thirds of the work area.
-- Alt+F: toggle fullscreen within the monitor's bar-excluded usable area; restore prior floating geometry on exit.
+- Alt+F: toggle fullscreen over the entire monitor, hiding its status bar and concealing the other managed windows (including floating windows), so they cannot show through a transparent terminal. Exiting fullscreen restores the bar, other windows and prior floating geometry. Switching workspaces restores the bar unless the destination also has a fullscreen window.
 - Alt+Q: post WM_CLOSE; save dialogs are the application's responsibility.
 
 ```powershell

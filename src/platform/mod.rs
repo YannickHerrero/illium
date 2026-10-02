@@ -161,7 +161,7 @@ impl Manager {
         let park = self.config.wm.park();
         let (space, active) = (self.model.space, self.model.active);
         if let Some(c) = self.model.clients.iter_mut().find(|c| c.id == id) {
-            if !c.on(space, active) && !native::concealed(id) {
+            if (c.hidden || !c.on(space, active)) && !native::concealed(id) {
                 c.hidden = true;
                 Self::conceal(c, park);
             }
@@ -324,6 +324,14 @@ impl Manager {
         // the foreground on the now invisible window, so move it ourselves.
         let foreground = unsafe { GetForegroundWindow().0 as isize };
         let area = self.area();
+        let full_area = self.full_area();
+        let fullscreen = self
+            .model
+            .clients
+            .iter()
+            .filter(|c| self.model.shown(c) && c.fullscreen && !native::minimized(c.id))
+            .max_by_key(|c| Some(c.id) == self.model.focused)
+            .map(|c| c.id);
         let ids = self.sync_splits();
         let rs = self.model.splits[usize::from(self.model.active - 1)].layout(
             area,
@@ -334,18 +342,19 @@ impl Manager {
         let mut placements: Vec<_> = ids
             .into_iter()
             .zip(rs)
+            .filter(|(id, _)| fullscreen.is_none_or(|full| full == *id))
             .map(|(id, r)| (id, native::framed(id, r)))
             .collect();
         let mut show = Vec::new();
         let mut concealed_foreground = false;
         let (space, workspace) = (self.model.space, self.model.active);
         for c in &mut self.model.clients {
-            let active = c.on(space, workspace);
+            let active = c.on(space, workspace) && fullscreen.is_none_or(|id| id == c.id);
             if active && !native::minimized(c.id) {
                 let parked = native::parked(c.id);
                 if c.fullscreen {
-                    placements.push((c.id, native::framed(c.id, area)));
-                } else if c.floating && parked {
+                    placements.push((c.id, native::framed(c.id, full_area)));
+                } else if c.floating && (parked || c.hidden) {
                     let current = native::rect(c.id);
                     placements.push((
                         c.id,
@@ -363,9 +372,9 @@ impl Manager {
                     show.push(c.id);
                 }
             } else if !active && !native::concealed(c.id) {
+                let current = native::rect(c.id);
+                c.parked = Some(current);
                 if park {
-                    let current = native::rect(c.id);
-                    c.parked = Some(current);
                     placements.push((c.id, native::parking_rect(current)));
                 } else {
                     native::conceal(c.id, false);
@@ -381,8 +390,8 @@ impl Manager {
             native::show(id, true);
         }
         for c in &self.model.clients {
-            if self.model.shown(c) && c.fullscreen && !native::minimized(c.id) {
-                native::position(c.id, native::framed(c.id, area), Some(HWND_TOP));
+            if Some(c.id) == fullscreen {
+                native::position(c.id, native::framed(c.id, full_area), Some(HWND_TOP));
             }
         }
         if let Some(id) = self.pending_browser_focus.take()
@@ -396,6 +405,10 @@ impl Manager {
             // Warp only once, after tiling, not during subsequent page resizes.
             native::focus(id, true);
         }
+        let monitor = self.model.monitors[usize::from(self.model.active - 1)]
+            .min(self.monitors.len().saturating_sub(1));
+        self.shell
+            .set_fullscreen_monitor(fullscreen.map(|_| monitor));
         self.shell.refresh(&self.model, &self.config, &self.applets);
         self.borders();
         if concealed_foreground {
@@ -471,16 +484,15 @@ impl Manager {
             .model
             .focused
             .filter(|id| {
-                self.model
-                    .clients
-                    .iter()
-                    .any(|c| c.id == *id && self.model.shown(c) && !native::minimized(c.id))
+                self.model.clients.iter().any(|c| {
+                    c.id == *id && self.model.shown(c) && !c.hidden && !native::minimized(c.id)
+                })
             })
             .or_else(|| {
                 self.model
                     .clients
                     .iter()
-                    .find(|c| self.model.shown(c) && !native::minimized(c.id))
+                    .find(|c| self.model.shown(c) && !c.hidden && !native::minimized(c.id))
                     .map(|c| c.id)
             });
         self.model.focused = id;
@@ -638,12 +650,9 @@ impl Manager {
             _ => tracing::debug!(?c, "command"),
         }
         let foreground = unsafe { GetForegroundWindow().0 as isize };
-        if self
-            .model
-            .clients
-            .iter()
-            .any(|w| w.id == foreground && self.model.shown(w) && !native::minimized(w.id))
-        {
+        if self.model.clients.iter().any(|w| {
+            w.id == foreground && self.model.shown(w) && !w.hidden && !native::minimized(w.id)
+        }) {
             self.model.focused = Some(foreground);
         }
         match c {
@@ -734,6 +743,7 @@ impl Manager {
                         .iter()
                         .filter(|w| {
                             self.model.shown(w)
+                                && !w.hidden
                                 && !native::minimized(w.id)
                                 && (!matches!(c, Command::Move(_)) || !w.floating)
                         })
@@ -1648,6 +1658,7 @@ impl Manager {
                     }
                     if let Some(c) = self.model.clients.iter().find(|c| c.id == id)
                         && self.model.shown(c)
+                        && !c.hidden
                         && !native::minimized(c.id)
                     {
                         self.model.focused = Some(id);

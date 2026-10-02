@@ -4,6 +4,9 @@ use std::{sync::mpsc, time::Duration};
 use windows::{
     Win32::{
         Foundation::*,
+        Graphics::Gdi::{
+            GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
+        },
         UI::{Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
     },
     core::PCWSTR,
@@ -319,7 +322,39 @@ fn ipc_desktop_smoke() {
     assert_ne!(floating, tiled);
     ctl("window toggle-fullscreen");
     assert_eq!(client(status())["fullscreen"], true);
+    unsafe {
+        let hwnd = HWND(focused as usize as *mut _);
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        assert!(
+            GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mut info).as_bool()
+        );
+        let mut rect = RECT::default();
+        GetWindowRect(hwnd, &mut rect).unwrap();
+        assert!(rect.left <= info.rcMonitor.left && rect.top <= info.rcMonitor.top);
+        assert!(rect.right >= info.rcMonitor.right && rect.bottom >= info.rcMonitor.bottom);
+        for &id in &ids {
+            if id != focused as isize {
+                let hwnd = HWND(id as *mut _);
+                GetWindowRect(hwnd, &mut rect).unwrap();
+                assert!(
+                    !IsWindowVisible(hwnd).as_bool() || rect.left <= -31000,
+                    "other clients must not show through a transparent fullscreen window"
+                );
+            }
+        }
+    }
     ctl("window toggle-fullscreen");
+    for &id in &ids {
+        unsafe {
+            let hwnd = HWND(id as *mut _);
+            let mut rect = RECT::default();
+            GetWindowRect(hwnd, &mut rect).unwrap();
+            assert!(IsWindowVisible(hwnd).as_bool() && rect.left > -31000);
+        }
+    }
     assert_eq!(client(status())["rect"], floating);
     ctl("window set-tiling");
     assert_eq!(client(status())["floating"], false);
