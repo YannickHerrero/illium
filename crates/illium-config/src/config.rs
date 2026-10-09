@@ -9,6 +9,8 @@ pub struct Global {
     pub theme: String,
     #[serde(default)]
     pub screensaver: crate::screensaver::Screensaver,
+    #[serde(default)]
+    pub notifications: crate::notifications::Notifications,
     /// Read by the applications through `illium_theme`, not by the daemon.
     #[serde(default)]
     pub background_blur: bool,

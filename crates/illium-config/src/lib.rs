@@ -6,5 +6,6 @@ pub mod clock;
 pub mod config;
 pub mod files;
 pub mod keyboard;
+pub mod notifications;
 pub mod plugins;
 pub mod screensaver;
