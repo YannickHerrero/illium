@@ -179,6 +179,23 @@ Existing keybinding files are not overwritten on upgrade. Add this line under `[
 "Ctrl+Alt+L" = "lock"
 ```
 
+## Notifications
+
+`illiumctl notify <title> [body...]` shows a silent toast in the top-right corner of the active monitor, under the bar. The newest toast is on top, at most three are shown, and each one disappears after a few seconds or when clicked. Toasts never take the keyboard focus and leave open pickers alone. They are refused while the screen is locked.
+
+```powershell
+illiumctl notify "Build finished" "illium · release"
+```
+
+The toast duration is set in `illium.toml` (omitting the table uses this default):
+
+```toml
+[notifications]
+timeout = 6 # seconds, 1..3600
+```
+
+`illiumctl.exe` also works from WSL, through its Windows path (for example `/mnt/c/Users/<you>/AppData/Local/Programs/Illium/illiumctl.exe notify ...`), so Linux tools can raise toasts too.
+
 ## Windows
 
 The first tiled client gets the left half; subsequent clients split the remainder alternately horizontally and vertically. Gaps are configurable. Very small remaining rectangles stack rather than producing negative dimensions; applications can still enforce their own minimum size.
