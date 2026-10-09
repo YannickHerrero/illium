@@ -1,0 +1,43 @@
+export struct NotificationItem { id: int, title: string, body: string }
+export component NotificationsView inherits Window {
+    title: "Illium Notifications";
+    no-frame: true;
+    default-font-family: "JetBrains Mono";
+    in property <length> surface-width;
+    in property <length> surface-height;
+    in property <length> item-height;
+    in property <length> spacing;
+    width: surface-width;
+    height: surface-height;
+    background: transparent;
+    in property <color> bg;
+    in property <color> fg;
+    in property <color> muted;
+    in property <color> accent;
+    in property <color> overlay;
+    in property <[NotificationItem]> items;
+    callback dismiss(int);
+    for item[index] in root.items: Rectangle {
+        y: index * (root.item-height + root.spacing);
+        height: root.item-height;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: root.overlay;
+        background: root.bg;
+        clip: true;
+        Rectangle { x: 0; width: 4px; background: root.accent; }
+        VerticalLayout {
+            padding-left: 16px; padding-right: 14px; padding-top: 10px; padding-bottom: 10px;
+            spacing: 4px; alignment: center;
+            Text {
+                text: item.title; color: root.fg; font-size: 13px; font-weight: 700;
+                overflow: elide;
+            }
+            if item.body != "": Text {
+                text: item.body; color: root.muted; font-size: 12px;
+                overflow: elide;
+            }
+        }
+        TouchArea { clicked => { root.dismiss(item.id); } }
+    }
+}

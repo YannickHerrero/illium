@@ -59,6 +59,8 @@ pub enum Event {
     /// Empty bar area clicked.
     BarBackground,
     BarHintPosition(u32, usize, f32),
+    /// A toast was clicked away.
+    DismissNotification(u64),
     BarHintKey(u32, crate::bar_hints::Input),
     /// An applet provider finished: applet name and its stdout or error.
     AppletData(String, u64, Result<String, String>),
@@ -619,25 +621,28 @@ impl Manager {
         if self.shell.lock.opened && !matches!(c, Command::Lock | Command::Status) {
             return Err("the screen is locked".into());
         }
-        if self.shell.hints.opened && !matches!(c, Command::BarHints | Command::Status) {
+        let passive = matches!(c, Command::Notify { .. } | Command::Status);
+        if self.shell.hints.opened && !passive && !matches!(c, Command::BarHints) {
             self.shell.hints.close();
             let restore = self.bar_restore.take();
             self.restore_focus(restore);
         }
         if self.shell.workspace_switcher.opened
-            && !matches!(c, Command::WorkspaceSwitcher | Command::Status)
+            && !passive
+            && !matches!(c, Command::WorkspaceSwitcher)
         {
             self.finish_workspace_switcher(shell::workspace_switcher::Outcome::Close);
         }
-        if self.shell.expose.opened && !matches!(c, Command::Expose | Command::Status) {
+        if self.shell.expose.opened && !passive && !matches!(c, Command::Expose) {
             self.finish_expose(crate::expose::Outcome::Close);
         }
         if self.shell.spaces.opened
-            && !matches!(c, Command::Space(SpaceCommand::Picker) | Command::Status)
+            && !passive
+            && !matches!(c, Command::Space(SpaceCommand::Picker))
         {
             self.finish_space_picker(crate::space_picker::Outcome::Close);
         }
-        if self.shell.saver_demo.opened && !matches!(c, Command::Screensaver(_) | Command::Status) {
+        if self.shell.saver_demo.opened && !passive && !matches!(c, Command::Screensaver(_)) {
             self.finish_saver_demo(shell::saver_demo::Outcome::Close);
         }
         if self.prune() {
@@ -959,6 +964,12 @@ impl Manager {
                         .expose
                         .open(&self.config, monitor, restore, scene);
                 }
+            }
+            Command::Notify { title, body } => {
+                let monitor = self.full_area();
+                self.shell
+                    .notifications
+                    .push(&self.config, monitor, &title, &body);
             }
             Command::Lock => {
                 if !self.shell.lock.opened {
@@ -1767,6 +1778,7 @@ impl Manager {
                 self.focus_visible();
             }
             Event::BarHintPosition(epoch, index, x) => self.shell.hints.position(epoch, index, x),
+            Event::DismissNotification(id) => self.shell.notifications.dismiss(id),
             Event::BarHintKey(epoch, input) => {
                 let active = self.shell.hints.opened && self.shell.hints.generation == epoch;
                 if let Some((kind, x, monitor)) = self.shell.hints.input(epoch, input) {
@@ -2238,6 +2250,7 @@ pub fn run(replace: bool) -> Result<(), String> {
             m.poll_demo();
             m.shell.poll_wallpaper();
             m.shell.lock.poll();
+            m.shell.notifications.poll();
             let outcome = m.shell.saver_demo.poll();
             m.finish_saver_demo(outcome);
             m.sync_wallpaper_palette();

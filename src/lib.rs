@@ -8,6 +8,7 @@ pub mod layout;
 pub mod lockscreen;
 pub mod model;
 pub mod modifiers;
+pub mod notifications;
 #[cfg(windows)]
 pub mod platform;
 pub mod queue;

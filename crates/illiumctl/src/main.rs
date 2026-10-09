@@ -74,7 +74,19 @@ fn main() {
         }
         return;
     }
-    let command = args.join(" ");
+    let command = if args.first().is_some_and(|s| s == "notify") {
+        let Some(title) = args.get(1) else {
+            eprintln!("usage: illiumctl notify <title> [body...]");
+            std::process::exit(2);
+        };
+        let body = args[2..].join(" ");
+        format!(
+            "notify {}",
+            serde_json::json!({ "title": title, "body": body })
+        )
+    } else {
+        args.join(" ")
+    };
     if let Err(e) = command.parse::<illium_ipc::command::Command>() {
         eprintln!("{e}");
         std::process::exit(2);

@@ -133,6 +133,7 @@ pub fn describe(command: &str) -> String {
         Command::Wallpaper(Some(name)) => format!("Wallpaper {name}"),
         Command::Explorer(true) => "Start Explorer".into(),
         Command::Explorer(false) => "Stop Explorer".into(),
+        Command::Notify { title, .. } => format!("Notify {title}"),
         Command::Quit => "Quit Illium".into(),
         Command::Status => "Status".into(),
     }

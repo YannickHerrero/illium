@@ -186,6 +186,7 @@ pub(super) mod bar_hints;
 pub(super) mod expose;
 pub(super) mod keybindings;
 pub(super) mod lockscreen;
+pub(super) mod notifications;
 pub(super) mod saver_demo;
 pub(super) mod space_picker;
 pub(super) mod theme_picker;
@@ -258,6 +259,7 @@ pub struct Shell {
     pub spaces: space_picker::SpacePicker,
     pub lock: lockscreen::Lock,
     pub saver_demo: saver_demo::SaverDemo,
+    pub notifications: notifications::Notifications,
     surface_key: Option<(Vec<Rect>, bool, String, i32)>,
     pub backgrounds: Vec<Background>,
     pub bars: Vec<Bar>,
@@ -375,6 +377,7 @@ impl Shell {
             spaces: space_picker::SpacePicker::new(tx.clone())?,
             lock: lockscreen::Lock::new(tx.clone()),
             saver_demo: saver_demo::SaverDemo::new(tx.clone())?,
+            notifications: notifications::Notifications::new(tx.clone())?,
             surface_key: None,
             backgrounds: vec![],
             bars: vec![],
@@ -481,6 +484,7 @@ impl Shell {
         self.expose.apply_theme(c);
         self.workspace_switcher.apply_theme(c);
         self.spaces.apply_theme(c);
+        self.notifications.apply_theme(c);
         self.home = c.home.clone();
         self.theme = c.global.theme.clone();
         self.popup.set_bg(color(&c.theme.background));
@@ -510,6 +514,7 @@ impl Shell {
         self.expose.apply_theme(c);
         self.workspace_switcher.apply_theme(c);
         self.spaces.apply_theme(c);
+        self.notifications.apply_theme(c);
         self.descriptions = c.launcher.show_descriptions;
         self.home = c.home.clone();
         self.theme = c.global.theme.clone();
@@ -724,6 +729,7 @@ impl Shell {
             5 => self.hints.prewarm(),
             6 => self.spaces.prewarm(),
             7 => self.workspace_switcher.prewarm(),
+            8 => self.notifications.prewarm(),
             _ => return false,
         }
         self.prewarm_stage += 1;
@@ -804,6 +810,7 @@ impl Shell {
         self.spaces.arrange();
         self.lock.arrange();
         self.saver_demo.arrange();
+        self.notifications.arrange();
         true
     }
     pub fn toggle_bar_background(&mut self) {

@@ -79,6 +79,11 @@ pub enum Command {
     /// None selects the solid theme background.
     Wallpaper(Option<String>),
     Explorer(bool),
+    /// Passive toast; the wire form is `notify <json>` so text keeps its spaces.
+    Notify {
+        title: String,
+        body: String,
+    },
     Quit,
     Status,
 }
@@ -123,6 +128,24 @@ impl FromStr for Command {
                 return Err("wallpaper must be a plain file name".into());
             }
             return Ok(Self::Wallpaper(Some(name.into())));
+        }
+        if let Some(json) = s.trim().strip_prefix("notify ") {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Notification {
+                title: String,
+                #[serde(default)]
+                body: String,
+            }
+            let n: Notification = serde_json::from_str(json)
+                .map_err(|_| r#"notify expects {"title":"...","body":"..."}"#.to_owned())?;
+            if n.title.trim().is_empty() {
+                return Err("notification title must not be empty".into());
+            }
+            return Ok(Self::Notify {
+                title: n.title,
+                body: n.body,
+            });
         }
         let parts: Vec<_> = s.split_whitespace().collect();
         let ws = |s: &str| {
@@ -370,6 +393,32 @@ mod tests {
             "wallpaper next extra",
         ] {
             assert!(command.parse::<Command>().is_err(), "{command}");
+        }
+    }
+    #[test]
+    fn notifications() {
+        assert_eq!(
+            r#"notify {"title":"Claude needs you","body":"fix auth · dev"}"#.parse(),
+            Ok(Command::Notify {
+                title: "Claude needs you".into(),
+                body: "fix auth · dev".into()
+            })
+        );
+        assert_eq!(
+            r#"notify {"title":"Done"}"#.parse(),
+            Ok(Command::Notify {
+                title: "Done".into(),
+                body: String::new()
+            })
+        );
+        for s in [
+            "notify",
+            "notify Done",
+            r#"notify {"title":" "}"#,
+            r#"notify {"body":"x"}"#,
+            r#"notify {"title":"x","sound":true}"#,
+        ] {
+            assert!(s.parse::<Command>().is_err(), "{s}");
         }
     }
     #[test]
