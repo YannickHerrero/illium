@@ -17,7 +17,7 @@ folder holding an `applet.toml`, or the configuration is rejected. Applets may
 also be listed in the `drawer` list, folded behind a chevron until the bar is
 hovered or the chevron clicked (see [drawer](configuration.md#drawer)).
 
-Illium ships `weather`, `wifi`, `calendar`, `timezones`, `volume`, `battery` and `_template`; they
+Illium ships `weather`, `wifi`, `calendar`, `timezones`, `volume`, `battery`, `_template` and `_web-template`; they
 are installed with the other defaults and never overwritten. `calendar` uses
 `attach = "clock"`: it has no icon and opens when the date is clicked;
 `timezones` uses `attach = "time"` and opens from the separate time target. Both
@@ -62,6 +62,7 @@ applets/weather/
 | `wifi_traffic` | `false` | Merge native Wi-Fi traffic counters using the script's `connected` and `interface_guid` fields; independent of script cadence |
 | `provider` | none | `builtin:clock`, `builtin:system`, `builtin:volume` or `builtin:battery` instead of a process |
 | `focusable` | `false` | Let the popup take keyboard focus |
+| `web` | none | HTML page shown in a WebView2 instead of `view.slint`, relative to the folder (see [web views](#web-views)) |
 | `attach` | none | Built-in module (`clock`, `time`, `battery`, `cpu`, `memory`, `volume`, `window-title`) whose click opens this applet; it then has no icon and is loaded whenever that module is in a section |
 | `[settings]` | empty | Passed to the provider as `ILLIUM_APPLET_<KEY>` variables |
 
@@ -275,11 +276,68 @@ Set `ILLIUM_WIFI_TEST_DIR` to the Windows-visible applet folder and optionally
 `ILLIUM_WIFI_RENDER_DIR` to an existing output folder for PPM snapshots, then run
 that test with `--ignored`. It includes light/dark, 150% DPI and long-list fixtures.
 
+### Web views
+
+With `web = "index.html"` in `applet.toml`, the popup shows that page in a
+WebView2 (the Microsoft Edge WebView2 Runtime that ships with Windows) instead
+of compiling `view.slint`, which is then ignored. The provider, interval, icon,
+label and popup size work as for any applet. Use it for animated or
+image-heavy views: Slint views use a software renderer. The path uses letters,
+digits, `-`, `_` and `.` only, has at most 16 components and ends in `.html` or
+`.htm`.
+
+The page is created hidden when the applet loads and kept while the applet does
+not change, so opening the popup only shows it, and the page's JavaScript state
+survives closing the popup. While hidden, `document.visibilityState` is
+`hidden` and Chromium stops `requestAnimationFrame`; messages still arrive. Any
+change to a file of the applet folder reloads the page, so a provider must
+never write into its own folder.
+
+Illium injects `window.illium` before the page's scripts run:
+
+```js
+const off = illium.on('data', data => render(data)); // returns an unsubscribe function
+illium.action();                     // re-run the provider without an argument
+illium.action('buy 2411');           // one argument
+illium.action(['bar', '141,0,0']);   // several: one JSON array, like a Slint action(a, b)
+illium.close();                      // close the popup, like Escape
+illium.data; illium.theme; illium.opened; // latest values
+```
+
+Events: `data` (the provider's JSON, keys unchanged), `theme` (`bg`, `surface`,
+`overlay`, `fg`, `muted`, `accent`, `green`, `yellow`, `red` as CSS colors, and
+`dark`), `busy`, `error` (empty after a success), `open`, `dismissed` and
+`completed`. `data`, `theme`, `busy` and `error` are replayed to a new
+listener, so a page can subscribe at any time. The theme is also set as CSS
+variables on `:root` (`--illium-bg`, `--illium-fg`, …) with a matching
+`color-scheme`, and `prefers-color-scheme` follows it. An action argument is at
+most 4 KiB.
+
+The folder is served from `https://applet-<name>.illium.example/` (the name in
+lower case, `_` replaced by `-`); use relative URLs. Each applet has its own
+origin, so `localStorage` and IndexedDB are private to it and persist in
+`%LOCALAPPDATA%\Illium\applet-webview`. Files are served without
+`Content-Encoding`, so precompressed `.br`/`.gz` assets are not decoded.
+
+The page is confined to its folder: navigation elsewhere, new windows, requests
+to any other host (including WebSockets), downloads and permission requests
+(camera, microphone, notifications, location, …) are refused. Developer tools,
+the context menu, zoom and browser shortcuts are disabled. Escape and Illium's
+global shortcuts never reach the page; with `focusable = true` the page gets
+the keyboard as soon as the popup opens, otherwise only the mouse.
+
+The page paints its own background; before its first frame the popup shows the
+theme's background color. Without the WebView2 runtime, the popup shows the
+error instead and the next opening retries. A crashed page reloads; if the
+WebView2 browser process exits, the view is recreated on the next opening.
+Each applet folder may hold up to 8192 files and folders.
+
 ## Popup behaviour
 
 One popup at a time, anchored under the module and kept on screen. It closes
 on a click anywhere else, on the module again, or with Escape. By default it does not take
-keyboard focus, so global Alt chords keep working while it is open. Errors in
+keyboard focus, so global Alt chords keep working while it is open; a `focusable` popup
+takes the keyboard as soon as it opens. Errors in
 the manifest, provider or view appear in a plain popup under the icon and in
 the daemon log.
 
@@ -294,6 +352,9 @@ packages and preservation rules. Disabling an applet does not stop external
 services it controls.
 
 ## Writing your own
+
+For a web page instead of a Slint view, start from `applets/_web-template`
+(see [web views](#web-views)); otherwise:
 
 1. Copy `applets/_template` to `applets/<name>` and rename `_template.ps1` to
    `<name>.ps1` (or set `script`).

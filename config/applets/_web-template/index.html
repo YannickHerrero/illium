@@ -1,0 +1,44 @@
+<!doctype html>
+<!-- Web view template. Illium injects window.illium before this page runs:
+     illium.on('data' | 'theme' | 'busy' | 'error' | 'open' | 'dismissed' | 'completed', callback)
+     illium.action(argument or [arguments]) re-runs the provider; illium.close() closes the popup.
+     Theme colors are CSS variables (--illium-bg, --illium-fg, ...). The page
+     cannot reach the network: load everything from this folder. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; height: 100%; }
+  body {
+    box-sizing: border-box;
+    padding: 18px;
+    border: 1px solid var(--illium-accent);
+    background: var(--illium-bg);
+    color: var(--illium-fg);
+    font: 14px "Segoe UI", sans-serif;
+    cursor: default;
+    user-select: none;
+  }
+  #message { font-size: 16px; }
+  #count { color: var(--illium-muted); margin: 10px 0; }
+  #action { color: var(--illium-accent); font-size: 12px; }
+  #error { color: var(--illium-red); font-size: 12px; }
+</style>
+</head>
+<body>
+  <div id="message">Loading…</div>
+  <div id="count"></div>
+  <div id="action"></div>
+  <div id="error"></div>
+<script>
+  const $ = id => document.getElementById(id);
+  illium.on('data', data => {
+    $('message').textContent = data.message;
+    $('count').textContent = `${data.count} processes`;
+    $('action').textContent = data.action ? `Last action: ${data.action}` : 'Click to refresh';
+  });
+  illium.on('error', error => { $('error').textContent = error; });
+  document.body.addEventListener('click', () => illium.action('refresh'));
+</script>
+</body>
+</html>

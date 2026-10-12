@@ -19,7 +19,7 @@ illiumctl plugin inspect theme dracula
 ```
 
 Discovery is local, read-only and works offline, including plugins outside any
-catalogue. `_template` is hidden. Origins are `bundled`, `local-package` and
+catalogue. `_template` and `_web-template` are hidden. Origins are `bundled`, `local-package` and
 `unmanaged`; a matching name alone never establishes provenance or a version.
 Existing installations have an unknown version and remain unmanaged. Bundled
 identifiers identify the bundled slot, not a guarantee that its files are pristine.
@@ -200,7 +200,7 @@ an unresolved backup. Crash-left `.plugins/stage-*` folders may be removed only
 while no manager operation is running and after recovery.
 
 Links, Windows reparse points, special files, case-colliding payload filenames and
-Windows device names are refused. Payload traversal is limited to 512 entries,
+Windows device names are refused. Payload traversal is limited to 8192 entries,
 16 levels and 512 MiB. Existing theme image limits also apply. Atomic transaction
 gate publication requires hard links on the config volume (NTFS on Windows).
 These checks are not a sandbox against a malicious concurrent filesystem writer.

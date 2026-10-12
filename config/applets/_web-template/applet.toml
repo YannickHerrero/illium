@@ -1,0 +1,20 @@
+# Web template applet: like _template, but the popup is a web page shown in a
+# WebView2. Copy this folder, rename it, and reference the new name in a bar
+# section of bar.toml.
+
+# Monochrome SVG shown in the bar, tinted with the theme's subtext color.
+icon = "icon.svg"
+# How often the provider runs: s, m or h.
+interval = "1m"
+# Optional text next to the icon; {field} and {a.b} come from the JSON.
+label = "{count}"
+# Popup size in logical pixels; it is the page's CSS viewport.
+popup = { width = 320, height = 160 }
+# Let the page take keyboard focus when the popup opens.
+focusable = false
+# Page shown in the popup, relative to this folder; replaces view.slint.
+web = "index.html"
+
+# Passed to the provider as ILLIUM_APPLET_<KEY> environment variables.
+[settings]
+greeting = "Hello"

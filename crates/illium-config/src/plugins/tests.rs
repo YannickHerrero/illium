@@ -209,7 +209,11 @@ fn inventory_is_read_only_and_unknown_plugins_are_never_adopted() {
     assert!(!local.managed && local.version.is_none());
     assert_eq!(local.origin, "unmanaged");
     assert!(!f.home.join(META).exists());
-    assert!(!rows.iter().any(|p| p.id == "_template"));
+    assert!(
+        !rows
+            .iter()
+            .any(|p| p.id == "_template" || p.id == "_web-template")
+    );
     assert!(
         rows.iter()
             .any(|p| p.id == "weather" && p.origin == "bundled")
