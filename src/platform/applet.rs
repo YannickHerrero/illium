@@ -574,7 +574,7 @@ impl Runtime {
             r,
             Some(windows::Win32::UI::WindowsAndMessaging::HWND_TOPMOST),
         );
-        if self.keyboard_focus {
+        if self.keyboard_focus || e.applet.manifest.focusable {
             native::focus(shell::id(window), false);
         }
         self.pending = None;

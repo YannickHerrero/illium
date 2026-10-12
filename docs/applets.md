@@ -279,7 +279,8 @@ that test with `--ignored`. It includes light/dark, 150% DPI and long-list fixtu
 
 One popup at a time, anchored under the module and kept on screen. It closes
 on a click anywhere else, on the module again, or with Escape. By default it does not take
-keyboard focus, so global Alt chords keep working while it is open. Errors in
+keyboard focus, so global Alt chords keep working while it is open; a `focusable` popup
+takes the keyboard as soon as it opens. Errors in
 the manifest, provider or view appear in a plain popup under the icon and in
 the daemon log.
 
