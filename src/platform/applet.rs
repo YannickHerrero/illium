@@ -3,6 +3,7 @@
 mod traffic;
 #[cfg(test)]
 mod view_tests;
+mod web;
 use super::{Event, EventSender, native, shell};
 use crate::{
     applets::{self, Applet},
@@ -52,6 +53,27 @@ pub struct Entry {
     interval: Duration,
     definition: Option<ComponentDefinition>,
     instance: Option<ComponentInstance>,
+    /// Replaces `definition`/`instance` when the manifest names a `web` page.
+    web: Option<web::View>,
+}
+/// The entry's web view, created when an earlier attempt failed.
+fn web_view<'a>(
+    e: &'a mut Entry,
+    theme: &crate::config::Theme,
+    tx: &EventSender,
+) -> Result<Option<&'a web::View>, String> {
+    let Some(page) = &e.applet.manifest.web else {
+        return Ok(None);
+    };
+    if e.web.is_none() {
+        let view = web::View::new(&e.applet, page, e.generation, theme, tx)?;
+        if e.data != serde_json::Value::Null {
+            view.data(&e.data);
+        }
+        view.error(e.error.as_deref().unwrap_or_default());
+        e.web = Some(view);
+    }
+    Ok(e.web.as_ref())
 }
 fn instantiate(e: &mut Entry, tx: &EventSender) -> Result<ComponentInstance, String> {
     if e.definition.is_none() {
@@ -171,6 +193,9 @@ impl Runtime {
                 if let Some(instance) = &entry.instance {
                     set_colors(instance, &c.theme);
                 }
+                if let Some(view) = &entry.web {
+                    view.theme(&c.theme);
+                }
                 // Keep generation, running worker, action queue, due time and
                 // instance together. In-flight results remain valid for this entry.
                 self.entries.push(entry);
@@ -192,9 +217,14 @@ impl Runtime {
                 due: Instant::now(),
                 definition: None,
                 instance: None,
+                web: None,
                 applet,
             };
             refresh_icon(&mut entry);
+            // Created now so the first opening finds the page loaded.
+            if let Err(error) = web_view(&mut entry, &c.theme, &self.tx) {
+                tracing::warn!(applet = entry.applet.name, %error, "web view not created");
+            }
             self.entries.push(entry);
         }
     }
@@ -204,6 +234,9 @@ impl Runtime {
     pub fn prepare_views(&mut self, c: &Config) {
         let started = Instant::now();
         for e in &mut self.entries {
+            if e.applet.manifest.web.is_some() {
+                continue;
+            }
             match instantiate(e, &self.tx) {
                 Ok(instance) => {
                     set_colors(&instance, &c.theme);
@@ -226,6 +259,9 @@ impl Runtime {
         for entry in &self.entries {
             if let Some(instance) = &entry.instance {
                 set_colors(instance, &c.theme);
+            }
+            if let Some(view) = &entry.web {
+                view.theme(&c.theme);
             }
         }
     }
@@ -349,6 +385,9 @@ impl Runtime {
         if let Some(instance) = &e.instance {
             let _ = instance.set_property("busy", Value::Bool(true));
         }
+        if let Some(view) = &e.web {
+            view.busy(true);
+        }
         let generation = e.generation;
         let name = e.applet.name.clone();
         let command = applets::command(&e.applet);
@@ -390,6 +429,9 @@ impl Runtime {
         if let Some(instance) = &e.instance {
             let _ = instance.set_property("busy", Value::Bool(false));
         }
+        if let Some(view) = &e.web {
+            view.busy(false);
+        }
         match result.and_then(|text| {
             serde_json::from_str::<serde_json::Value>(&text)
                 .map_err(|err| format!("invalid JSON: {err}"))
@@ -420,6 +462,9 @@ impl Runtime {
                 {
                     e.error = Some(err);
                 }
+                if let Some(view) = &e.web {
+                    view.data(&e.data);
+                }
             }
             Err(err) => {
                 tracing::warn!(applet = name, %err, "applet provider failed");
@@ -432,6 +477,9 @@ impl Runtime {
                 Value::String(e.error.clone().unwrap_or_default().into()),
             );
         }
+        if let Some(view) = &e.web {
+            view.error(e.error.as_deref().unwrap_or_default());
+        }
         let next = e.pending_actions.pop_front();
         if (next.is_none() || e.applet.manifest.provider.as_deref() != Some("builtin:volume"))
             && let Some(instance) = &e.instance
@@ -439,6 +487,9 @@ impl Runtime {
             // Audio reconciles after the latest intent; external providers
             // retain their existing per-result completion callback contract.
             let _ = instance.invoke("completed", &[]);
+        }
+        if let Some(view) = &e.web {
+            view.completed();
         }
         if let Some(action) = next {
             self.refresh(index, Some(action));
@@ -470,6 +521,9 @@ impl Runtime {
         {
             tracing::warn!(%error, "traffic view update failed");
         }
+        if let Some(view) = &e.web {
+            view.data(&e.data);
+        }
     }
     /// Shows or hides the applet view under the bar module centered at logical `x`.
     pub fn toggle(&mut self, c: &Config, monitor: Rect, name: &str, x: i32) -> Result<(), String> {
@@ -482,9 +536,6 @@ impl Runtime {
         let Some(e) = self.entries.iter_mut().find(|e| e.applet.name == name) else {
             return Err(format!("unknown applet {name}"));
         };
-        // A failed refresh must not make cached content inaccessible. Render
-        // the error alongside the last snapshot and let opening request a retry.
-        let instance = instantiate(e, &self.tx)?;
         if let Some(traffic) = &mut e.traffic {
             traffic.due = Instant::now();
             if let Some(data) = e.data.as_object_mut() {
@@ -492,6 +543,18 @@ impl Runtime {
                 data.insert("sending".into(), serde_json::json!("—"));
             }
         }
+        if let Some(view) = web_view(e, &c.theme, &self.tx)? {
+            if let Some(failure) = view.take_failure() {
+                return Err(failure);
+            }
+            self.pending = Some(applet_rect(c, monitor, &e.applet.manifest.popup, x));
+            self.pending_since = Some(started);
+            self.open = Some(name.to_owned());
+            return Ok(());
+        }
+        // A failed refresh must not make cached content inaccessible. Render
+        // the error alongside the last snapshot and let opening request a retry.
+        let instance = instantiate(e, &self.tx)?;
         let def = e.definition.as_ref().expect("compiled above");
         set_colors(&instance, &c.theme);
         let _ = instance.set_property("busy", Value::Bool(e.running));
@@ -504,18 +567,7 @@ impl Runtime {
             set_data(&instance, def, &e.data)?;
         }
         let _ = instance.set_property("open", Value::Bool(true));
-        let size = &e.applet.manifest.popup;
-        let rect = popup_rect(
-            monitor,
-            (
-                super::dpi::scale(monitor, size.width),
-                super::dpi::scale(monitor, size.height),
-            ),
-            super::dpi::scale(monitor, c.bar.height),
-            super::dpi::scale(monitor, 6),
-            monitor.x + super::dpi::scale(monitor, x),
-            c.bar.position == "top",
-        );
+        let rect = applet_rect(c, monitor, &e.applet.manifest.popup, x);
         let _ = instance.set_property(
             "popup-width",
             Value::Number(super::dpi::logical(monitor, rect.w) as f64),
@@ -538,11 +590,14 @@ impl Runtime {
     pub fn close(&mut self) {
         if let Some(name) = self.open.take()
             && let Some(e) = self.entries.iter().find(|e| e.applet.name == name)
-            && let Some(instance) = &e.instance
         {
-            let _ = instance.invoke("dismissed", &[]);
-            let _ = instance.set_property("open", Value::Bool(false));
-            let _ = instance.hide();
+            if let Some(view) = &e.web {
+                view.hide();
+            } else if let Some(instance) = &e.instance {
+                let _ = instance.invoke("dismissed", &[]);
+                let _ = instance.set_property("open", Value::Bool(false));
+                let _ = instance.hide();
+            }
         }
         self.pending = None;
         self.pending_since = None;
@@ -563,6 +618,12 @@ impl Runtime {
             self.pending = None;
             return;
         };
+        if let Some(view) = &e.web {
+            view.show(r, self.keyboard_focus || e.applet.manifest.focusable);
+            self.pending = None;
+            self.pending_since = None;
+            return;
+        }
         let Some(instance) = &e.instance else { return };
         let window = instance.window();
         if shell::id(window) == 0 {
@@ -587,11 +648,27 @@ impl Runtime {
         }
     }
     pub fn owns(&self, id: isize) -> bool {
-        self.entries
-            .iter()
-            .filter_map(|e| e.instance.as_ref())
-            .any(|i| shell::id(i.window()) == id)
+        self.entries.iter().any(|e| {
+            e.instance
+                .as_ref()
+                .is_some_and(|i| shell::id(i.window()) == id)
+                || e.web.as_ref().is_some_and(|v| v.window() == id)
+        })
     }
+}
+/// The popup under the bar module centered at logical `x`, in physical pixels.
+fn applet_rect(c: &Config, monitor: Rect, size: &applets::PopupSize, x: i32) -> Rect {
+    popup_rect(
+        monitor,
+        (
+            super::dpi::scale(monitor, size.width),
+            super::dpi::scale(monitor, size.height),
+        ),
+        super::dpi::scale(monitor, c.bar.height),
+        super::dpi::scale(monitor, 6),
+        monitor.x + super::dpi::scale(monitor, x),
+        c.bar.position == "top",
+    )
 }
 fn popup_rect(
     monitor: Rect,

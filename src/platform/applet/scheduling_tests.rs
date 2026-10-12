@@ -23,6 +23,7 @@ fn runtime() -> Runtime {
         interval: Duration::from_secs(30),
         definition: None,
         instance: None,
+        web: None,
     });
     runtime
 }

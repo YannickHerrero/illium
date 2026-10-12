@@ -324,6 +324,22 @@ const DEFAULTS: &[(&str, &str)] = &[
         "applets/_template/icon.svg",
         include_str!("../../../config/applets/_template/icon.svg"),
     ),
+    (
+        "applets/_web-template/applet.toml",
+        include_str!("../../../config/applets/_web-template/applet.toml"),
+    ),
+    (
+        "applets/_web-template/_web-template.ps1",
+        include_str!("../../../config/applets/_web-template/_web-template.ps1"),
+    ),
+    (
+        "applets/_web-template/index.html",
+        include_str!("../../../config/applets/_web-template/index.html"),
+    ),
+    (
+        "applets/_web-template/icon.svg",
+        include_str!("../../../config/applets/_web-template/icon.svg"),
+    ),
 ];
 // Bundled data, not runtime downloads. Keep existing installed files intact.
 const DEFAULT_ASSETS: &[(&str, &[u8])] = &[

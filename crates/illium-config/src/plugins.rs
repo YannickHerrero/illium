@@ -14,13 +14,14 @@ const META: &str = ".plugins";
 const MAX_TREE: usize = crate::files::MAX_APPLET_ENTRIES;
 const MAX_BYTES: u64 = 512 * 1024 * 1024;
 const SECTIONS: [&str; 4] = ["left", "center", "right", "drawer"];
-const BUNDLED_APPLETS: [&str; 6] = [
+const BUNDLED_APPLETS: [&str; 7] = [
     "weather",
     "wifi",
     "calendar",
     "timezones",
     "volume",
     "_template",
+    "_web-template",
 ];
 const BUNDLED_THEMES: [&str; 4] = [
     "catppuccin-mocha",
@@ -359,7 +360,7 @@ pub fn list(home: &Path) -> Result<Vec<Installed>> {
             let id = match kind {
                 Kind::Applet
                     if applets::valid_name(name)
-                        && name != "_template"
+                        && !["_template", "_web-template"].contains(&name)
                         && path.join("applet.toml").is_file() =>
                 {
                     name.to_owned()
