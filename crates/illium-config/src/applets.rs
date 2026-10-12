@@ -1,7 +1,8 @@
 //! Applet discovery and manifest handling: a folder per applet under the
-//! configuration home, with an `applet.toml`, an icon, a Slint view and a
-//! data provider (a script printing JSON, or a built-in provider).
+//! configuration home, with an `applet.toml`, an icon, a Slint view (or a web
+//! page) and a data provider (a script printing JSON, or a built-in provider).
 pub mod sprite;
+pub mod web;
 use serde::Deserialize;
 use std::{
     collections::BTreeMap,
@@ -44,6 +45,8 @@ pub struct Manifest {
     /// Built-in module whose click opens this applet instead of its details;
     /// the applet then has no icon of its own.
     pub attach: Option<String>,
+    /// HTML page shown in a WebView2 instead of `view.slint`, relative to the folder.
+    pub web: Option<String>,
     /// Passed to the provider as ILLIUM_APPLET_<KEY> environment variables.
     #[serde(default)]
     pub settings: BTreeMap<String, toml::Value>,
@@ -119,6 +122,13 @@ pub fn load(home: &Path, name: &str) -> Result<Applet, String> {
             || ["workspaces", "space", "separator"].contains(&module.as_str()))
     {
         return Err(format!("applet {name}: attach must name a built-in module"));
+    }
+    if let Some(page) = &manifest.web
+        && !web::page(page)
+    {
+        return Err(format!(
+            "applet {name}: web must be a relative .html path inside the folder"
+        ));
     }
     Ok(Applet {
         name: name.to_owned(),
@@ -434,6 +444,13 @@ mod tests {
                 ("ILLIUM_APPLET_COUNT".to_owned(), "3".to_owned()),
             ]
         );
+        std::fs::write(dir.join("applet.toml"), "web = \"web/index.html\"\n").unwrap();
+        assert_eq!(
+            load(&home, "sample").unwrap().manifest.web.as_deref(),
+            Some("web/index.html")
+        );
+        std::fs::write(dir.join("applet.toml"), "web = \"../index.html\"\n").unwrap();
+        assert!(load(&home, "sample").is_err());
         std::fs::write(dir.join("applet.toml"), "interval = \"never\"\n").unwrap();
         assert!(load(&home, "sample").is_err());
         std::fs::remove_dir_all(home).unwrap();
