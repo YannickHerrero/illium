@@ -19,7 +19,7 @@ illiumctl plugin inspect theme dracula
 ```
 
 Discovery is local, read-only and works offline, including plugins outside any
-catalogue. `_template` is hidden. Origins are `bundled`, `local-package` and
+catalogue. `_template` and `_web-template` are hidden. Origins are `bundled`, `local-package` and
 `unmanaged`; a matching name alone never establishes provenance or a version.
 Existing installations have an unknown version and remain unmanaged. Bundled
 identifiers identify the bundled slot, not a guarantee that its files are pristine.
