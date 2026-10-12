@@ -200,7 +200,7 @@ an unresolved backup. Crash-left `.plugins/stage-*` folders may be removed only
 while no manager operation is running and after recovery.
 
 Links, Windows reparse points, special files, case-colliding payload filenames and
-Windows device names are refused. Payload traversal is limited to 512 entries,
+Windows device names are refused. Payload traversal is limited to 8192 entries,
 16 levels and 512 MiB. Existing theme image limits also apply. Atomic transaction
 gate publication requires hard links on the config volume (NTFS on Windows).
 These checks are not a sandbox against a malicious concurrent filesystem writer.

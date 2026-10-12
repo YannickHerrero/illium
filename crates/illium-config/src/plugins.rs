@@ -11,7 +11,7 @@ use std::{
 };
 
 const META: &str = ".plugins";
-const MAX_TREE: usize = 512;
+const MAX_TREE: usize = crate::files::MAX_APPLET_ENTRIES;
 const MAX_BYTES: u64 = 512 * 1024 * 1024;
 const SECTIONS: [&str; 4] = ["left", "center", "right", "drawer"];
 const BUNDLED_APPLETS: [&str; 6] = [
@@ -226,7 +226,9 @@ fn tree(root: &Path) -> Result<Vec<PathBuf>> {
     while let Some((path, depth)) = pending.pop() {
         count += 1;
         if count > MAX_TREE || depth > 16 {
-            return Err("package tree exceeds 512 entries / 16 levels".into());
+            return Err(format!(
+                "package tree exceeds {MAX_TREE} entries / 16 levels"
+            ));
         }
         let m = metadata(&path)?;
         if m.is_dir() {
@@ -244,7 +246,7 @@ fn tree(root: &Path) -> Result<Vec<PathBuf>> {
                     return Err(format!("invalid or case-colliding filename: {name}"));
                 }
                 if pending.len() + count >= MAX_TREE {
-                    return Err("package tree exceeds 512 entries".into());
+                    return Err(format!("package tree exceeds {MAX_TREE} entries"));
                 }
                 pending.push((entry.path(), depth + 1));
             }

@@ -5,6 +5,8 @@ use std::{
 };
 pub const MAX_CONFIG_BYTES: usize = 64 * 1024;
 pub const MAX_CONFIG_ENTRIES: usize = 256;
+/// Files and folders in one applet tree; web views ship many small assets.
+pub const MAX_APPLET_ENTRIES: usize = 8192;
 fn reparse(metadata: &std::fs::Metadata) -> bool {
     #[cfg(windows)]
     {
@@ -117,7 +119,7 @@ pub fn applet_snapshot(dir: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, String> {
     let mut examined = 0;
     while let Some((path, depth)) = pending.pop() {
         examined += 1;
-        if examined > 512 || depth > 16 {
+        if examined > MAX_APPLET_ENTRIES || depth > 16 {
             return Err(format!(
                 "{}: applet source tree exceeds limits",
                 dir.display()
@@ -129,7 +131,7 @@ pub fn applet_snapshot(dir: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, String> {
         }
         if meta.is_dir() {
             for entry in std::fs::read_dir(&path).map_err(|e| e.to_string())? {
-                if pending.len() + examined >= 512 {
+                if pending.len() + examined >= MAX_APPLET_ENTRIES {
                     return Err(format!(
                         "{}: applet source tree exceeds limits",
                         dir.display()
@@ -222,7 +224,7 @@ mod tests {
         assert_ne!(before, applet_snapshot(&t.0).unwrap());
         std::fs::remove_file(file).unwrap();
         assert!(applet_snapshot(&t.0).unwrap().is_empty());
-        for i in 0..512 {
+        for i in 0..MAX_APPLET_ENTRIES {
             std::fs::write(t.0.join(format!("{i}.slint")), "").unwrap();
         }
         assert!(applet_snapshot(&t.0).is_err());
