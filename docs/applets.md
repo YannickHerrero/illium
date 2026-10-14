@@ -64,6 +64,7 @@ applets/weather/
 | `focusable` | `false` | Let the popup take keyboard focus |
 | `web` | none | HTML page shown in a WebView2 instead of `view.slint`, relative to the folder (see [web views](#web-views)) |
 | `site` | none | `https://` URL shown in a WebView2 instead of a view; no provider runs (see [remote sites](#remote-sites)) |
+| `zoom` | `1` | Zoom factor of a `web` or `site` view, 0.25 to 5; the CSS viewport is the popup size divided by it |
 | `attach` | none | Built-in module (`clock`, `time`, `battery`, `cpu`, `memory`, `volume`, `window-title`) whose click opens this applet; it then has no icon and is loaded whenever that module is in a section |
 | `[settings]` | empty | Passed to the provider as `ILLIUM_APPLET_<KEY>` variables |
 
@@ -293,6 +294,10 @@ survives closing the popup. While hidden, `document.visibilityState` is
 `hidden` and Chromium stops `requestAnimationFrame`; messages still arrive. Any
 change to a file of the applet folder reloads the page, so a provider must
 never write into its own folder.
+
+`zoom = 0.6` scales the page like the browser's zoom: a 860 px wide popup then
+has a 1433 px CSS viewport. Users cannot change it (zoom shortcuts and pinch
+are disabled).
 
 #### Remote sites
 

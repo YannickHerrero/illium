@@ -49,6 +49,8 @@ pub struct Manifest {
     pub web: Option<String>,
     /// `https://` site shown in a WebView2 instead of a view; no provider runs.
     pub site: Option<String>,
+    /// Zoom factor of a web view; the CSS viewport is the popup size divided by it.
+    pub zoom: Option<f64>,
     /// Passed to the provider as ILLIUM_APPLET_<KEY> environment variables.
     #[serde(default)]
     pub settings: BTreeMap<String, toml::Value>,
@@ -138,6 +140,14 @@ pub fn load(home: &Path, name: &str) -> Result<Applet, String> {
         }
         if web::site_host(site).is_none() {
             return Err(format!("applet {name}: site must be a plain https:// URL"));
+        }
+    }
+    if let Some(zoom) = manifest.zoom {
+        if manifest.web.is_none() && manifest.site.is_none() {
+            return Err(format!("applet {name}: zoom needs web or site"));
+        }
+        if !(0.25..=5.0).contains(&zoom) {
+            return Err(format!("applet {name}: zoom must be between 0.25 and 5"));
         }
     }
     Ok(Applet {
@@ -470,7 +480,16 @@ mod tests {
             load(&home, "sample").unwrap().manifest.site.as_deref(),
             Some("https://notes.example.org/")
         );
+        std::fs::write(
+            dir.join("applet.toml"),
+            "site = \"https://notes.example.org/\"\nzoom = 0.6\n",
+        )
+        .unwrap();
+        assert_eq!(load(&home, "sample").unwrap().manifest.zoom, Some(0.6));
         for bad in [
+            "site = \"https://notes.example.org/\"\nzoom = 0.1\n",
+            "site = \"https://notes.example.org/\"\nzoom = 6\n",
+            "zoom = 1.5\n",
             "site = \"http://notes.example.org/\"\n",
             "site = \"https://user@notes.example.org/\"\n",
             "web = \"index.html\"\nsite = \"https://notes.example.org/\"\n",

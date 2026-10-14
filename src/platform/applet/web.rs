@@ -66,6 +66,7 @@ struct State {
     open: bool,
     focus: bool,
     size: (i32, i32),
+    zoom: Option<f64>,
 }
 pub struct View(Shared);
 impl Drop for View {
@@ -119,6 +120,7 @@ impl View {
             open: false,
             focus: false,
             size: (1, 1),
+            zoom: applet.manifest.zoom,
         })));
         start(&view.0);
         Ok(view)
@@ -490,7 +492,7 @@ unsafe fn setup(
     controller: ICoreWebView2Controller,
 ) -> windows62::core::Result<()> {
     let web = unsafe { controller.CoreWebView2()? };
-    let (host, url, local, dir, theme, open, size, focus, env) = {
+    let (host, url, local, dir, theme, open, size, focus, zoom, env) = {
         let s = state.borrow();
         (
             s.host.clone(),
@@ -501,6 +503,7 @@ unsafe fn setup(
             s.open,
             s.size,
             s.focus,
+            s.zoom,
             ENVIRONMENT.with(|slot| match &*slot.borrow() {
                 Environment::Ready(env) => Some(env.clone()),
                 _ => None,
@@ -511,6 +514,9 @@ unsafe fn setup(
         env.ok_or_else(|| windows62::core::Error::from(windows62::Win32::Foundation::E_POINTER))?;
     unsafe {
         controller.SetIsVisible(false)?;
+        if let Some(zoom) = zoom {
+            controller.SetZoomFactor(zoom)?;
+        }
         colors(&controller, &web, &theme)?;
         let settings = web.Settings()?;
         settings.SetAreDevToolsEnabled(false)?;
