@@ -63,6 +63,7 @@ applets/weather/
 | `provider` | none | `builtin:clock`, `builtin:system`, `builtin:volume` or `builtin:battery` instead of a process |
 | `focusable` | `false` | Let the popup take keyboard focus |
 | `web` | none | HTML page shown in a WebView2 instead of `view.slint`, relative to the folder (see [web views](#web-views)) |
+| `site` | none | `https://` URL shown in a WebView2 instead of a view; no provider runs (see [remote sites](#remote-sites)) |
 | `attach` | none | Built-in module (`clock`, `time`, `battery`, `cpu`, `memory`, `volume`, `window-title`) whose click opens this applet; it then has no icon and is loaded whenever that module is in a section |
 | `[settings]` | empty | Passed to the provider as `ILLIUM_APPLET_<KEY>` variables |
 
@@ -292,6 +293,19 @@ survives closing the popup. While hidden, `document.visibilityState` is
 `hidden` and Chromium stops `requestAnimationFrame`; messages still arrive. Any
 change to a file of the applet folder reloads the page, so a provider must
 never write into its own folder.
+
+#### Remote sites
+
+With `site = "https://notes.example.org/"` instead of `web`, the popup shows
+that site as is: no provider runs (`script`, `command`, `interval` and
+`label` placeholders are unused), nothing is injected and the theme colors are
+not applied. The same WebView2 setup applies, so the page is kept between
+openings and the popup's focus, Escape and outside-click rules are the same.
+The site must be self-contained: navigation, frames and requests to any other
+host (including `http://`) are blocked, as for a local page, and so are new
+windows, downloads and permission requests. The URL is `https://`, a host with
+an optional port and an optional path; no user information, query or
+fragment.
 
 Illium injects `window.illium` before the page's scripts run:
 

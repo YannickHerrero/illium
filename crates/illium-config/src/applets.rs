@@ -47,6 +47,8 @@ pub struct Manifest {
     pub attach: Option<String>,
     /// HTML page shown in a WebView2 instead of `view.slint`, relative to the folder.
     pub web: Option<String>,
+    /// `https://` site shown in a WebView2 instead of a view; no provider runs.
+    pub site: Option<String>,
     /// Passed to the provider as ILLIUM_APPLET_<KEY> environment variables.
     #[serde(default)]
     pub settings: BTreeMap<String, toml::Value>,
@@ -129,6 +131,14 @@ pub fn load(home: &Path, name: &str) -> Result<Applet, String> {
         return Err(format!(
             "applet {name}: web must be a relative .html path inside the folder"
         ));
+    }
+    if let Some(site) = &manifest.site {
+        if manifest.web.is_some() {
+            return Err(format!("applet {name}: web and site are exclusive"));
+        }
+        if web::site_host(site).is_none() {
+            return Err(format!("applet {name}: site must be a plain https:// URL"));
+        }
     }
     Ok(Applet {
         name: name.to_owned(),
@@ -451,6 +461,23 @@ mod tests {
         );
         std::fs::write(dir.join("applet.toml"), "web = \"../index.html\"\n").unwrap();
         assert!(load(&home, "sample").is_err());
+        std::fs::write(
+            dir.join("applet.toml"),
+            "site = \"https://notes.example.org/\"\n",
+        )
+        .unwrap();
+        assert_eq!(
+            load(&home, "sample").unwrap().manifest.site.as_deref(),
+            Some("https://notes.example.org/")
+        );
+        for bad in [
+            "site = \"http://notes.example.org/\"\n",
+            "site = \"https://user@notes.example.org/\"\n",
+            "web = \"index.html\"\nsite = \"https://notes.example.org/\"\n",
+        ] {
+            std::fs::write(dir.join("applet.toml"), bad).unwrap();
+            assert!(load(&home, "sample").is_err(), "{bad}");
+        }
         std::fs::write(dir.join("applet.toml"), "interval = \"never\"\n").unwrap();
         assert!(load(&home, "sample").is_err());
         std::fs::remove_dir_all(home).unwrap();

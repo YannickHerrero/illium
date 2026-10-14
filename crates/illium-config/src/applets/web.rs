@@ -42,6 +42,18 @@ pub fn host(name: &str) -> String {
 pub fn url(name: &str, page: &str) -> String {
     format!("https://{}/{}", host(name), page.replace('\\', "/"))
 }
+/// The host (with its port) of a `site` URL: `https://`, a host without user
+/// information, then nothing or a path. The host is what `allowed` checks.
+pub fn site_host(url: &str) -> Option<String> {
+    let rest = url.strip_prefix("https://")?;
+    let host = rest.split(['/', '?', '#']).next()?;
+    let plain = !host.is_empty()
+        && host
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b':'));
+    let path = matches!(rest.as_bytes().get(host.len()), None | Some(b'/'));
+    (plain && path).then(|| host.to_owned())
+}
 fn starts_with(text: &str, prefix: &str) -> bool {
     text.get(..prefix.len())
         .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
@@ -145,6 +157,31 @@ mod tests {
             "a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q.html",
         ] {
             assert!(!page(bad), "{bad}");
+        }
+    }
+    #[test]
+    fn site_hosts() {
+        assert_eq!(
+            site_host("https://notes.example.org/").as_deref(),
+            Some("notes.example.org")
+        );
+        assert_eq!(
+            site_host("https://notes.example.org:8443/app").as_deref(),
+            Some("notes.example.org:8443")
+        );
+        assert_eq!(
+            site_host("https://notes.example.org").as_deref(),
+            Some("notes.example.org")
+        );
+        for bad in [
+            "http://notes.example.org/",
+            "https://user@notes.example.org/",
+            "https:///path",
+            "https://notes.example.org?x=1",
+            "https://",
+            "",
+        ] {
+            assert_eq!(site_host(bad), None, "{bad}");
         }
     }
     #[test]

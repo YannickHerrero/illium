@@ -45,6 +45,9 @@ struct State {
     generation: u64,
     host: String,
     url: String,
+    /// A page of the applet folder, served and scripted by Illium; a remote
+    /// `site` is only shown.
+    local: bool,
     dir: std::path::PathBuf,
     window: isize,
     tx: EventSender,
@@ -82,17 +85,25 @@ impl Drop for View {
 impl View {
     pub fn new(
         applet: &Applet,
-        page: &str,
         generation: u64,
         theme: &Theme,
         tx: &EventSender,
     ) -> Result<Self, String> {
+        let (host, url, local) = match (&applet.manifest.site, &applet.manifest.web) {
+            (Some(site), _) => {
+                let host = web::site_host(site).ok_or("site is not a plain https:// URL")?;
+                (host, site.clone(), false)
+            }
+            (None, Some(page)) => (web::host(&applet.name), web::url(&applet.name, page), true),
+            (None, None) => return Err("neither web nor site in the manifest".into()),
+        };
         let window = create_window(applet.manifest.focusable)?;
         let view = Self(Rc::new(RefCell::new(State {
             name: applet.name.clone(),
             generation,
-            host: web::host(&applet.name),
-            url: web::url(&applet.name, page),
+            host,
+            url,
+            local,
             dir: applet.dir.clone(),
             window,
             tx: tx.clone(),
@@ -479,11 +490,12 @@ unsafe fn setup(
     controller: ICoreWebView2Controller,
 ) -> windows62::core::Result<()> {
     let web = unsafe { controller.CoreWebView2()? };
-    let (host, url, dir, theme, open, size, focus, env) = {
+    let (host, url, local, dir, theme, open, size, focus, env) = {
         let s = state.borrow();
         (
             s.host.clone(),
             s.url.clone(),
+            s.local,
             s.dir.clone(),
             s.theme.clone(),
             s.open,
@@ -514,12 +526,14 @@ unsafe fn setup(
         settings.SetIsPinchZoomEnabled(false)?;
         settings.SetIsGeneralAutofillEnabled(false)?;
         settings.SetIsPasswordAutosaveEnabled(false)?;
-        web.cast::<ICoreWebView2_3>()?
-            .SetVirtualHostNameToFolderMapping(
-                &HSTRING::from(host.as_str()),
-                &HSTRING::from(dir.as_os_str()),
-                COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY,
-            )?;
+        if local {
+            web.cast::<ICoreWebView2_3>()?
+                .SetVirtualHostNameToFolderMapping(
+                    &HSTRING::from(host.as_str()),
+                    &HSTRING::from(dir.as_os_str()),
+                    COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY,
+                )?;
+        }
         let mut token = 0;
         let weak = Rc::downgrade(state);
         let navigation_host = host.clone();
@@ -655,7 +669,9 @@ unsafe fn setup(
             })),
             &mut token,
         )?;
-        web.AddScriptToExecuteOnDocumentCreated(&HSTRING::from(web::SCRIPT), None)?;
+        if local {
+            web.AddScriptToExecuteOnDocumentCreated(&HSTRING::from(web::SCRIPT), None)?;
+        }
         web.Navigate(&HSTRING::from(url.as_str()))?;
         {
             let mut s = state.borrow_mut();

@@ -56,17 +56,20 @@ pub struct Entry {
     /// Replaces `definition`/`instance` when the manifest names a `web` page.
     web: Option<web::View>,
 }
+fn web_manifest(m: &applets::Manifest) -> bool {
+    m.web.is_some() || m.site.is_some()
+}
 /// The entry's web view, created when an earlier attempt failed.
 fn web_view<'a>(
     e: &'a mut Entry,
     theme: &crate::config::Theme,
     tx: &EventSender,
 ) -> Result<Option<&'a web::View>, String> {
-    let Some(page) = &e.applet.manifest.web else {
+    if !web_manifest(&e.applet.manifest) {
         return Ok(None);
-    };
+    }
     if e.web.is_none() {
-        let view = web::View::new(&e.applet, page, e.generation, theme, tx)?;
+        let view = web::View::new(&e.applet, e.generation, theme, tx)?;
         if e.data != serde_json::Value::Null {
             view.data(&e.data);
         }
@@ -234,7 +237,7 @@ impl Runtime {
     pub fn prepare_views(&mut self, c: &Config) {
         let started = Instant::now();
         for e in &mut self.entries {
-            if e.applet.manifest.web.is_some() {
+            if web_manifest(&e.applet.manifest) {
                 continue;
             }
             match instantiate(e, &self.tx) {
@@ -319,7 +322,11 @@ impl Runtime {
                     &self.tx,
                 );
             }
-            if !self.entries[i].running && self.entries[i].due <= now {
+            // A remote site has no provider: nothing to run.
+            if self.entries[i].applet.manifest.site.is_none()
+                && !self.entries[i].running
+                && self.entries[i].due <= now
+            {
                 self.refresh(i, None);
             }
         }
