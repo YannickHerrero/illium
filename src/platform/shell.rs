@@ -592,6 +592,10 @@ impl Shell {
                     let _ = tx.send(Event::Module(kind.to_string(), x as i32, index));
                 });
                 let tx = self.tx.clone();
+                b.on_module_reload(move |kind| {
+                    let _ = tx.send(Event::ModuleReload(kind.to_string()));
+                });
+                let tx = self.tx.clone();
                 b.on_hint_position(move |epoch, index, x| {
                     let _ = tx.send(Event::BarHintPosition(epoch as u32, index as usize - 1, x));
                 });

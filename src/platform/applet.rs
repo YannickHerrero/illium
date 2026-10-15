@@ -590,6 +590,15 @@ impl Runtime {
         self.open = Some(name.to_owned());
         Ok(())
     }
+    /// Reloads the page of a web applet whose view exists; a never opened
+    /// view has nothing to reload.
+    pub fn reload(&self, name: &str) {
+        if let Some(e) = self.entries.iter().find(|e| e.applet.name == name)
+            && let Some(view) = &e.web
+        {
+            view.reload();
+        }
+    }
     /// Global Escape always dismisses the entire applet, including inner dialogs.
     pub fn escape(&mut self) {
         self.close();

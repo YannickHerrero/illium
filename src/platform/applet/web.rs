@@ -158,6 +158,14 @@ impl View {
         self.0.borrow_mut().error = error.to_owned();
         post(&self.0, "error", json!(error));
     }
+    pub fn reload(&self) {
+        let web = self.0.borrow().web.clone();
+        if let Some(web) = web
+            && let Err(error) = unsafe { web.Reload() }
+        {
+            tracing::warn!(applet = self.0.borrow().name, %error, "web applet reload failed");
+        }
+    }
     pub fn completed(&self) {
         post(&self.0, "completed", Value::Null);
     }

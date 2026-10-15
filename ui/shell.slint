@@ -53,6 +53,8 @@ component StatusModule inherits Rectangle {
     in property <color> bg;
     /// Horizontal center of the module in window coordinates, for anchoring a popup.
     callback clicked(length);
+    /// Right button released on the module.
+    callback reload();
     in property <int> hint-request;
     callback hint-position(int, int, length);
     changed hint-request => { root.report-hint(); }
@@ -128,6 +130,11 @@ component StatusModule inherits Rectangle {
         enabled: !root.separator;
         mouse-cursor: root.separator ? MouseCursor.default : MouseCursor.pointer;
         clicked => { root.clicked(root.x + root.width / 2); }
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.up && event.button == PointerEventButton.right) {
+                root.reload();
+            }
+        }
     }
 }
 export component Bar inherits Window {
@@ -159,6 +166,8 @@ export component Bar inherits Window {
     callback workspace(int);
     /// A module was clicked: its kind and horizontal center in the bar.
     callback module(string, length);
+    /// A module was right-clicked: its kind.
+    callback module-reload(string);
     in property <int> hint-request;
     callback hint-position(int, int, length);
     /// Shared theme/application opacity affects only the base surface.
@@ -185,6 +194,7 @@ export component Bar inherits Window {
             hint-request: root.hint-request;
             hint-position(epoch, index, x) => { root.hint-position(epoch, index, center-group.x + x); }
             clicked(x) => { root.module(item.kind, center-group.x + x); }
+            reload => { root.module-reload(item.kind); }
         }
     }
     left-group := HorizontalLayout {
@@ -195,6 +205,7 @@ export component Bar inherits Window {
             hint-request: root.hint-request;
             hint-position(epoch, index, x) => { root.hint-position(epoch, index, left-group.x + x); }
             clicked(x) => { root.module(item.kind, left-group.x + x); }
+            reload => { root.module-reload(item.kind); }
         }
         for n in root.workspaces: Rectangle {
             width: 26px;
@@ -226,6 +237,7 @@ export component Bar inherits Window {
             hint-request: root.hint-request;
             hint-position(epoch, index, x) => { root.hint-position(epoch, index, left-group.x + x); }
             clicked(x) => { root.module(item.kind, left-group.x + x); }
+            reload => { root.module-reload(item.kind); }
         }
     }
     right-group := HorizontalLayout {
@@ -236,6 +248,7 @@ export component Bar inherits Window {
             hint-request: root.hint-request;
             hint-position(epoch, index, x) => { root.hint-position(epoch, index, right-group.x + x); }
             clicked(x) => { root.module(item.kind, right-group.x + x); }
+            reload => { root.module-reload(item.kind); }
         }
     }
 }
