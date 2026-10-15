@@ -356,7 +356,6 @@ impl Picker {
             return;
         }
         self.suggestions = self.library.borrow().suggestions(&self.text());
-        self.suggestions.sort_by_key(|s| !s.bookmarked);
         self.status.borrow_mut().clear();
         SendMessageW(self.list, LB_RESETCONTENT, None, None);
         for s in &self.suggestions {

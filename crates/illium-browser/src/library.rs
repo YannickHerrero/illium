@@ -167,7 +167,8 @@ impl Library {
                 }
             }
         }
-        matches.sort_by_key(|(score, history, recency, _)| (*score, *history, *recency));
+        // Every matching bookmark comes before the history, however well it matches.
+        matches.sort_by_key(|(score, history, recency, _)| (*history, *score, *recency));
         matches
             .into_iter()
             .take(8)
@@ -316,6 +317,12 @@ mod tests {
         a.visit("https://example.com/new", "New").unwrap();
         assert_eq!(a.data.history.len(), HISTORY_LIMIT);
         assert_eq!(a.suggestions("").len(), 8);
+        // A bookmark matching worse than eight history entries still leads.
+        a.add_bookmark("https://example.com/bookmark", "Issues | Example")
+            .unwrap();
+        let hits = a.suggestions("example");
+        assert!(hits[0].bookmarked);
+        assert!(hits[1..].iter().all(|s| !s.bookmarked));
         fs::write(dir.join("library.json"), "broken").unwrap();
         assert!(
             a.visit("https://example.com", "Don't overwrite corrupt data")
