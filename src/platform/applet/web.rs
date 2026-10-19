@@ -363,7 +363,10 @@ fn environment() -> Result<(), String> {
     let folder = std::path::Path::new(&local).join("Illium/applet-webview");
     std::fs::create_dir_all(&folder).map_err(|e| format!("{}: {e}", folder.display()))?;
     let folder = HSTRING::from(folder.as_os_str());
-    let options: ICoreWebView2EnvironmentOptions = CoreWebView2EnvironmentOptions::default().into();
+    let options = CoreWebView2EnvironmentOptions::default();
+    // Thin overlay scrollbars, visible only while scrolling; the popups are small.
+    unsafe { options.set_scroll_bar_style(COREWEBVIEW2_SCROLLBAR_STYLE_FLUENT_OVERLAY) };
+    let options: ICoreWebView2EnvironmentOptions = options.into();
     let handler = CreateCoreWebView2EnvironmentCompletedHandler::create(Box::new(|result, env| {
         finish_environment(
             result
