@@ -304,7 +304,12 @@ are disabled).
 With `site = "https://notes.example.org/"` instead of `web`, the popup shows
 that site as is: no provider runs (`script`, `command`, `interval` and
 `label` placeholders are unused), nothing is injected and the theme colors are
-not applied. The same WebView2 setup applies, so the page is kept between
+not applied. With `style = "theme.css"` (a `.css` file of the folder), Illium
+does inject one thing: the theme colors as `--illium-*` variables and
+`color-scheme` on `<html>`, followed by that sheet in a `<style>` element, kept
+up to date when the theme changes. `window.illium` stays absent, so the site
+can neither act nor close the popup; the sheet typically remaps the site's own
+CSS variables to the `--illium-*` ones. The same WebView2 setup applies, so the page is kept between
 openings and the popup's focus, Escape and outside-click rules are the same.
 The site must be self-contained: navigation, frames and requests to any other
 host (including `http://`) are blocked, as for a local page, and so are new

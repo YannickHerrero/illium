@@ -49,6 +49,8 @@ struct State {
     /// A page of the applet folder, served and scripted by Illium; a remote
     /// `site` is only shown.
     local: bool,
+    /// Script injecting the manifest's `style` sheet into a site.
+    style: Option<String>,
     dir: std::path::PathBuf,
     window: isize,
     tx: EventSender,
@@ -105,6 +107,15 @@ impl View {
             ),
             (None, None) => return Err("neither web nor site in the manifest".into()),
         };
+        let style = match &applet.manifest.style {
+            Some(style) => {
+                let path = applet.dir.join(style);
+                let css = std::fs::read_to_string(&path)
+                    .map_err(|e| format!("style {}: {e}", path.display()))?;
+                Some(web::style_script(&css))
+            }
+            None => None,
+        };
         let window = create_window(applet.manifest.focusable)?;
         let view = Self(Rc::new(RefCell::new(State {
             name: applet.name.clone(),
@@ -112,6 +123,7 @@ impl View {
             hosts,
             url,
             local,
+            style,
             dir: applet.dir.clone(),
             window,
             tx: tx.clone(),
@@ -510,12 +522,13 @@ unsafe fn setup(
     controller: ICoreWebView2Controller,
 ) -> windows62::core::Result<()> {
     let web = unsafe { controller.CoreWebView2()? };
-    let (hosts, url, local, dir, theme, open, size, focus, zoom, env) = {
+    let (hosts, url, local, style, dir, theme, open, size, focus, zoom, env) = {
         let s = state.borrow();
         (
             s.hosts.clone(),
             s.url.clone(),
             s.local,
+            s.style.clone(),
             s.dir.clone(),
             s.theme.clone(),
             s.open,
@@ -695,6 +708,8 @@ unsafe fn setup(
         )?;
         if local {
             web.AddScriptToExecuteOnDocumentCreated(&HSTRING::from(web::SCRIPT), None)?;
+        } else if let Some(style) = &style {
+            web.AddScriptToExecuteOnDocumentCreated(&HSTRING::from(style.as_str()), None)?;
         }
         web.Navigate(&HSTRING::from(url.as_str()))?;
         {

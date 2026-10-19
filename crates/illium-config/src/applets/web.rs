@@ -6,12 +6,26 @@ use serde_json::{Value, json};
 
 /// Runs before any page script and defines `window.illium`.
 pub const SCRIPT: &str = include_str!("web.js");
+/// Runs before a remote site's scripts when its manifest declares `style`.
+const STYLE_SCRIPT: &str = include_str!("style.js");
+/// `STYLE_SCRIPT` carrying the applet's style sheet.
+pub fn style_script(css: &str) -> String {
+    let literal = serde_json::to_string(css).unwrap_or_default();
+    STYLE_SCRIPT.replace("'__ILLIUM_CSS__'", &literal)
+}
 /// Longest action argument a page may send.
 pub const MAX_ACTION_BYTES: usize = 4096;
 
 /// A relative `.html`/`.htm` path whose components are URL-safe names, so it
 /// can be appended to the virtual host without escaping.
 pub fn page(path: &str) -> bool {
+    inside(path, &["html", "htm"])
+}
+/// A relative `.css` path inside the applet folder.
+pub fn stylesheet(path: &str) -> bool {
+    inside(path, &["css"])
+}
+fn inside(path: &str, extensions: &[&str]) -> bool {
     let parts: Vec<&str> = path.split(['/', '\\']).collect();
     parts.len() <= 16
         && parts.iter().all(|part| {
@@ -26,9 +40,7 @@ pub fn page(path: &str) -> bool {
             .last()
             .and_then(|file| file.rsplit_once('.'))
             .is_some_and(|(stem, extension)| {
-                !stem.is_empty()
-                    && (extension.eq_ignore_ascii_case("html")
-                        || extension.eq_ignore_ascii_case("htm"))
+                !stem.is_empty() && extensions.iter().any(|e| extension.eq_ignore_ascii_case(e))
             })
 }
 /// One origin per applet, so storage is not shared between applets. `.example`
@@ -161,6 +173,18 @@ mod tests {
         ] {
             assert!(!page(bad), "{bad}");
         }
+        assert!(stylesheet("theme.css"));
+        assert!(stylesheet("css\\Theme.CSS"));
+        assert!(!stylesheet("index.html"));
+        assert!(!stylesheet("../theme.css"));
+    }
+    #[test]
+    fn style_script_embeds_the_sheet() {
+        let script = style_script("html { --dl-bg: var(--illium-bg); }\n/* it's </script> */");
+        assert!(script.contains(
+            r#"const css = "html { --dl-bg: var(--illium-bg); }\n/* it's </script> */";"#
+        ));
+        assert!(!script.contains("__ILLIUM_CSS__"));
     }
     #[test]
     fn site_hosts() {

@@ -52,6 +52,9 @@ pub struct Manifest {
     /// Other hosts a `site` may navigate to or load from, such as a login provider.
     #[serde(default)]
     pub hosts: Vec<String>,
+    /// Style sheet of the folder injected into a `site`, with the theme colors
+    /// as `--illium-*` variables on `<html>`.
+    pub style: Option<String>,
     /// Zoom factor of a web view; the CSS viewport is the popup size divided by it.
     pub zoom: Option<f64>,
     /// Passed to the provider as ILLIUM_APPLET_<KEY> environment variables.
@@ -156,6 +159,16 @@ pub fn load(home: &Path, name: &str) -> Result<Applet, String> {
         {
             return Err(format!(
                 "applet {name}: hosts entry {host:?} is not a plain host"
+            ));
+        }
+    }
+    if let Some(style) = &manifest.style {
+        if manifest.site.is_none() {
+            return Err(format!("applet {name}: style needs site"));
+        }
+        if !web::stylesheet(style) {
+            return Err(format!(
+                "applet {name}: style must be a relative .css path inside the folder"
             ));
         }
     }
@@ -512,7 +525,19 @@ mod tests {
             load(&home, "sample").unwrap().manifest.hosts,
             vec!["login.example.com:8443".to_owned()]
         );
+        std::fs::write(
+            dir.join("applet.toml"),
+            "site = \"https://notes.example.org/\"\nstyle = \"theme.css\"\n",
+        )
+        .unwrap();
+        assert_eq!(
+            load(&home, "sample").unwrap().manifest.style.as_deref(),
+            Some("theme.css")
+        );
         for bad in [
+            "style = \"theme.css\"\n",
+            "site = \"https://notes.example.org/\"\nstyle = \"../theme.css\"\n",
+            "site = \"https://notes.example.org/\"\nstyle = \"theme.html\"\n",
             "site = \"https://notes.example.org/\"\nzoom = 0.1\n",
             "site = \"https://notes.example.org/\"\nzoom = 6\n",
             "zoom = 1.5\n",
