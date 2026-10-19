@@ -310,7 +310,10 @@ The site must be self-contained: navigation, frames and requests to any other
 host (including `http://`) are blocked, as for a local page, and so are new
 windows, downloads and permission requests. The URL is `https://`, a host with
 an optional port and an optional path; no user information, query or
-fragment.
+fragment. A site that signs in through another host lists it in `hosts`, for
+example `hosts = ["login.example.com", "cdn.example.com"]`:
+navigation, frames and requests to those `https://` hosts are allowed too.
+Each entry is a bare host with an optional port, and the key needs `site`.
 
 Illium injects `window.illium` before the page's scripts run:
 

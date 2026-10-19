@@ -43,7 +43,8 @@ thread_local! {
 struct State {
     name: String,
     generation: u64,
-    host: String,
+    /// The site or virtual host first, then the manifest's extra hosts.
+    hosts: Vec<String>,
     url: String,
     /// A page of the applet folder, served and scripted by Illium; a remote
     /// `site` is only shown.
@@ -90,19 +91,25 @@ impl View {
         theme: &Theme,
         tx: &EventSender,
     ) -> Result<Self, String> {
-        let (host, url, local) = match (&applet.manifest.site, &applet.manifest.web) {
+        let (hosts, url, local) = match (&applet.manifest.site, &applet.manifest.web) {
             (Some(site), _) => {
                 let host = web::site_host(site).ok_or("site is not a plain https:// URL")?;
-                (host, site.clone(), false)
+                let mut hosts = vec![host];
+                hosts.extend(applet.manifest.hosts.iter().cloned());
+                (hosts, site.clone(), false)
             }
-            (None, Some(page)) => (web::host(&applet.name), web::url(&applet.name, page), true),
+            (None, Some(page)) => (
+                vec![web::host(&applet.name)],
+                web::url(&applet.name, page),
+                true,
+            ),
             (None, None) => return Err("neither web nor site in the manifest".into()),
         };
         let window = create_window(applet.manifest.focusable)?;
         let view = Self(Rc::new(RefCell::new(State {
             name: applet.name.clone(),
             generation,
-            host,
+            hosts,
             url,
             local,
             dir: applet.dir.clone(),
@@ -465,17 +472,17 @@ unsafe fn reveal(
     Ok(())
 }
 fn on_message(state: &Shared, source: &str, json: &str) {
-    let (host, name, generation, tx, open) = {
+    let (hosts, name, generation, tx, open) = {
         let s = state.borrow();
         (
-            s.host.clone(),
+            s.hosts.clone(),
             s.name.clone(),
             s.generation,
             s.tx.clone(),
             s.open,
         )
     };
-    if !web::allowed(&host, source, true) {
+    if !web::allowed(&hosts, source, true) {
         return;
     }
     match web::request(json) {
@@ -500,10 +507,10 @@ unsafe fn setup(
     controller: ICoreWebView2Controller,
 ) -> windows62::core::Result<()> {
     let web = unsafe { controller.CoreWebView2()? };
-    let (host, url, local, dir, theme, open, size, focus, zoom, env) = {
+    let (hosts, url, local, dir, theme, open, size, focus, zoom, env) = {
         let s = state.borrow();
         (
-            s.host.clone(),
+            s.hosts.clone(),
             s.url.clone(),
             s.local,
             s.dir.clone(),
@@ -543,19 +550,19 @@ unsafe fn setup(
         if local {
             web.cast::<ICoreWebView2_3>()?
                 .SetVirtualHostNameToFolderMapping(
-                    &HSTRING::from(host.as_str()),
+                    &HSTRING::from(hosts[0].as_str()),
                     &HSTRING::from(dir.as_os_str()),
                     COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY,
                 )?;
         }
         let mut token = 0;
         let weak = Rc::downgrade(state);
-        let navigation_host = host.clone();
+        let navigation_hosts = hosts.clone();
         web.add_NavigationStarting(
             &NavigationStartingEventHandler::create(Box::new(move |_, args| {
                 if let Some(args) = args {
                     let uri = string(|s| args.Uri(s))?;
-                    if !web::allowed(&navigation_host, &uri, true) {
+                    if !web::allowed(&navigation_hosts, &uri, true) {
                         tracing::warn!(%uri, "web applet navigation blocked");
                         args.SetCancel(true)?;
                     } else if let Some(state) = weak.upgrade() {
@@ -566,12 +573,12 @@ unsafe fn setup(
             })),
             &mut token,
         )?;
-        let frame_host = host.clone();
+        let frame_hosts = hosts.clone();
         web.add_FrameNavigationStarting(
             &NavigationStartingEventHandler::create(Box::new(move |_, args| {
                 if let Some(args) = args {
                     let uri = string(|s| args.Uri(s))?;
-                    if !web::allowed(&frame_host, &uri, true) {
+                    if !web::allowed(&frame_hosts, &uri, true) {
                         args.SetCancel(true)?;
                     }
                 }
@@ -594,12 +601,12 @@ unsafe fn setup(
                 COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
                 COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS_ALL,
             )?;
-        let request_host = host.clone();
+        let request_hosts = hosts.clone();
         web.add_WebResourceRequested(
             &WebResourceRequestedEventHandler::create(Box::new(move |_, args| {
                 if let Some(args) = args {
                     let uri = string(|s| args.Request()?.Uri(s))?;
-                    if !web::allowed(&request_host, &uri, false) {
+                    if !web::allowed(&request_hosts, &uri, false) {
                         tracing::debug!(%uri, "web applet request blocked");
                         let response = env.CreateWebResourceResponse(
                             None,

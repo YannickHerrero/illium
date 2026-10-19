@@ -49,6 +49,9 @@ pub struct Manifest {
     pub web: Option<String>,
     /// `https://` site shown in a WebView2 instead of a view; no provider runs.
     pub site: Option<String>,
+    /// Other hosts a `site` may navigate to or load from, such as a login provider.
+    #[serde(default)]
+    pub hosts: Vec<String>,
     /// Zoom factor of a web view; the CSS viewport is the popup size divided by it.
     pub zoom: Option<f64>,
     /// Passed to the provider as ILLIUM_APPLET_<KEY> environment variables.
@@ -140,6 +143,20 @@ pub fn load(home: &Path, name: &str) -> Result<Applet, String> {
         }
         if web::site_host(site).is_none() {
             return Err(format!("applet {name}: site must be a plain https:// URL"));
+        }
+    }
+    if !manifest.hosts.is_empty() {
+        if manifest.site.is_none() {
+            return Err(format!("applet {name}: hosts needs site"));
+        }
+        if let Some(host) = manifest
+            .hosts
+            .iter()
+            .find(|host| web::site_host(&format!("https://{host}/")).as_deref() != Some(host))
+        {
+            return Err(format!(
+                "applet {name}: hosts entry {host:?} is not a plain host"
+            ));
         }
     }
     if let Some(zoom) = manifest.zoom {
@@ -486,6 +503,15 @@ mod tests {
         )
         .unwrap();
         assert_eq!(load(&home, "sample").unwrap().manifest.zoom, Some(0.6));
+        std::fs::write(
+            dir.join("applet.toml"),
+            "site = \"https://notes.example.org/\"\nhosts = [\"login.example.com:8443\"]\n",
+        )
+        .unwrap();
+        assert_eq!(
+            load(&home, "sample").unwrap().manifest.hosts,
+            vec!["login.example.com:8443".to_owned()]
+        );
         for bad in [
             "site = \"https://notes.example.org/\"\nzoom = 0.1\n",
             "site = \"https://notes.example.org/\"\nzoom = 6\n",
@@ -493,6 +519,10 @@ mod tests {
             "site = \"http://notes.example.org/\"\n",
             "site = \"https://user@notes.example.org/\"\n",
             "web = \"index.html\"\nsite = \"https://notes.example.org/\"\n",
+            "hosts = [\"login.example.com\"]\n",
+            "site = \"https://notes.example.org/\"\nhosts = [\"https://login.example.com\"]\n",
+            "site = \"https://notes.example.org/\"\nhosts = [\"login.example.com/\"]\n",
+            "site = \"https://notes.example.org/\"\nhosts = [\"\"]\n",
         ] {
             std::fs::write(dir.join("applet.toml"), bad).unwrap();
             assert!(load(&home, "sample").is_err(), "{bad}");

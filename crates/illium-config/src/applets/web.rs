@@ -58,10 +58,13 @@ fn starts_with(text: &str, prefix: &str) -> bool {
     text.get(..prefix.len())
         .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
 }
-/// Whether a page on `host` may navigate to or load `uri`: only its own host.
-/// `data:` and `blob:` resources never leave the page; navigating to them does.
-pub fn allowed(host: &str, uri: &str, navigation: bool) -> bool {
-    starts_with(uri, &format!("https://{host}/"))
+/// Whether a page may navigate to or load `uri`: only `hosts`, its own and the
+/// manifest's extra ones. `data:` and `blob:` resources never leave the page;
+/// navigating to them does.
+pub fn allowed(hosts: &[String], uri: &str, navigation: bool) -> bool {
+    hosts
+        .iter()
+        .any(|host| starts_with(uri, &format!("https://{host}/")))
         || (!navigation && (starts_with(uri, "data:") || starts_with(uri, "blob:")))
 }
 #[derive(Debug, PartialEq)]
@@ -195,7 +198,7 @@ mod tests {
     }
     #[test]
     fn only_the_applet_host_is_reachable() {
-        let host = host("game");
+        let host = vec![host("game")];
         for (uri, navigation) in [
             ("https://applet-game.illium.example/index.html", true),
             ("HTTPS://APPLET-GAME.ILLIUM.EXAMPLE/img/a.png", false),
@@ -218,6 +221,27 @@ mod tests {
         ] {
             assert!(!allowed(&host, uri, navigation), "{uri}");
         }
+    }
+    #[test]
+    fn extra_hosts_are_reachable_too() {
+        let hosts = vec![
+            "notes.example.org".to_owned(),
+            "login.example.com".to_owned(),
+        ];
+        assert!(allowed(&hosts, "https://notes.example.org/", true));
+        assert!(allowed(
+            &hosts,
+            "https://login.example.com/oauth2/authorize?x=1",
+            true
+        ));
+        assert!(allowed(&hosts, "https://login.example.com/app.js", false));
+        assert!(!allowed(
+            &hosts,
+            "https://login.example.com.evil.com/",
+            true
+        ));
+        assert!(!allowed(&hosts, "https://cdn.example.com/app.js", false));
+        assert!(!allowed(&[], "https://notes.example.org/", true));
     }
     #[test]
     fn page_requests() {
