@@ -15,6 +15,9 @@ pub const DEFAULT_FG: Color = Color([0xd8, 0xd8, 0xd8]);
 
 pub struct Renderer {
     font: Font,
+    /// System font for glyphs JetBrains Mono lacks (Matrix's half-width
+    /// katakana); `None` until first needed, `Some(None)` when unavailable.
+    fallback: Option<Option<Font>>,
     px: f32,
     pub cell_width: usize,
     pub cell_height: usize,
@@ -45,6 +48,7 @@ impl Renderer {
         let rows = (height / cell_height).max(1);
         Self {
             font,
+            fallback: None,
             px,
             cell_width,
             cell_height,
@@ -113,11 +117,14 @@ impl Renderer {
             return;
         }
         let px = self.px;
-        let font = &self.font;
-        let (metrics, bitmap) = self
-            .glyphs
-            .entry(cell.symbol)
-            .or_insert_with(|| font.rasterize(cell.symbol, px));
+        let symbol = cell.symbol;
+        let (metrics, bitmap) = match self.glyphs.get_mut(&symbol) {
+            Some(entry) => entry,
+            None => {
+                let rasterized = self.font_for(symbol).rasterize(symbol, px);
+                self.glyphs.entry(symbol).or_insert(rasterized)
+            }
+        };
         let (metrics, bitmap) = (*metrics, std::mem::take(bitmap));
         let gx = x as i32 + metrics.xmin;
         let gy = y as i32 + self.baseline - metrics.height as i32 - metrics.ymin;
@@ -140,6 +147,23 @@ impl Renderer {
         }
         self.glyphs.insert(cell.symbol, (metrics, bitmap));
     }
+
+    fn font_for(&mut self, symbol: char) -> &Font {
+        if self.font.has_glyph(symbol) {
+            return &self.font;
+        }
+        self.fallback
+            .get_or_insert_with(load_fallback_font)
+            .as_ref()
+            .unwrap_or(&self.font)
+    }
+}
+
+/// MS Gothic ships with every Windows edition and covers half-width katakana.
+fn load_fallback_font() -> Option<Font> {
+    let windir = std::env::var_os("WINDIR")?;
+    let bytes = std::fs::read(std::path::Path::new(&windir).join("Fonts/msgothic.ttc")).ok()?;
+    Font::from_bytes(bytes, FontSettings::default()).ok()
 }
 
 type Rect = (f32, f32, f32, f32, f32);
