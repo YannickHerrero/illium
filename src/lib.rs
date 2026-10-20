@@ -4,6 +4,7 @@ pub mod bar_hints;
 pub mod battery;
 pub mod expose;
 pub mod keybindings;
+pub mod launch_history;
 pub mod layout;
 pub mod lockscreen;
 pub mod model;

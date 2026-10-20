@@ -274,6 +274,9 @@ pub struct Shell {
     popup_keyboard: bool,
     apps: Vec<App>,
     search_names: Vec<String>,
+    /// Launch count of every entry of `apps`, in the same order.
+    search_counts: Vec<u32>,
+    pub history: crate::launch_history::History,
     indexed_apps: Vec<App>,
     index_generation: u64,
     index_running: bool,
@@ -390,6 +393,8 @@ impl Shell {
             popup_keyboard: false,
             apps: vec![],
             search_names: vec![],
+            search_counts: vec![],
+            history: Default::default(),
             indexed_apps: vec![],
             index_generation: 0,
             index_running: false,
@@ -657,8 +662,16 @@ impl Shell {
             .iter()
             .map(|app| app.name.to_lowercase())
             .collect();
+        self.refresh_counts();
         let query = self.launcher.get_query();
         self.search(&query, max);
+    }
+    pub fn refresh_counts(&mut self) {
+        self.search_counts = self
+            .apps
+            .iter()
+            .map(|app| self.history.count(&app.name))
+            .collect();
     }
     fn reindex(&mut self) {
         if self.index_running {
@@ -908,14 +921,19 @@ impl Shell {
             .apps
             .iter()
             .zip(&self.search_names)
-            .filter_map(|(a, name)| score_folded(&query, name).map(|s| (s, a)))
+            .zip(&self.search_counts)
+            .filter_map(|((a, name), count)| score_folded(&query, name).map(|s| (*count, s, a)))
             .collect();
-        matches
-            .sort_by(|(a, app_a), (b, app_b)| a.cmp(b).then_with(|| app_a.name.cmp(&app_b.name)));
+        matches.sort_by(|(count_a, score_a, app_a), (count_b, score_b, app_b)| {
+            crate::launch_history::compare(
+                (*count_a, *score_a, &app_a.name),
+                (*count_b, *score_b, &app_b.name),
+            )
+        });
         self.results = matches
             .into_iter()
             .take(max)
-            .map(|(_, a)| a.clone())
+            .map(|(_, _, a)| a.clone())
             .collect();
         self.launcher
             .set_results(ModelRc::from(Rc::new(VecModel::from(

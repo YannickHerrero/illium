@@ -1762,6 +1762,10 @@ impl Manager {
             Event::Launch(n) => {
                 if let Some(app) = self.shell.results.get(n.max(0) as usize).cloned() {
                     self.shell.dismiss();
+                    if let Err(e) = self.shell.history.record(&app.name) {
+                        tracing::warn!(%e, "launch history not saved");
+                    }
+                    self.shell.refresh_counts();
                     let command = match app.app {
                         Some(name) => Command::App(name),
                         None => Command::LaunchTarget {
@@ -2134,7 +2138,12 @@ pub fn run(replace: bool) -> Result<(), String> {
         config_files,
         model: Model::new(),
         monitors: native::monitors(),
-        shell: shell::Shell::new(tx.clone())?,
+        shell: {
+            let mut shell = shell::Shell::new(tx.clone())?;
+            shell.history =
+                crate::launch_history::History::load(&home.join("launcher-history.json"));
+            shell
+        },
         borders: std::collections::HashMap::new(),
         pending_browser_focus: None,
         demo: None,
