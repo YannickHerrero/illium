@@ -17,6 +17,10 @@ mod surface;
 
 fn main() {
     #[cfg(windows)]
+    if let Err(error) = illium_theme::fonts::install() {
+        resident::log(&format!("fonts: {error}"));
+    }
+    #[cfg(windows)]
     if let Err(error) = resident::run() {
         resident::log(&format!("illium-browser: {error}"));
         if !std::env::args().any(|a| matches!(a.as_str(), "--serve" | "--status" | "--quit")) {

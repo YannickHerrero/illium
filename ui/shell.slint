@@ -1,5 +1,3 @@
-import "fonts/JetBrainsMono-Regular.ttf";
-import "fonts/JetBrainsMono-Bold.ttf";
 
 export { ThemePicker, PreviewCard } from "theme-picker.slint";
 export { KeybindingsEditor, KeyRow } from "keybindings.slint";
@@ -139,7 +137,7 @@ component StatusModule inherits Rectangle {
 }
 export component Bar inherits Window {
     no-frame: true;
-    default-font-family: "JetBrains Mono";
+    default-font-family: "Illium Mono";
     default-font-size: 13px;
     in property <bool> bottom: false;
     in property <length> surface-width;
@@ -219,8 +217,7 @@ export component Bar inherits Window {
                 background: root.active == n ? root.accent : workspace-touch.has-hover ? root.fg.with-alpha(0.08) : Colors.transparent;
                 Text {
                     text: root.japanese-workspace-numbers ? root.japanese-numbers[n - 1] : "\{n}";
-                    // JetBrains Mono has no kanji; software-renderer fallback is not reliable.
-                    font-family: root.workspace-font-family != "" ? root.workspace-font-family : root.japanese-workspace-numbers ? "Yu Gothic UI" : "JetBrains Mono";
+                    font-family: root.workspace-font-family != "" ? root.workspace-font-family : root.japanese-workspace-numbers ? "Yu Gothic UI" : "Illium Mono";
                     font-size: root.workspace-font-size;
                     color: root.active == n ? root.bg : root.muted;
                     font-weight: root.workspace-font-weight > 0 ? root.workspace-font-weight : root.japanese-workspace-numbers || root.active == n ? 700 : 400;

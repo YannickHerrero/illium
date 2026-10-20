@@ -199,8 +199,10 @@ Provider regression checks (including DST and date rollover):
 
 The panel uses English labels, status messages and decimal byte units (`KB/s`,
 `MB`, `GB`). SSIDs retain their original Unicode characters; diagnostics returned
-by Windows itself may follow the Windows display language. System fonts are used
-at runtime rather than a bitmap subset of the shell's static text.
+by Windows itself may follow the Windows display language. Texts without a
+`font-family` use Illium Mono, the shell's font, which covers Japanese; the
+software renderer has no glyph fallback, so a view naming another family only
+shows the characters that family has.
 
 The 480×600 logical-pixel panel separates the connected-network header, traffic,
 interface details and scrollable saved/other networks. A lock means secured, not

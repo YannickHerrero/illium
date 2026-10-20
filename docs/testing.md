@@ -123,7 +123,7 @@ checks that the status bar follows both updates without changing workspaces.
 
 ## Status bar design
 
-The bar uses embedded JetBrains Mono, rounded workspace markers, vertical separators,
+The bar uses Illium Mono (JetBrains Mono with Noto Sans JP's Japanese glyphs), rounded workspace markers, vertical separators,
 and configurable time/date labels (see [configuration](configuration.md#bartoml)).
 Time and date have independent click targets, popup anchors and keyboard hints.
 The timezone provider's DST/date-rollover checks run with

@@ -59,7 +59,7 @@ pub struct Bar {
     /// Display workspace numbers as Japanese kanji in the bar.
     #[serde(default)]
     pub japanese_workspace_numbers: bool,
-    /// Empty selects Yu Gothic UI for kanji, JetBrains Mono otherwise.
+    /// Empty selects Yu Gothic UI for kanji, Illium Mono otherwise.
     #[serde(default)]
     pub workspace_font_family: String,
     #[serde(default = "default_workspace_font_size")]

@@ -2113,6 +2113,9 @@ pub fn run(replace: bool) -> Result<(), String> {
             windows::Win32::System::Com::COINIT_APARTMENTTHREADED,
         );
     }
+    if let Err(error) = illium_theme::fonts::install() {
+        tracing::warn!(%error, "Illium Mono not installed; texts fall back to the system font");
+    }
     let home = Config::home();
     Config::install(&home)?;
     illium_theme::opacity::clear(&home)?;

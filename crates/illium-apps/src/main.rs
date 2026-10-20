@@ -20,6 +20,9 @@ const UNKNOWN: &str = "unknown application (expected: shot, tasks, files, serve)
 fn main() {
     std::panic::set_hook(Box::new(|info| log::write(&format!("panic: {info}"))));
     let name = std::env::args().nth(1).unwrap_or_default();
+    if let Err(e) = illium_theme::fonts::install() {
+        log::write(&format!("fonts: {e}"));
+    }
     if let Err(e) = run(&name) {
         log::write(&format!("{name}: {e}"));
         std::process::exit(if e == UNKNOWN { USAGE } else { 1 });
