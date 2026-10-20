@@ -4,6 +4,7 @@
 #[cfg(windows)]
 pub mod blur;
 pub mod dynamic;
+pub mod fonts;
 #[cfg(feature = "live")]
 pub mod live;
 pub mod opacity;

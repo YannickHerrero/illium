@@ -4,5 +4,5 @@ Regular and Bold TTFs from https://github.com/JetBrains/JetBrainsMono/tree/maste
 (downloaded 2026-09-18). Copyright JetBrains; SIL Open Font License 1.1,
 see `JetBrainsMono-OFL.txt`.
 
-Embedded as complete font files by Slint (`EmbedFiles`), not rasterized subsets,
-so dynamic labels retain their glyphs. Applied only to the status bar.
+Inputs of `scripts/build-illium-mono.py` (see `IlliumMono-SOURCE.md`); the
+Regular face is also rasterized directly by the screensaver.
