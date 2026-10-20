@@ -134,6 +134,10 @@ unsafe extern "system" fn procedure(hwnd: HWND, message: u32, w: WPARAM, l: LPAR
                     hit
                 }
             }
+            // A bare Alt press/release is left over from workspace chords;
+            // DefWindowProc would enter menu mode on it and swallow every
+            // following key.
+            WM_SYSCOMMAND if (w.0 & 0xfff0) as u32 == SC_KEYMENU => LRESULT(0),
             _ => DefWindowProcW(hwnd, message, w, l),
         }
     }
