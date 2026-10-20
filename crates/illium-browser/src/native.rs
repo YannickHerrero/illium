@@ -958,6 +958,19 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         // DirectComposition owns every client pixel; suppress classic frames.
         WM_NCACTIVATE => DefWindowProcW(hwnd, msg, wp, LPARAM(-1)),
         WM_NCPAINT => LRESULT(0),
+        // Activation leaves the keyboard focus on this host window; the page
+        // lives in WebView2's own HWND and only receives keys once focus is
+        // moved there, which a click does but a workspace switch does not.
+        WM_SETFOCUS => {
+            if let Some(app) = snapshot()
+                && !app.home
+                && !app.picker.borrow().visible
+                && let Some(c) = &app.controller
+            {
+                let _ = c.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+            }
+            LRESULT(0)
+        }
         WM_NCHITTEST => {
             let hit = DefWindowProcW(hwnd, msg, wp, lp);
             if hit.0 == HTCAPTION as isize {
