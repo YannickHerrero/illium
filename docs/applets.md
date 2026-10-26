@@ -54,6 +54,7 @@ applets/weather/
 |---|---|---|
 | `icon` | `icon.svg` | Bar icon, relative to the folder; `{field}` placeholders let the provider choose the file (a plain name in the folder), so a state can change the icon |
 | `sprite` | none | Optional sprite-pack TOML filename; replaces the icon when valid, otherwise falls back to `icon` |
+| `pulse` | none | `{field}` placeholder; while it reads `true`, the bar icon slowly fades in and out (see [animated bar icons](#animated-bar-icons)) |
 | `interval` | `1m` | Provider cadence: `30s`, `10m`, `2h` |
 | `label` | none | Bar text; `{field}` and `{a.b}` read the JSON |
 | `popup` | `{ width = 360, height = 240 }` | Popup size in logical pixels |
@@ -69,6 +70,12 @@ applets/weather/
 | `[settings]` | empty | Passed to the provider as `ILLIUM_APPLET_<KEY>` variables |
 
 ### Animated bar icons
+
+For a running state, such as a timer counting, `pulse = "{working}"` makes the
+ordinary icon breathe: its opacity eases down and back up every 2.4 seconds
+while the provider's `working` field is `true`, and it stays still otherwise
+or after a provider error. The icon keeps its theme tint. It does not apply to
+sprites, which animate themselves.
 
 Set `sprite = "glitchcat.toml"` in `applet.toml`. Packs are separate data files,
 so multiple packs can be installed side by side and selected by changing this

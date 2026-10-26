@@ -25,7 +25,7 @@ export component Background inherits Window {
     }
 }
 export struct SpriteFrame { sheet: image, frame-width: int, frame-height: int, display-height: int, interval-ms: int, row: int, frames: int }
-export struct StatusItem { kind: string, value: string, secondary: string, icon: image, has-icon: bool, level: int, charging: bool, hint-id: int, sprite: SpriteFrame }
+export struct StatusItem { kind: string, value: string, secondary: string, icon: image, has-icon: bool, level: int, charging: bool, hint-id: int, sprite: SpriteFrame, pulse: bool }
 component SpriteIcon inherits Image {
     in property <SpriteFrame> sprite;
     property <int> frame: 0;
@@ -114,6 +114,14 @@ component StatusModule inherits Rectangle {
                 : item.kind == "memory" ? @image-url("icons/memory.svg")
                 : item.icon;
             colorize: muted;
+            property <bool> dimmed: false;
+            opacity: item.pulse && dimmed ? 0.3 : 1;
+            animate opacity { duration: 1200ms; easing: ease-in-out; }
+            Timer {
+                interval: 1200ms;
+                running: item.pulse;
+                triggered => { parent.dimmed = !parent.dimmed; }
+            }
         }
         if !separator && item.value != "": Text {
             text: item.value; color: item.kind == "clock" ? muted : fg; vertical-alignment: center;

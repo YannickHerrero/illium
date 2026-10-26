@@ -1218,6 +1218,7 @@ impl Shell {
                         kind: name.clone().into(),
                         value: label.into(),
                         sprite: applets.sprite(name),
+                        pulse: applets.pulse(name),
                         secondary: Default::default(),
                         has_icon: icon.is_some(),
                         icon: icon.unwrap_or_default(),

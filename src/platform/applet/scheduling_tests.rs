@@ -13,6 +13,7 @@ fn runtime() -> Runtime {
         },
         icon: None,
         sprite: None,
+        pulse: None,
         icon_file: None,
         data: serde_json::json!({"ssid":"current"}),
         error: None,

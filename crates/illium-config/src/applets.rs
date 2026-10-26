@@ -23,6 +23,8 @@ pub struct Manifest {
     /// Optional sprite-pack TOML filename relative to the applet folder.
     /// Invalid/unavailable packs fall back to `icon`.
     pub sprite: Option<String>,
+    /// `{field}` placeholder; the bar icon breathes while it reads `true`.
+    pub pulse: Option<String>,
     /// Full command line; overrides `script`.
     pub command: Option<Vec<String>>,
     /// PowerShell script relative to the applet folder; defaults to `<name>.ps1`.

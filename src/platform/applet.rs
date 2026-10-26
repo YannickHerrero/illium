@@ -291,6 +291,13 @@ impl Runtime {
         };
         Some((label, e.icon.clone()))
     }
+    pub fn pulse(&self, name: &str) -> bool {
+        self.entries
+            .iter()
+            .find(|e| e.applet.name == name)
+            .and_then(|e| Some((e, e.applet.manifest.pulse.as_ref()?)))
+            .is_some_and(|(e, t)| e.error.is_none() && applets::label(t, &e.data) == "true")
+    }
     pub fn sprite(&self, name: &str) -> shell::SpriteFrame {
         let Some(entry) = self.entries.iter().find(|e| e.applet.name == name) else {
             return Default::default();
