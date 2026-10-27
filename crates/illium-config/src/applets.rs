@@ -41,6 +41,9 @@ pub struct Manifest {
     pub popup: PopupSize,
     /// Bar text next to the icon, with `{field}` or `{a.b}` placeholders.
     pub label: Option<String>,
+    /// `{field}` placeholder of a number of seconds; while it holds one, the
+    /// bar shows that duration counting up every second instead of `label`.
+    pub timer: Option<String>,
     /// Let the popup take keyboard focus (global Alt chords stop while it does).
     #[serde(default)]
     pub focusable: bool,
@@ -360,9 +363,33 @@ pub fn label(template: &str, data: &serde_json::Value) -> String {
     out.push_str(rest);
     out
 }
+/// The `timer` text, `H:MM:SS`, `elapsed` seconds after the provider printed
+/// `template`'s value; `None` unless that value is a whole number of seconds.
+pub fn timer(template: &str, data: &serde_json::Value, elapsed: Duration) -> Option<String> {
+    let seconds = label(template, data).parse::<u64>().ok()? + elapsed.as_secs();
+    Some(format!(
+        "{}:{:02}:{:02}",
+        seconds / 3600,
+        seconds / 60 % 60,
+        seconds % 60
+    ))
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn timer_counts_up_from_a_number_of_seconds() {
+        let data = serde_json::json!({"seconds": 11_705, "off": null, "text": "soon"});
+        let later = Duration::from_millis(3_900);
+        assert_eq!(timer("{seconds}", &data, later).as_deref(), Some("3:15:08"));
+        assert_eq!(
+            timer("{seconds}", &data, Duration::ZERO).as_deref(),
+            Some("3:15:05")
+        );
+        assert_eq!(timer("{off}", &data, later), None);
+        assert_eq!(timer("{text}", &data, later), None);
+        assert_eq!(timer("{missing}", &data, later), None);
+    }
     #[test]
     fn disabled_direct_and_attached_applets_keep_their_configuration() {
         let home = std::env::temp_dir().join(format!("illium-disabled-{}", std::process::id()));

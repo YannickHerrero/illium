@@ -1059,7 +1059,13 @@ impl Manager {
                     if blur { "on" } else { "off" }
                 ));
             }
-            Command::Explorer(start) => session::explorer(start)?,
+            Command::Explorer(start) => {
+                session::explorer(start)?;
+                // Explorer revives the shell helpers while it runs; they outlive it.
+                if !start {
+                    session::stop_processes(&self.config.wm.stop_processes);
+                }
+            }
             Command::Quit => {
                 apps::stop_resident();
                 terminal::stop_idle();

@@ -45,6 +45,8 @@ pub struct Entry {
     /// File the loaded icon came from, so data refreshes only reload on a change.
     icon_file: Option<String>,
     pub data: serde_json::Value,
+    /// When `data` arrived, for a `timer` counting up between two runs.
+    received: Instant,
     pub error: Option<String>,
     running: bool,
     traffic: Option<traffic::Monitor>,
@@ -212,6 +214,7 @@ impl Runtime {
                 icon: None,
                 sprite: load_sprite(&applet),
                 icon_file: None,
+                received: old.as_ref().map_or_else(Instant::now, |o| o.received),
                 data: old.map_or(serde_json::Value::Null, |o| o.data),
                 error: None,
                 running: false,
@@ -284,10 +287,17 @@ impl Runtime {
             .entries
             .iter()
             .find(|e| e.applet.name == name && e.applet.manifest.attach.is_none())?;
-        let label = match (&e.error, &e.applet.manifest.label) {
-            (Some(_), _) => "!".into(),
-            (None, Some(t)) => applets::label(t, &e.data),
-            (None, None) => String::new(),
+        let timer = e
+            .applet
+            .manifest
+            .timer
+            .as_ref()
+            .and_then(|t| applets::timer(t, &e.data, e.received.elapsed()));
+        let label = match (&e.error, timer, &e.applet.manifest.label) {
+            (Some(_), _, _) => "!".into(),
+            (None, Some(timer), _) => timer,
+            (None, None, Some(t)) => applets::label(t, &e.data),
+            (None, None, None) => String::new(),
         };
         Some((label, e.icon.clone()))
     }
@@ -459,6 +469,7 @@ impl Runtime {
                 } else {
                     e.data = data;
                 }
+                e.received = Instant::now();
                 refresh_icon(e);
                 if let Some(traffic) = &mut e.traffic {
                     let interface = if e.data["connected"].as_bool() == Some(true) {

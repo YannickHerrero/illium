@@ -57,6 +57,7 @@ applets/weather/
 | `pulse` | none | `{field}` placeholder; while it reads `true`, the bar icon slowly fades in and out (see [animated bar icons](#animated-bar-icons)) |
 | `interval` | `1m` | Provider cadence: `30s`, `10m`, `2h` |
 | `label` | none | Bar text; `{field}` and `{a.b}` read the JSON |
+| `timer` | none | `{field}` holding a whole number of seconds; while it does, the bar shows that duration as `H:MM:SS`, counting up every second between two provider runs, instead of `label` |
 | `popup` | `{ width = 360, height = 240 }` | Popup size in logical pixels |
 | `script` | `<name>.ps1` | PowerShell script run hidden with `-NoProfile -ExecutionPolicy Bypass` |
 | `command` | none | Full command line instead of `script` |
