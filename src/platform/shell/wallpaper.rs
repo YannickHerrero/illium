@@ -4,6 +4,7 @@ use crate::wallpaper::{
     Selections,
     loader::{Key, Prepared},
 };
+use slint::ComponentHandle as _;
 use std::{collections::VecDeque, sync::Arc, time::Instant};
 
 pub(super) struct Pending {
@@ -55,6 +56,11 @@ impl Shell {
                     .get(index)
                     .cloned()
                     .unwrap_or_default(),
+            );
+            super::native::repaint(
+                super::id(background.window()),
+                None,
+                std::time::Duration::from_millis(200),
             );
         }
     }

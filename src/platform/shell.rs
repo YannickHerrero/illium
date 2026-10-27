@@ -752,6 +752,9 @@ impl Shell {
         self.prewarm_stage += 1;
         true
     }
+    pub fn background_ids(&self) -> Vec<isize> {
+        self.backgrounds.iter().map(|b| id(b.window())).collect()
+    }
     pub fn arrange(&mut self, c: &Config, monitors: &[Rect]) -> bool {
         if self.pending {
             if self.backgrounds.iter().any(|b| id(b.window()) == 0)
@@ -770,6 +773,7 @@ impl Shell {
                     );
                 }
                 native::position(id(b.window()), *r, Some(HWND_BOTTOM));
+                native::repaint(id(b.window()), None, std::time::Duration::from_millis(200));
             }
             for (b, r) in self.bars.iter().zip(monitors) {
                 let height = super::dpi::scale(*r, c.bar.height);

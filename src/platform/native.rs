@@ -452,7 +452,7 @@ pub fn monitors() -> Vec<Rect> {
 /// Illium stops it. The drawing process could not be identified: it is
 /// neither Explorer nor sihost, both of which were ruled out with a
 /// DrawTextExW hook, so the region is refreshed rather than the draw blocked.
-pub fn repaint_corners() {
+pub fn repaint_corners(backgrounds: &[isize]) {
     for monitor in monitors() {
         let band = RECT {
             left: monitor.x + monitor.w - super::dpi::scale(monitor, 420),
@@ -468,7 +468,46 @@ pub fn repaint_corners() {
                 RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW,
             );
         }
+        // The desktop-wide redraw no longer reaches the wallpaper surfaces
+        // (observed 2026-10-26); the band is invalidated on them directly.
+        for &id in backgrounds {
+            let mut r = RECT::default();
+            if id == 0 || unsafe { GetWindowRect(hwnd(id), &mut r) }.is_err() {
+                continue;
+            }
+            let local = RECT {
+                left: band.left - r.left,
+                top: band.top - r.top,
+                right: band.right - r.left,
+                bottom: band.bottom - r.top,
+            };
+            if local.right > 0 && local.bottom > 0 {
+                repaint(id, Some(local), std::time::Duration::ZERO);
+            }
+        }
     }
+}
+/// Invalidates a window, or a client-area rectangle of it, from another
+/// thread after `delay`. DWM stopped composing the wallpaper surfaces'
+/// internal repaints: their content was painted but never shown until an
+/// invalidating repaint reached them. Sent from the UI thread, winit turns
+/// such a paint back into an internal one; sent from elsewhere while the
+/// loop is idle, it keeps its update region and DWM composes the result.
+pub fn repaint(id: isize, area: Option<RECT>, delay: std::time::Duration) {
+    if id == 0 {
+        return;
+    }
+    std::thread::spawn(move || {
+        std::thread::sleep(delay);
+        unsafe {
+            let _ = RedrawWindow(
+                Some(hwnd(id)),
+                area.as_ref().map(|r| r as *const RECT),
+                None,
+                RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_UPDATENOW,
+            );
+        }
+    });
 }
 /// Windows 11 rounds top-level windows; tiled windows look wrong with gaps
 /// between rounded corners. `square` false restores the system default.

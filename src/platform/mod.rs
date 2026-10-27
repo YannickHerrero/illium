@@ -2363,8 +2363,8 @@ pub fn run(replace: bool) -> Result<(), String> {
         slint::TimerMode::Repeated,
         std::time::Duration::from_secs(1),
         move || {
-            native::repaint_corners();
             let mut m = m.borrow_mut();
+            native::repaint_corners(&m.shell.background_ids());
             if m.prune() {
                 m.layout();
             }
