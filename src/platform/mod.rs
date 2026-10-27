@@ -1862,27 +1862,6 @@ impl Manager {
             }
             Event::Click(id) => {
                 self.shell.hints.close();
-                // TEMP diagnostic: web applet select popups.
-                if self.applets.open.is_some() {
-                    unsafe {
-                        let h = native::hwnd(id);
-                        let mut class = [0u16; 256];
-                        let n = GetClassNameW(h, &mut class);
-                        let owner = GetWindow(h, GW_OWNER).map(|o| o.0 as isize).unwrap_or(0);
-                        let root_owner = GetAncestor(h, GA_ROOTOWNER).0 as isize;
-                        tracing::info!(
-                            id,
-                            class = %String::from_utf16_lossy(&class[..n.max(0) as usize]),
-                            owner,
-                            root_owner,
-                            process = ?native::process(id),
-                            owns = self.applets.owns(id),
-                            owns_owner = self.applets.owns(owner),
-                            owns_root_owner = self.applets.owns(root_owner),
-                            "TEMP click diagnostic"
-                        );
-                    }
-                }
                 // Any press outside the open popup closes it, the bar included.
                 if !self.applets.owns(id) && self.shell.popup_hwnd() != id {
                     // A mouse click owns focus; don't steal it back on Escape.
