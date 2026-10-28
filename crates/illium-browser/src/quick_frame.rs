@@ -1,5 +1,6 @@
-//! Owned, non-activating Slint scrim around a quick view. The hole over the
-//! quick WebView is hit-test transparent so pointer input reaches the page.
+//! Owned, non-activating Slint scrim around a quick view. The window region
+//! excludes the hole: HTTRANSPARENT only hands input to same-thread windows,
+//! and WebView2's input surface lives in the msedgewebview2 process.
 #![allow(unsafe_op_in_unsafe_fn)]
 use crate::surface::{Surface, place_popup};
 use std::cell::RefCell;
@@ -12,8 +13,6 @@ use windows::{
     core::*,
 };
 
-thread_local! { static HOLE: RefCell<RECT> = const { RefCell::new(RECT { left: 0, top: 0, right: 0, bottom: 0 }) }; }
-
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     match msg {
         WM_PAINT => {
@@ -25,19 +24,6 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
         }
         WM_ERASEBKGND => LRESULT(1),
         WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
-        WM_NCHITTEST => {
-            let mut point = POINT {
-                x: (lp.0 & 0xffff) as i16 as i32,
-                y: ((lp.0 >> 16) & 0xffff) as i16 as i32,
-            };
-            let _ = ScreenToClient(hwnd, &mut point);
-            let hole = HOLE.with(|h| *h.borrow());
-            if PtInRect(&hole, point).as_bool() {
-                LRESULT(HTTRANSPARENT as isize)
-            } else {
-                LRESULT(HTCLIENT as isize)
-            }
-        }
         WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN => {
             crate::native::quick_scrim_clicked();
             LRESULT(0)
@@ -107,7 +93,12 @@ impl QuickFrame {
         let mut rect = RECT::default();
         let _ = GetClientRect(parent, &mut rect);
         let hole = Self::hole(parent);
-        HOLE.with(|h| *h.borrow_mut() = hole);
+        let ring = CreateRectRgn(0, 0, rect.right, rect.bottom);
+        let cut = CreateRectRgn(hole.left, hole.top, hole.right, hole.bottom);
+        CombineRgn(Some(ring), Some(ring), Some(cut), RGN_DIFF);
+        let _ = DeleteObject(cut.into());
+        // The system owns the region after this call.
+        SetWindowRgn(self.hwnd, Some(ring), true);
         let scale = GetDpiForWindow(parent) as f32 / 96.;
         {
             // Released before showing: a synchronous WM_PAINT borrows it mutably.
