@@ -16,6 +16,10 @@ mod resident;
 mod surface;
 
 fn main() {
+    // A panic inside a window procedure or COM callback aborts the process
+    // without any console; keep its message next to the resident log.
+    #[cfg(windows)]
+    std::panic::set_hook(Box::new(|info| resident::log(&format!("panic: {info}"))));
     #[cfg(windows)]
     if let Err(error) = illium_theme::fonts::install() {
         resident::log(&format!("fonts: {error}"));
