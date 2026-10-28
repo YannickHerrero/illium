@@ -3,6 +3,7 @@
 use crate::browser_view::{BrowserView, ViewContext};
 use crate::leader_panel::LeaderPanel;
 use crate::picker::{EDIT_ID, LIST_ID, Picker};
+use crate::quick_frame::QuickFrame;
 use crate::resident::{self, Exit, Request};
 use illium_browser::leader::{Action, CapturedKeys, Key, Leader, Outcome};
 use illium_browser::tabs::{self, TabId, Tabs};
@@ -51,6 +52,9 @@ const LEADER_CHANGED: u32 = WM_APP + 10;
 const LEADER_TIMER: usize = 0x4c44;
 const TABS_CHANGED: u32 = WM_APP + 11;
 const OPEN_POPUP: u32 = WM_APP + 12;
+const CLOSE_QUICK: u32 = WM_APP + 13;
+/// Identity of the quick view's controller; never allocated by `Tabs`.
+const QUICK_ID: TabId = TabId::MAX;
 #[derive(Default)]
 struct LeaderInput {
     state: Leader,
@@ -87,7 +91,9 @@ struct App {
     tabs: Rc<RefCell<Tabs>>,
     views: Rc<RefCell<HashMap<TabId, Rc<BrowserView>>>>,
     view_context: Option<ViewContext>,
-    popups: Rc<RefCell<VecDeque<(TabId, String)>>>,
+    popups: Rc<RefCell<VecDeque<(TabId, String, bool)>>>,
+    quick: Rc<RefCell<Option<Rc<BrowserView>>>>,
+    quick_frame: Rc<RefCell<QuickFrame>>,
     background_opacity: f32,
     background_blur: bool,
     home_surface: Rc<RefCell<crate::surface::Surface>>,
@@ -130,6 +136,18 @@ pub(crate) unsafe fn picker_pointer(msg: u32, wp: WPARAM, lp: LPARAM) {
         && let Ok(picker) = app.picker.try_borrow()
     {
         picker.pointer(msg, wp, lp);
+    }
+}
+pub(crate) unsafe fn paint_quick_frame() {
+    if let Some(app) = snapshot()
+        && let Ok(frame) = app.quick_frame.try_borrow()
+    {
+        frame.paint();
+    }
+}
+pub(crate) unsafe fn quick_scrim_clicked() {
+    if let Some(app) = snapshot() {
+        let _ = PostMessageW(Some(app.hwnd), CLOSE_QUICK, WPARAM(0), LPARAM(0));
     }
 }
 pub(crate) unsafe fn paint_leader() {
@@ -378,15 +396,80 @@ unsafe fn copy_url(hwnd: HWND, value: &str) -> AppResult<()> {
 pub(crate) unsafe fn tabs_changed(hwnd: HWND) {
     let _ = PostMessageW(Some(hwnd), TABS_CHANGED, WPARAM(0), LPARAM(0));
 }
-pub(crate) unsafe fn queue_popup(source: TabId, url: String) {
+pub(crate) unsafe fn queue_popup(source: TabId, url: String, quick: bool) {
     if let Some(app) = snapshot() {
-        app.popups.borrow_mut().push_back((source, url));
+        app.popups.borrow_mut().push_back((source, url, quick));
         let _ = PostMessageW(Some(app.hwnd), OPEN_POPUP, WPARAM(0), LPARAM(0));
     }
 }
 pub(crate) unsafe fn tab_got_focus(id: TabId, hwnd: HWND) {
     if snapshot().is_some_and(|app| app.tabs.borrow().active() == Some(id)) {
         let _ = PostMessageW(Some(hwnd), DISMISS_PALETTE, WPARAM(0), LPARAM(0));
+        let _ = PostMessageW(Some(hwnd), CLOSE_QUICK, WPARAM(0), LPARAM(0));
+    }
+}
+/// Shift+click target: one extra controller above the active tab, outside the
+/// tab list, dismissed with Escape or a click around it.
+unsafe fn open_quick(url: &str) -> AppResult<()> {
+    close_quick();
+    let app = snapshot().ok_or("Browser closed")?;
+    let context = app
+        .view_context
+        .as_ref()
+        .ok_or("WebView environment is not ready")?;
+    let before = children(app.hwnd);
+    let view = context.create(QUICK_ID)?;
+    if !IsWindow(Some(app.hwnd)).as_bool() {
+        PostQuitMessage(0);
+        return Err("Browser closed during quick view initialization".into());
+    }
+    *app.quick.borrow_mut() = Some(view.clone());
+    layout(&app);
+    view.controller.SetIsVisible(true)?;
+    // The controller exposes no HWND; WebView2 does not stack its new child
+    // above the active tab's, so the one that appeared is raised by hand.
+    for child in children(app.hwnd) {
+        if !before.contains(&child) {
+            let _ = SetWindowPos(
+                child,
+                Some(HWND_TOP),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+        }
+    }
+    view.web.Navigate(PCWSTR(wide(url).as_ptr()))?;
+    view.controller
+        .MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC)?;
+    for message in [LEADER_CHANGED, OPEN_POPUP, THEME_CHANGED, resident::REQUEST] {
+        let _ = PostMessageW(Some(app.hwnd), message, WPARAM(0), LPARAM(0));
+    }
+    Ok(())
+}
+unsafe fn children(parent: HWND) -> Vec<HWND> {
+    let mut out = vec![];
+    let mut child = GetWindow(parent, GW_CHILD).unwrap_or_default();
+    while !child.is_invalid() {
+        out.push(child);
+        child = GetWindow(child, GW_HWNDNEXT).unwrap_or_default();
+    }
+    out
+}
+unsafe fn close_quick() {
+    let Some(app) = snapshot() else { return };
+    let view = app.quick.borrow_mut().take();
+    let Some(view) = view else { return };
+    drop(view); // Close outside the RefCell borrow: COM can deliver callbacks.
+    layout(&app);
+    if !app.home
+        && !app.picker.borrow().visible
+        && IsWindowVisible(app.hwnd).as_bool()
+        && let Some(c) = &app.controller
+    {
+        let _ = c.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
     }
 }
 unsafe fn queue_action(action: Action) {
@@ -414,7 +497,9 @@ pub(crate) unsafe fn web_accelerator(
     id: TabId,
     args: &ICoreWebView2AcceleratorKeyPressedEventArgs,
 ) -> windows::core::Result<()> {
-    let Some(app) = snapshot().filter(|app| app.tabs.borrow().active() == Some(id)) else {
+    let Some(app) =
+        snapshot().filter(|app| app.tabs.borrow().active() == Some(id) || id == QUICK_ID)
+    else {
         return Ok(());
     };
     let mut event = COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN;
@@ -423,6 +508,15 @@ pub(crate) unsafe fn web_accelerator(
         || event == COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN;
     let mut key = 0;
     args.VirtualKey(&mut key)?;
+    if id == QUICK_ID {
+        if key == VK_ESCAPE.0 as u32 {
+            args.SetHandled(true)?;
+            if down {
+                PostMessageW(Some(app.hwnd), CLOSE_QUICK, WPARAM(0), LPARAM(0))?;
+            }
+        }
+        return Ok(());
+    }
     let mut status = COREWEBVIEW2_PHYSICAL_KEY_STATUS::default();
     args.PhysicalKeyStatus(&mut status)?;
     if leader_key(
@@ -460,6 +554,7 @@ pub(crate) unsafe fn web_accelerator(
     Ok(())
 }
 unsafe fn activate_tab(id: TabId, keep_picker: bool) -> AppResult<()> {
+    close_quick();
     let app = snapshot().ok_or("Browser closed")?;
     let view = app.views.borrow().get(&id).cloned().ok_or("Unknown tab")?;
     let home = app.tabs.borrow().get(id).ok_or("Unknown tab")?.home;
@@ -779,6 +874,13 @@ unsafe fn layout(app: &App) {
     if let Some(c) = &app.controller {
         let _ = c.SetBounds(rect);
     }
+    let quick = app.quick.try_borrow().ok().and_then(|q| q.clone());
+    if let Some(quick) = &quick {
+        let _ = quick.controller.SetBounds(QuickFrame::hole(app.hwnd));
+    }
+    if let Ok(frame) = app.quick_frame.try_borrow() {
+        frame.layout(app.hwnd, quick.is_some());
+    }
     // Owned surfaces follow the client area without changing WebView bounds.
     // Activating a native EDIT can synchronously reposition its owner.
     if let Ok(picker) = app.picker.try_borrow() {
@@ -792,6 +894,9 @@ unsafe fn layout(app: &App) {
     }
 }
 unsafe fn palette(show: bool) {
+    if show {
+        close_quick();
+    }
     if let Some(app) = snapshot() {
         if show {
             let current = if app.home {
@@ -836,6 +941,7 @@ unsafe fn apply_theme(theme: &illium_theme::Theme) -> AppResult<()> {
         apply_opacity(&app);
         app.picker.borrow_mut().set_theme(theme);
         app.leader_panel.borrow_mut().set_theme(theme);
+        app.quick_frame.borrow().set_theme(theme);
         let _ = RedrawWindow(Some(app.hwnd), None, None, RDW_INVALIDATE | RDW_ALLCHILDREN);
         let views: Vec<_> = app.views.borrow().values().cloned().collect();
         for view in views {
@@ -962,12 +1068,20 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         // lives in WebView2's own HWND and only receives keys once focus is
         // moved there, which a click does but a workspace switch does not.
         WM_SETFOCUS => {
+            // Hiding the palette can hand focus back here while the picker is
+            // still mutably borrowed; it moves focus to the page itself then.
             if let Some(app) = snapshot()
                 && !app.home
-                && !app.picker.borrow().visible
-                && let Some(c) = &app.controller
+                && app.picker.try_borrow().is_ok_and(|p| !p.visible)
             {
-                let _ = c.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+                let quick = app.quick.borrow().clone();
+                if let Some(quick) = quick {
+                    let _ = quick
+                        .controller
+                        .MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+                } else if let Some(c) = &app.controller {
+                    let _ = c.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+                }
             }
             LRESULT(0)
         }
@@ -1095,6 +1209,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             palette(true);
             LRESULT(0)
         }
+        CLOSE_QUICK => {
+            close_quick();
+            LRESULT(0)
+        }
         DISMISS_PALETTE => {
             if let Some(app) = snapshot()
                 && !app.home
@@ -1166,6 +1284,8 @@ unsafe fn release_window() {
             if IsWindow(Some(app.hwnd)).as_bool() {
                 let _ = DestroyWindow(app.hwnd);
             }
+            let quick = app.quick.borrow_mut().take();
+            drop(quick);
             let views = std::mem::take(&mut *app.views.borrow_mut());
             drop(views);
             let _ = DeleteObject(app.brush.into());
@@ -1339,6 +1459,7 @@ fn run_inner(
         let edit = picker.borrow().edit;
         let list = picker.borrow().list;
         let leader_panel = Rc::new(RefCell::new(LeaderPanel::new(hwnd, instance)?));
+        let quick_frame = Rc::new(RefCell::new(QuickFrame::new(hwnd, instance)?));
         APP.with(|a| {
             *a.borrow_mut() = Some(App {
                 hwnd,
@@ -1357,6 +1478,8 @@ fn run_inner(
                 views: Rc::new(RefCell::new(HashMap::new())),
                 view_context: None,
                 popups: Rc::new(RefCell::new(VecDeque::new())),
+                quick: Rc::new(RefCell::new(None)),
+                quick_frame,
                 background_opacity: theme.background_opacity,
                 background_blur: theme.background_blur,
                 home_surface,
@@ -1494,12 +1617,21 @@ fn run_inner(
                 if let Some(app) = snapshot() {
                     loop {
                         let popup = app.popups.borrow_mut().pop_front();
-                        let Some((source, url)) = popup else {
+                        let Some((source, url, quick)) = popup else {
                             break;
                         };
+                        let from_quick = source == QUICK_ID && app.quick.borrow().is_some();
                         let source_exists = app.tabs.borrow().get(source).is_some();
-                        if source_exists && let Err(error) = create_tab(&url, false) {
-                            eprintln!("Cannot open popup tab: {error}");
+                        let result = if quick && source_exists {
+                            open_quick(&url)
+                        } else if source_exists || from_quick {
+                            // Links leaving a quick view become ordinary tabs.
+                            create_tab(&url, false).map(drop)
+                        } else {
+                            Ok(())
+                        };
+                        if let Err(error) = result {
+                            eprintln!("Cannot open popup: {error}");
                         }
                     }
                 }

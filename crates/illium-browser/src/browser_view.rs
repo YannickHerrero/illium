@@ -9,7 +9,11 @@ use illium_browser::{
 use std::{cell::RefCell, rc::Rc, time::Instant};
 use webview2_com::{Microsoft::Web::WebView2::Win32::*, *};
 use windows::{
-    Win32::{Foundation::*, System::Com::CoTaskMemFree},
+    Win32::{
+        Foundation::*,
+        System::Com::CoTaskMemFree,
+        UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_CONTROL, VK_SHIFT},
+    },
     core::*,
 };
 
@@ -254,7 +258,11 @@ impl ViewContext {
                     if user_initiated.as_bool()
                         && (uri.starts_with("https://") || uri.starts_with("http://"))
                     {
-                        native::queue_popup(id, uri);
+                        // The event carries no modifier; Chromium raises it for a
+                        // Shift+click (new window) as for Ctrl+click or target=_blank.
+                        let quick = GetAsyncKeyState(VK_SHIFT.0 as i32) < 0
+                            && GetAsyncKeyState(VK_CONTROL.0 as i32) >= 0;
+                        native::queue_popup(id, uri, quick);
                     }
                 }
                 Ok(())

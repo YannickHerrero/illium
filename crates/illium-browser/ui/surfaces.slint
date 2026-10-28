@@ -17,8 +17,13 @@ export component BrowserSurface inherits Window {
     in property <color> accent;
     in property <color> border;
     in property <float> background-opacity: 0.85;
-    // 0 = home background, 1 = navigation/tabs, 2 = leader.
+    // 0 = home background, 1 = navigation/tabs, 2 = leader, 3 = quick link scrim.
     in property <int> kind;
+    property <bool> palette: root.kind == 1 || root.kind == 2;
+    in property <length> hole-x;
+    in property <length> hole-y;
+    in property <length> hole-width;
+    in property <length> hole-height;
     in property <string> heading;
     in property <string> footer;
     in property <[PaletteRow]> rows;
@@ -35,11 +40,27 @@ export component BrowserSurface inherits Window {
     in property <bool> input-empty;
     in property <string> input-placeholder;
 
-    Rectangle {
+    if root.kind == 3: Rectangle {
+        // Four opaque-free bands leave the hole fully transparent for the page.
+        Rectangle { x: 0; y: 0; width: parent.width; height: root.hole-y; background: root.bg.with-alpha(0.6); }
+        Rectangle { x: 0; y: root.hole-y + root.hole-height; width: parent.width; height: max(0px, parent.height - self.y); background: root.bg.with-alpha(0.6); }
+        Rectangle { x: 0; y: root.hole-y; width: root.hole-x; height: root.hole-height; background: root.bg.with-alpha(0.6); }
+        Rectangle { x: root.hole-x + root.hole-width; y: root.hole-y; width: max(0px, parent.width - self.x); height: root.hole-height; background: root.bg.with-alpha(0.6); }
+        Rectangle {
+            x: root.hole-x - 2px; y: root.hole-y - 2px;
+            width: root.hole-width + 4px; height: root.hole-height + 4px;
+            border-width: 2px; border-color: root.accent; border-radius: 4px;
+        }
+        Text {
+            x: root.hole-x; y: max(4px, root.hole-y - 24px); width: root.hole-width; height: 20px;
+            text: "Quick link · Esc close"; color: root.subtext; horizontal-alignment: right;
+        }
+    }
+    if root.kind != 3: Rectangle {
         background: (root.kind == 0 ? root.bg : root.surface).with-alpha(root.background-opacity);
         border-width: root.kind == 0 ? 0px : 1px;
         border-color: root.border;
-        if root.kind != 0: Text {
+        if root.palette: Text {
             x: 20px; y: root.kind == 1 ? 64px : 12px;
             width: parent.width - 40px; height: 28px;
             text: root.heading; color: root.accent;
@@ -76,11 +97,11 @@ export component BrowserSurface inherits Window {
             x: parent.width - 48px; y: 12px; width: 38px; height: 36px;
             text: "Esc"; color: root.subtext; vertical-alignment: center;
         }
-        if root.kind != 0: Rectangle {
+        if root.palette: Rectangle {
             x: 1px; y: root.kind == 1 ? 60px : 48px;
             width: parent.width - 2px; height: 1px; background: root.border;
         }
-        if root.kind != 0: Rectangle {
+        if root.palette: Rectangle {
             x: 20px; y: root.kind == 1 ? 93px : 52px;
             width: parent.width - 40px;
             height: max(0px, parent.height - self.y - 44px);
@@ -120,11 +141,11 @@ export component BrowserSurface inherits Window {
                 }
             }
         }
-        if root.kind != 0: Rectangle {
+        if root.palette: Rectangle {
             x: 1px; y: parent.height - 42px; width: parent.width - 2px; height: 1px;
             background: root.border;
         }
-        if root.kind != 0: Text {
+        if root.palette: Text {
             x: 20px; y: parent.height - 38px; width: parent.width - 40px; height: 32px;
             text: root.footer; color: root.subtext; overflow: elide;
             vertical-alignment: center;

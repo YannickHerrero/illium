@@ -113,6 +113,7 @@ not modified. OS-owned dialogs may still follow Windows language settings.
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab, wrapping in list order |
 | `Ctrl+Shift+T` | Reopen the last closed tab |
 | `Ctrl+Shift+A` | Open the fuzzy tab palette |
+| Shift+click on a link | Open it as a quick link over the page; Escape or a click around it closes it |
 | Escape | Close editor and restore page focus; on home, clear input |
 | `:block` in editor, then Enter | Toggle blocking for the current exact hostname, persist, reload |
 | `Alt+Left` / `Alt+Right` | Back / forward |
@@ -121,7 +122,7 @@ not modified. OS-owned dialogs may still follow Windows language settings.
 
 Illium gives each newly opened browser window on the active workspace foreground focus and centers the pointer after applying its tile geometry. This is a one-shot launch action, not a cursor warp on every resize. Both the browser and the daemon must be updated for this behavior.
 
-There is no caption or tab strip. Use Illium's window management or Windows' system menu (`Alt+Space`) to move the window. Palettes are owned, non-activating tool windows with independent Slint/DirectComposition surfaces above WebView2; they neither reserve page space nor allocate another WebView. It remains inside its browser window and inherits its minimize/move/resize lifecycle. Tabs are retained in the background; only the active tab's controller is visible. User-initiated HTTP(S) `target=_blank` / `window.open` requests open a new active tab. Unsolicited script popups are blocked instead of allocating controllers. These are URL-only popup opens, not a complete opener/window-object implementation; popup-based OAuth and scripted about:blank popups remain unsupported. Only one window is kept prepared; additional simultaneous windows use standalone hosts.
+There is no caption or tab strip. Use Illium's window management or Windows' system menu (`Alt+Space`) to move the window. Palettes are owned, non-activating tool windows with independent Slint/DirectComposition surfaces above WebView2; they neither reserve page space nor allocate another WebView. It remains inside its browser window and inherits its minimize/move/resize lifecycle. Tabs are retained in the background; only the active tab's controller is visible. User-initiated HTTP(S) `target=_blank` / `window.open` requests open a new active tab. A Shift+click (without Ctrl) opens the link as a **quick link** instead: one extra controller over the active tab, inset by 6% of the client area, surrounded by a themed scrim and accent border. It shares the profile and keeps the page below untouched. Escape, a click on the scrim, a click on the page below, opening the palette or switching tabs closes it; Escape is consumed by the host, so a page inside the quick view never receives it. Links that the quick view would open in a new window become ordinary tabs and close the quick view. The quick view has no entry in the tab palette and no back/forward of its own. Unsolicited script popups are blocked instead of allocating controllers. These are URL-only popup opens, not a complete opener/window-object implementation; popup-based OAuth and scripted about:blank popups remain unsupported. Only one window is kept prepared; additional simultaneous windows use standalone hosts.
 
 ## Leader key
 

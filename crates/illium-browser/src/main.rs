@@ -11,6 +11,8 @@ mod native;
 #[cfg(windows)]
 mod picker;
 #[cfg(windows)]
+mod quick_frame;
+#[cfg(windows)]
 mod resident;
 #[cfg(windows)]
 mod surface;
